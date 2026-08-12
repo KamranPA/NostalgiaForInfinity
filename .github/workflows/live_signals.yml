@@ -13,7 +13,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install System Dependencies for TA-Lib
         run: |
@@ -28,10 +28,9 @@ jobs:
           cd ..
           rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
 
-      - name: Install Freqtrade & Compatible Telegram Package
+      - name: Install Freqtrade
         run: |
           python -m pip install --upgrade pip
-          pip install "python-telegram-bot==20.7"
           pip install freqtrade
 
       - name: Inject Secrets into Config
@@ -39,11 +38,18 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          sed -i "s/TELEGRAM_TOKEN_PLACEHOLDER/$TELEGRAM_TOKEN/g" config_telegram.json
-          sed -i "s/TELEGRAM_CHAT_ID_PLACEHOLDER/$TELEGRAM_CHAT_ID/g" config_telegram.json
+          # جاگذاری امن با جاوااسکریپت برای جلوگیری از کاراکترهای خاص در sed
+          node -e '
+            const fs = require("fs");
+            let conf = fs.readFileSync("config_telegram.json", "utf8");
+            conf = conf.replace("TELEGRAM_TOKEN_PLACEHOLDER", process.env.TELEGRAM_TOKEN);
+            conf = conf.replace("TELEGRAM_CHAT_ID_PLACEHOLDER", process.env.TELEGRAM_CHAT_ID);
+            fs.writeFileSync("config_telegram.json", conf);
+          '
 
-      - name: Run Live Signal Bot
+      - name: Run Dry-Run Signal Generator
         run: |
           freqtrade trade \
             --config config_telegram.json \
-            --strategy NostalgiaForInfinityX7
+            --strategy NostalgiaForInfinityX7 \
+            --dry-run-wallet 1000
