@@ -16,7 +16,17 @@
             "BTC/USDT",
             "ETH/USDT",
             "SOL/USDT"
-        ]
+        ],
+        "pair_blacklist": []
+    },
+    "entry_pricing": {
+        "price_side": "same",
+        "use_order_book": false,
+        "order_book_top": 1
+    },
+    "exit_pricing": {
+        "price_side": "same",
+        "use_order_book": false
     },
     "telegram": {
         "enabled": true,
@@ -26,12 +36,12 @@
             "status": "on",
             "warning": "on",
             "startup": "on",
-            "buy": "on",
-            "buy_cancel": "on",
-            "buy_fill": "off",
-            "sell": "on",
-            "sell_cancel": "on",
-            "sell_fill": "off"
+            "entry": "on",
+            "entry_cancel": "on",
+            "entry_fill": "off",
+            "exit": "on",
+            "exit_cancel": "on",
+            "exit_fill": "off"
         }
     }
 }
