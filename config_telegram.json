@@ -1,0 +1,37 @@
+{
+    "max_open_trades": 5,
+    "stake_currency": "USDT",
+    "stake_amount": 100,
+    "tradable_balance_ratio": 0.99,
+    "fiat_display_currency": "USD",
+    "dry_run": true,
+    "cancel_open_orders_on_exit": false,
+    "trading_mode": "spot",
+    "margin_mode": "",
+    "exchange": {
+        "name": "coinex",
+        "key": "",
+        "secret": "",
+        "pair_whitelist": [
+            "BTC/USDT",
+            "ETH/USDT",
+            "SOL/USDT"
+        ]
+    },
+    "telegram": {
+        "enabled": true,
+        "token": "8418942706:AAFo75aQ6sYic98uf1qIOC0dUZWSmzXyXCI",
+        "chat_id": "104506829",
+        "notification_settings": {
+            "status": "on",
+            "warning": "on",
+            "startup": "on",
+            "buy": "on",
+            "buy_cancel": "on",
+            "buy_fill": "off",
+            "sell": "on",
+            "sell_cancel": "on",
+            "sell_fill": "off"
+        }
+    }
+}
