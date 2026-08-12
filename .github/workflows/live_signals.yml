@@ -28,10 +28,11 @@ jobs:
           cd ..
           rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
 
-      - name: Install Freqtrade & Telegram Dependencies
+      - name: Install Freqtrade & Compatible Telegram Package
         run: |
           python -m pip install --upgrade pip
-          pip install "freqtrade[telegram]" python-telegram-bot --upgrade
+          pip install "python-telegram-bot==20.7"
+          pip install freqtrade
 
       - name: Inject Secrets into Config
         env:
