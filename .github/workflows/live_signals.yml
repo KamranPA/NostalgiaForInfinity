@@ -33,6 +33,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install freqtrade
 
+      - name: Inject Secrets into Config
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          sed -i "s/TELEGRAM_TOKEN_PLACEHOLDER/$TELEGRAM_TOKEN/g" config_telegram.json
+          sed -i "s/TELEGRAM_CHAT_ID_PLACEHOLDER/$TELEGRAM_CHAT_ID/g" config_telegram.json
+
       - name: Run Live Signal Bot
         run: |
           freqtrade trade \
