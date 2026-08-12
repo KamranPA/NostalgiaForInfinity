@@ -53,11 +53,11 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            -d "text=✅ تست اتصال: ربات سیگنال‌دهی با موفقیت روی گیت‌هاب فعال شد!"
+            -d "text=✅ تست اتصال: ربات سیگنال‌دهی مجدداً به‌صورت زنده و پیوسته فعال شد!"
 
       - name: Run Dry-Run Signal Generator
         run: |
-          freqtrade trade \
+          timeout 3.5h freqtrade trade \
             --config config_telegram.json \
             --strategy NostalgiaForInfinityX7 \
-            --dry-run-wallet 1000
+            --dry-run-wallet 1000 || true
