@@ -12,6 +12,17 @@
     "exit_profit_only": false,
     "exit_profit_offset": 0.0,
     "ignore_roi_if_entry_signal": false,
+    "entry_pricing": {
+        "price_side": "same",
+        "use_order_book": true,
+        "order_book_top": 1,
+        "price_last_balance": 0.0
+    },
+    "exit_pricing": {
+        "price_side": "same",
+        "use_order_book": true,
+        "order_book_top": 1
+    },
     "exchange": {
         "name": "coinex",
         "key": "",
