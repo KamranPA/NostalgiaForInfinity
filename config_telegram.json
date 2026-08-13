@@ -50,12 +50,12 @@
             "status": "on",
             "warning": "on",
             "startup": "on",
-            "buy": "on",
-            "buy_cancel": "on",
-            "buy_fill": "on",
-            "sell": "on",
-            "sell_cancel": "on",
-            "sell_fill": "on",
+            "entry": "on",
+            "entry_cancel": "on",
+            "entry_fill": "on",
+            "exit": "on",
+            "exit_cancel": "on",
+            "exit_fill": "on",
             "show_candle": "off"
         }
     },
