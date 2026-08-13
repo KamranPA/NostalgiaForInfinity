@@ -47,8 +47,19 @@ jobs:
           '
 
       - name: Run Continuous Signal Monitor
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          # اجرای پیوسته به مدت ۳ ساعت و ۵۵ دقیقه (۱۴۱۰۰ ثانیه)
+          # ۱. ارسال اجباری پیام تست
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            -d "text=✅ تست اتصال: ربات سیگنال‌دهی مجدداً به‌صورت زنده فعال شد!"
+
+          echo ""
+          echo " Starting Freqtrade Live Monitoring..."
+
+          # ۲. اجرای حلقه پایش زنده بازار
           end=$((SECONDS+14100))
           while [ $SECONDS -lt $end ]; do
             freqtrade trade --config config_telegram.json --strategy NostalgiaForInfinityX7 --dry-run-wallet 1000 || true
