@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 # تنظیمات اصلی Walk-Forward Analysis
 # ==========================================
 STRATEGY_NAME = "NostalgiaForInfinityX7"
-CONFIG_FILE = "config.json"
-DATA_EXCHANGE = "okx"  # OKX دارای آرشیو کامل دیتای تاریخی و بدون محدودیت روی GitHub Actions است
+CONFIG_FILE = "config_telegram.json"  # <--- نام فایل کانفیگی که در پروژه وجود دارد را اینجا قرار دهید
+DATA_EXCHANGE = "okx"
 PAIRS = ["BTC/USDT", "ETH/USDT"]
 TIMEFRAMES = ["5m", "1h"]
 
