@@ -2,7 +2,7 @@ import os
 import json
 import glob
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ==========================================
 # تنظیمات اصلی Walk-Forward Analysis
@@ -20,19 +20,18 @@ STEP_DAYS = 30
 RESULTS_DIR = os.path.join("user_data", "backtest_results")
 
 def ensure_dir(directory):
-    """اطمینان از وجود پوشه خروجی"""
     if not os.path.exists(directory):
         os.makedirs(directory)
 
 def run_command(command):
-    """اجرای دستورات ترمینال و چاپ خروجی مستقیم در ترمینال"""
     print(f"\n[EXEC] {' '.join(command)}")
     result = subprocess.run(command, capture_output=False, text=True)
     return result.returncode == 0
 
 def generate_timeranges():
-    """تولید بازه‌های زمانی ۳۰ روزه"""
-    end_date = datetime.utcnow()
+    """تولید بازه‌های زمانی واقعی ۳۰ روزه بر اساس تاریخ فعلی"""
+    now = datetime.now(timezone.utc)
+    end_date = now.replace(minute=0, second=0, microsecond=0)
     start_date = end_date - timedelta(days=TOTAL_DAYS)
     
     timeranges = []
@@ -42,19 +41,17 @@ def generate_timeranges():
         current_end = current_start + timedelta(days=WINDOW_DAYS)
         start_str = current_start.strftime("%Y%m%d")
         end_str = current_end.strftime("%Y%m%d")
-        timeranges.append(f"{start_str}-{end_str}")
+        timeranges.append((f"{start_str}-{end_str}", current_start, current_end))
         current_start += timedelta(days=STEP_DAYS)
         
     return timeranges
 
 def parse_latest_backtest_result():
-    """استخراج نتایج آخرین بک‌تست انجام شده از فایل JSON"""
     pattern1 = os.path.join(RESULTS_DIR, ".backtest-result-*.json")
     pattern2 = os.path.join(RESULTS_DIR, "backtest-result-*.json")
     
     list_of_files = glob.glob(pattern1) + glob.glob(pattern2)
     if not list_of_files:
-        print("[WARNING] No backtest result file found in backtest_results folder.")
         return None
     
     latest_file = max(list_of_files, key=os.path.getctime)
@@ -76,7 +73,7 @@ def parse_latest_backtest_result():
                 "win_rate": win_rate
             }
     except Exception as e:
-        print(f"[WARNING] Failed to parse {latest_file}: {e}")
+        print(f"[WARNING] Could not parse results: {e}")
         return None
 
 def main():
@@ -91,23 +88,24 @@ def main():
     timeranges = generate_timeranges()
     summary_results = []
     
-    for idx, timerange in enumerate(timeranges, start=1):
-        print(f"\n>>> Running Window {idx}/{len(timeranges)}: {timerange} <<<")
+    # برای محاسبه اندیکاتورهای سنگین استراتژی، داده دانلود را از ۶۰ روز قبل‌تر دانلود می‌کنیم
+    download_start = (timeranges[0][1] - timedelta(days=60)).strftime("%Y%m%d")
+    download_end = timeranges[-1][2].strftime("%Y%m%d")
+    full_download_timerange = f"{download_start}-{download_end}"
+    
+    print(f"\n[INFO] Downloading full dataset for indicators ({full_download_timerange})...")
+    download_cmd = [
+        "freqtrade", "download-data",
+        "--exchange", DATA_EXCHANGE,
+        "-p", *PAIRS,
+        "-t", *TIMEFRAMES,
+        "--timerange", full_download_timerange
+    ]
+    run_command(download_cmd)
+    
+    for idx, (timerange, _, _) in enumerate(timeranges, start=1):
+        print(f"\n>>> Running Backtest Window {idx}/{len(timeranges)}: {timerange} <<<")
         
-        # ۱. دانلود داده
-        download_cmd = [
-            "freqtrade", "download-data",
-            "--exchange", DATA_EXCHANGE,
-            "-p", *PAIRS,
-            "-t", *TIMEFRAMES,
-            "--timerange", timerange
-        ]
-        
-        if not run_command(download_cmd):
-            print(f"[SKIP] Failed to download data for window {timerange}.")
-            continue
-            
-        # ۲. اجرای بک‌تست همراه با ذخیره خروجی
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
@@ -122,10 +120,17 @@ def main():
             if res:
                 res['window'] = f"W{idx} ({timerange})"
                 summary_results.append(res)
+            else:
+                summary_results.append({
+                    'window': f"W{idx} ({timerange})",
+                    'trades': 0,
+                    'win_rate': 0.0,
+                    'profit_pct': 0.0
+                })
         else:
             print(f"[SKIP] Backtest failed for window {timerange}.")
 
-    # ۳. نمایش جدول نهایی تجمیعی
+    # نمایش جدول نهایی
     print("\n" + "=" * 70)
     print("                WALK-FORWARD SUMMARY RESULTS                ")
     print("=" * 70)
