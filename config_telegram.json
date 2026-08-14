@@ -1,27 +1,20 @@
 {
     "max_open_trades": 5,
     "stake_currency": "USDT",
-    "stake_amount": 100,
+    "stake_amount": "unlimited",
     "tradable_balance_ratio": 0.99,
     "fiat_display_currency": "USD",
     "dry_run": true,
     "dry_run_wallet": 1000,
     "cancel_open_orders_on_exit": false,
-    "timeframe": "5m",
-    "use_exit_signal": true,
-    "exit_profit_only": false,
-    "exit_profit_offset": 0.0,
-    "ignore_roi_if_entry_signal": false,
-    "entry_pricing": {
-        "price_side": "same",
-        "use_order_book": true,
-        "order_book_top": 1,
-        "price_last_balance": 0.0
-    },
-    "exit_pricing": {
-        "price_side": "same",
-        "use_order_book": true,
-        "order_book_top": 1
+    "trading_mode": "spot",
+    "margin_mode": "",
+    "user_data_dir": "user_data",
+    "initial_state": "running",
+    "force_entry_enable": false,
+    "internals": {
+        "process_throttle_secs": 5,
+        "heartbeat_interval": 60
     },
     "exchange": {
         "name": "okx",
@@ -42,10 +35,12 @@
             "method": "StaticPairList"
         }
     ],
-    "bot_name": "Freqtrade_Signal_Bot",
-    "initial_state": "running",
-    "force_entry_enable": false,
-    "internals": {
-        "process_throttle_secs": 5
+    "bot_name": "freqtrade",
+    "api_server": {
+        "enabled": false,
+        "listen_ip_address": "127.0.0.1",
+        "listen_port": 8080,
+        "username": "freqtrade",
+        "password": "freqtrade-password"
     }
 }
