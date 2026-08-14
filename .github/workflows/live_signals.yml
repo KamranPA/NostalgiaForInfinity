@@ -39,9 +39,15 @@ jobs:
           pip install freqtrade
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Run Freqtrade Dry-Run
+      # جایگزینی عبارات موقت با مقادیر واقعی Secrets در کانفیگ
+      - name: Inject Telegram Credentials
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          sed -i "s/TELEGRAM_TOKEN_PLACEHOLDER/$BOT_TOKEN/g" config_telegram.json
+          sed -i "s/TELEGRAM_CHAT_ID_PLACEHOLDER/$CHAT_ID/g" config_telegram.json
+
+      - name: Run Freqtrade Dry-Run
         run: |
           freqtrade trade --config config_telegram.json --strategy NostalgiaForInfinityX7
