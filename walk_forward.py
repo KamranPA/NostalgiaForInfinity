@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 # تنظیمات اصلی Walk-Forward Analysis
 # ==========================================
 STRATEGY_NAME = "NostalgiaForInfinityX7"
-CONFIG_FILE = "config.json"  # یا config_telegram.json
-DATA_EXCHANGE = "kraken"     # تغییر به kraken برای دور زدن تحریم IP سرور گیت‌هاب
+CONFIG_FILE = "config.json"
+DATA_EXCHANGE = "gateio"     # <--- تغییر به gateio (بدون تحریم و با پشتیبانی کامل klines)
 PAIRS = ["BTC/USDT", "ETH/USDT"]
 TIMEFRAMES = ["5m", "1h"]
 
@@ -36,7 +36,6 @@ def generate_timeranges():
     while current_start + timedelta(days=WINDOW_DAYS) <= end_date:
         current_end = current_start + timedelta(days=WINDOW_DAYS)
         
-        # فرمت مورد نیاز Freqtrade: YYYYMMDD-YYYYMMDD
         start_str = current_start.strftime("%Y%m%d")
         end_str = current_end.strftime("%Y%m%d")
         
@@ -57,7 +56,7 @@ def main():
     for idx, timerange in enumerate(timeranges, start=1):
         print(f"\n>>> Running Window {idx}/{len(timeranges)}: {timerange} <<<")
         
-        # ۱. دانلود داده‌های تاریخی مربوط به بازه مشخص‌شده
+        # ۱. دانلود داده‌های تاریخی
         download_cmd = [
             "freqtrade", "download-data",
             "--exchange", DATA_EXCHANGE,
@@ -70,7 +69,7 @@ def main():
             print(f"[SKIP] Failed to download data for window {timerange}. Skipping...")
             continue
             
-        # ۲. اجرای بک‌تست روی داده‌های دانلود شده
+        # ۲. اجرای بک‌تست
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
