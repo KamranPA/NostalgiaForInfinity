@@ -1,13 +1,21 @@
 name: Telegram Live Signals
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # برای اجرای دستی یا توسط وب‌هوک (cron-job.org)
+
+# ========================================================
+# این بخش دقیقاً مشکل تداخل و اجراهای هم‌زمان را حل می‌کند
+concurrency:
+  group: live-bot-execution
+  cancel-in-progress: true
+# ========================================================
 
 jobs:
-  live-signals:
+  trade:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -15,7 +23,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install System Dependencies for TA-Lib
+      - name: Install TA-Lib System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential wget
@@ -26,42 +34,14 @@ jobs:
           make
           sudo make install
           cd ..
-          rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
+          rm -rf ta-lib*
 
-      - name: Install Freqtrade
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install freqtrade
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Inject Secrets into Config
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Run Freqtrade Dry-Run
         run: |
-          node -e '
-            const fs = require("fs");
-            let conf = fs.readFileSync("config_telegram.json", "utf8");
-            conf = conf.replace("TELEGRAM_TOKEN_PLACEHOLDER", process.env.TELEGRAM_TOKEN);
-            conf = conf.replace("TELEGRAM_CHAT_ID_PLACEHOLDER", process.env.TELEGRAM_CHAT_ID);
-            fs.writeFileSync("config_telegram.json", conf);
-          '
-
-      - name: Run Continuous Signal Monitor
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          # ۱. ارسال اجباری پیام تست
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            -d "text=✅ تست اتصال: ربات سیگنال‌دهی مجدداً به‌صورت زنده فعال شد!"
-
-          echo ""
-          echo " Starting Freqtrade Live Monitoring..."
-
-          # ۲. اجرای حلقه پایش زنده بازار
-          end=$((SECONDS+14100))
-          while [ $SECONDS -lt $end ]; do
-            freqtrade trade --config config_telegram.json --strategy NostalgiaForInfinityX7 --dry-run-wallet 1000 || true
-            sleep 10
-          done
+          freqtrade trade --config config_telegram.json --strategy NostalgiaForInfinityX7
