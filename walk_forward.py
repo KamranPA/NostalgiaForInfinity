@@ -10,30 +10,14 @@ PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"]
 TIMEFRAMES = ["5m"]
 TIMERANGE = "20260101-20260814"
 
-DATA_DIR = os.path.join("user_data", "data", DATA_EXCHANGE)
-
-def run_command(command):
-    print(f"\n[EXEC] {' '.join(command)}")
-    subprocess.run(command, capture_output=False, text=True)
-
 def main():
     print("=" * 60)
-    print("DEEP RECURSIVE SCANNER")
+    print("STRICT ERROR CAPTURE SCANNER")
     print(f"Current Directory: {os.getcwd()}")
     print("=" * 60)
     
-    # دانلود دیتا
-    download_cmd = [
-        "freqtrade", "download-data",
-        "--exchange", DATA_EXCHANGE,
-        "-p", *PAIRS,
-        "-t", *TIMEFRAMES,
-        "--timerange", TIMERANGE
-    ]
-    run_command(download_cmd)
-    
-    # اجرای بک‌تست با درخواست صریح ذخیره در پوشه استاندارد
-    print(f"\n[INFO] Running backtest...")
+    # اجرای بک‌تست با چاپ کامل خروجی استاندارد و خطاهای احتمالی ترمینال
+    print(f"\n[INFO] Running backtest and capturing raw output...")
     backtest_cmd = [
         "freqtrade", "backtesting",
         "--config", CONFIG_FILE,
@@ -43,10 +27,16 @@ def main():
         "--export", "trades",
         "--export-directory", "user_data/backtest_results"
     ]
-    run_command(backtest_cmd)
     
-    # اسکن تمام فایل‌های ایجاد شده در کل پوشه user_data برای پیدا کردن خروجی
-    print("\n[DEBUG] Scanning entire user_data directory for any new files:")
+    result = subprocess.run(backtest_cmd, capture_output=True, text=True)
+    
+    print("\n--- STDOUT ---")
+    print(result.stdout[-2000:]) # چاپ ۲۰۰۲ کاراکتر آخر خروجی استاندارد
+    
+    print("\n--- STDERR ---")
+    print(result.stderr[-2000:]) # چاپ خطاهای احتمالی پایتون یا فریدتید
+    
+    print("\n[DEBUG] Scanning entire user_data directory:")
     all_files = glob.glob("user_data/**/*", recursive=True)
     for f in all_files:
         if os.path.isfile(f):
