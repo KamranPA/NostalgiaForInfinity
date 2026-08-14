@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 STRATEGY = "NostalgiaForInfinityX7"
 CONFIG = "config_telegram.json"
 TIMEFRAME = "5m"
-# تایم‌فریم‌های مکمل که استراتژی N4I حتماً به آن‌ها نیاز دارد:
-ADDITIONAL_TIMEFRAMES = "1h 1d" 
+# تایم‌فریم‌های فرعی مورد نیاز N4I
+ADDITIONAL_TIMEFRAMES = "15m 1h 4h 1d" 
 TOTAL_DAYS = 120       # بازه زمانی کل (۱۲۰ روز گذشته)
 WINDOW_DAYS = 30       # طول هر پنجره تست (۳۰ روزه)
 STEP_DAYS = 30         # میزان حرکت به جلو در هر گام (۳۰ روز)
@@ -38,23 +38,23 @@ def main():
 
     print(f"تعداد پنجره‌های زمان یافت‌شده: {len(timeranges)}")
     
-    # ۱. دانلود کامل داده‌ها (شامل تایم‌فریم‌های ۵ دقیقه‌ای + تایم‌فریم‌های مکمل استراتژی)
+    # ۱. دانلود داده‌ها (بدون پرچم --dl-trades برای کوین‌اکس)
     first_date = timeranges[0][0]
     last_date = timeranges[-1][1]
     
     download_cmd = (
         f"freqtrade download-data --config {CONFIG} "
         f"--timeframes {TIMEFRAME} {ADDITIONAL_TIMEFRAMES} "
-        f"--timerange {first_date}-{last_date} "
-        f"--dl-trades"
+        f"--timerange {first_date}-{last_date}"
     )
     
-    print(f"\n[۱/۲] در حال دانلود جامع داده‌ها (تایم‌فریم‌های {TIMEFRAME} و {ADDITIONAL_TIMEFRAMES})...")
+    print(f"\n[۱/۲] در حال دانلود داده‌ها از صرافی CoinEx (تایم‌فریم‌های {TIMEFRAME} {ADDITIONAL_TIMEFRAMES})...")
     dl_out, dl_err = run_command(download_cmd)
     
     if dl_err and "ERROR" in dl_err:
-        print("هشدار یا خطا در دانلود داده‌ها:")
-        print(dl_err[-500:])
+        print("❌ خطا در دانلود داده‌ها:")
+        print(dl_err[-600:])
+        return
     else:
         print("✅ دانلود داده‌ها با موفقیت انجام شد.")
 
