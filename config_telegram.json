@@ -32,7 +32,8 @@
         "pair_whitelist": [
             "BTC/USDT",
             "ETH/USDT",
-            "SOL/USDT"
+            "SOL/USDT",
+            "XRP/USDT"
         ],
         "pair_blacklist": []
     },
@@ -41,9 +42,6 @@
             "method": "StaticPairList"
         }
     ],
-    "telegram": {
-        "enabled": false
-    },
     "api_server": {
         "enabled": false
     },
