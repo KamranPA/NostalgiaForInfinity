@@ -29,7 +29,6 @@ def run_command(command):
     return result.returncode == 0
 
 def generate_timeranges():
-    """تولید بازه‌های زمانی واقعی ۳۰ روزه بر اساس تاریخ فعلی"""
     now = datetime.now(timezone.utc)
     end_date = now.replace(minute=0, second=0, microsecond=0)
     start_date = end_date - timedelta(days=TOTAL_DAYS)
@@ -88,7 +87,7 @@ def main():
     timeranges = generate_timeranges()
     summary_results = []
     
-    # برای محاسبه اندیکاتورهای سنگین استراتژی، داده دانلود را از ۶۰ روز قبل‌تر دانلود می‌کنیم
+    # دانلود دیتای پیش‌فرض (Warmup) برای اندیکاتورهای سنگین
     download_start = (timeranges[0][1] - timedelta(days=60)).strftime("%Y%m%d")
     download_end = timeranges[-1][2].strftime("%Y%m%d")
     full_download_timerange = f"{download_start}-{download_end}"
@@ -106,11 +105,13 @@ def main():
     for idx, (timerange, _, _) in enumerate(timeranges, start=1):
         print(f"\n>>> Running Backtest Window {idx}/{len(timeranges)}: {timerange} <<<")
         
+        # اضافه کردن -p به بک‌تست برای اجبار فرکترید به استفاده از جفت‌ارزهای ما
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
             "--strategy", STRATEGY_NAME,
             "--data-format-exchange", DATA_EXCHANGE,
+            "-p", *PAIRS,
             "--export", "trades",
             "--timerange", timerange
         ]
