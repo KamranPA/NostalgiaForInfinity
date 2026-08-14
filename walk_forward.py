@@ -2,7 +2,7 @@ import os
 import glob
 import subprocess
 
-STRATEGY_NAME = "DefaultStrategy"
+STRATEGY_NAME = "NostalgiaForInfinityX"
 CONFIG_FILE = "config_telegram.json"
 DATA_EXCHANGE = "okx"
 
