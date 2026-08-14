@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 # تنظیمات اصلی Walk-Forward Analysis
 # ==========================================
 STRATEGY_NAME = "NostalgiaForInfinityX7"
-CONFIG_FILE = "config_telegram.json"  # <--- نام فایل کانفیگی که در پروژه وجود دارد را اینجا قرار دهید
-DATA_EXCHANGE = "okx"
-PAIRS = ["BTC/USDT", "ETH/USDT"]
+CONFIG_FILE = "config_telegram.json"
+DATA_EXCHANGE = "okx"  # دانلود از OKX جهت جلوگیری از تحریم و محدودیت
+PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]  # جفت‌ارزهای موجود در کانفیگ
 TIMEFRAMES = ["5m", "1h"]
 
 TOTAL_DAYS = 120
@@ -68,11 +68,12 @@ def main():
             print(f"[SKIP] Failed to download data for window {timerange}. Skipping...")
             continue
             
-        # ۲. اجرای بک‌تست روی بازه دانلود شده
+        # ۲. اجرای بک‌تست با ارجاع صریح به دیتای OKX
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
             "--strategy", STRATEGY_NAME,
+            "--data-format-exchange", DATA_EXCHANGE,
             "--timerange", timerange
         ]
         
