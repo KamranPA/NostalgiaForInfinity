@@ -1,14 +1,11 @@
 name: Telegram Live Signals
 
 on:
-  workflow_dispatch: # برای اجرای دستی یا توسط وب‌هوک (cron-job.org)
+  workflow_dispatch:
 
-# ========================================================
-# این بخش دقیقاً مشکل تداخل و اجراهای هم‌زمان را حل می‌کند
 concurrency:
   group: live-bot-execution
   cancel-in-progress: true
-# ========================================================
 
 jobs:
   trade:
@@ -43,5 +40,8 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run Freqtrade Dry-Run
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           freqtrade trade --config config_telegram.json --strategy NostalgiaForInfinityX7
