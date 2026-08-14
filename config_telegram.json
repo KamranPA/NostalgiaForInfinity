@@ -42,9 +42,6 @@
             "method": "StaticPairList"
         }
     ],
-    "api_server": {
-        "enabled": false
-    },
     "bot_name": "Freqtrade_Signal_Bot",
     "initial_state": "running",
     "force_entry_enable": false,
