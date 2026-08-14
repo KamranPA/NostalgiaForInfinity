@@ -24,7 +24,7 @@
         "order_book_top": 1
     },
     "exchange": {
-        "name": "coinex",
+        "name": "okx",
         "key": "",
         "secret": "",
         "ccxt_config": {},
