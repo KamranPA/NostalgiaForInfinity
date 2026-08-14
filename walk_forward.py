@@ -6,11 +6,11 @@ from datetime import datetime, timedelta
 STRATEGY = "NostalgiaForInfinityX7"
 CONFIG = "config_telegram.json"
 TIMEFRAME = "5m"
-# تایم‌فریم‌های فرعی مورد نیاز N4I
 ADDITIONAL_TIMEFRAMES = "15m 1h 4h 1d" 
-TOTAL_DAYS = 120       # بازه زمانی کل (۱۲۰ روز گذشته)
+TOTAL_DAYS = 120       # بازه زمانی کل (۱۲۰ روز)
 WINDOW_DAYS = 30       # طول هر پنجره تست (۳۰ روزه)
-STEP_DAYS = 30         # میزان حرکت به جلو در هر گام (۳۰ روز)
+STEP_DAYS = 30         # میزان حرکت به جلو در هر گام
+BACKTEST_EXCHANGE = "binance" # 👈 استفاده از بایننس برای رفع محدودیت دیتا
 # =================================================
 
 def run_command(command):
@@ -38,17 +38,18 @@ def main():
 
     print(f"تعداد پنجره‌های زمان یافت‌شده: {len(timeranges)}")
     
-    # ۱. دانلود داده‌ها (بدون پرچم --dl-trades برای کوین‌اکس)
+    # ۱. دانلود داده‌ها از بایننس
     first_date = timeranges[0][0]
     last_date = timeranges[-1][1]
     
     download_cmd = (
         f"freqtrade download-data --config {CONFIG} "
+        f"--exchange {BACKTEST_EXCHANGE} "
         f"--timeframes {TIMEFRAME} {ADDITIONAL_TIMEFRAMES} "
         f"--timerange {first_date}-{last_date}"
     )
     
-    print(f"\n[۱/۲] در حال دانلود داده‌ها از صرافی CoinEx (تایم‌فریم‌های {TIMEFRAME} {ADDITIONAL_TIMEFRAMES})...")
+    print(f"\n[۱/۲] در حال دانلود داده‌های عمیق از {BACKTEST_EXCHANGE.upper()} (تایم‌فریم‌های {TIMEFRAME} {ADDITIONAL_TIMEFRAMES})...")
     dl_out, dl_err = run_command(download_cmd)
     
     if dl_err and "ERROR" in dl_err:
@@ -66,7 +67,11 @@ def main():
         timerange_str = f"{start}-{end}"
         print(f"\n---> پنجره شماره {idx}: از {start} تا {end}")
         
-        bt_cmd = f"freqtrade backtesting --config {CONFIG} --strategy {STRATEGY} --timerange {timerange_str}"
+        bt_cmd = (
+            f"freqtrade backtesting --config {CONFIG} "
+            f"--exchange {BACKTEST_EXCHANGE} "
+            f"--strategy {STRATEGY} --timerange {timerange_str}"
+        )
         stdout, stderr = run_command(bt_cmd)
         
         if "STRATEGY SUMMARY" in stdout:
