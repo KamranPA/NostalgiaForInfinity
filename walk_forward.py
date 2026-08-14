@@ -7,12 +7,10 @@ from datetime import datetime, timedelta, timezone
 # ==========================================
 # تنظیمات اصلی Walk-Forward Analysis
 # ==========================================
-# فعلاً روی استراتژی پیش‌فرض برای تست نهایی
 STRATEGY_NAME = "SampleStrategy"
 CONFIG_FILE = "config_telegram.json"
 DATA_EXCHANGE = "okx"
 
-# لیست کوتاه برای اجرای سریع زیر ۲ دقیقه
 PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
 TIMEFRAMES = ["5m"]
 
@@ -109,11 +107,11 @@ def main():
     for idx, (timerange, _, _) in enumerate(timeranges, start=1):
         print(f"\n>>> Running Backtest Window {idx}/{len(timeranges)}: {timerange} <<<")
         
+        # بدون آرگومان --exchange (چون صرافی از داخل کانفیگ خوانده می‌شود)
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
             "--strategy", STRATEGY_NAME,
-            "--exchange", DATA_EXCHANGE,        # <--- این پارامتر مشکل تداخل کانفیگ را حل می‌کند
             "--data-format-exchange", DATA_EXCHANGE,
             "--export", "trades",
             "--timerange", timerange
