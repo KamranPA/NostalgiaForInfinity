@@ -3,11 +3,13 @@ import json
 import glob
 import subprocess
 
-STRATEGY_NAME = "SampleStrategy"
+# تغییر استراتژی به DefaultStrategy برای تضمین تولید معامله و فایل خروجی
+STRATEGY_NAME = "DefaultStrategy"
 CONFIG_FILE = "config_telegram.json"
 DATA_EXCHANGE = "okx"
 
-PAIRS = ["BTC/USDT"]
+# افزایش لیست ارزها برای بالا بردن شانس تولید سیگنال
+PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"]
 TIMEFRAMES = ["5m"]
 TIMERANGE = "20260101-20260814"
 
@@ -28,7 +30,7 @@ def main():
     ensure_dir(DATA_DIR)
     
     print("=" * 60)
-    print("ULTIMATE DEBUG SANITY CHECK")
+    print("ULTIMATE DEBUG SANITY CHECK (DefaultStrategy)")
     print(f"Current Directory: {os.getcwd()}")
     print(f"Data Directory Path: {os.path.abspath(DATA_DIR)}")
     print("=" * 60)
