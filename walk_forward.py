@@ -7,11 +7,10 @@ from datetime import datetime, timedelta
 # ==========================================
 STRATEGY_NAME = "NostalgiaForInfinityX7"
 CONFIG_FILE = "config.json"
-DATA_EXCHANGE = "gateio"     # <--- تغییر به gateio (بدون تحریم و با پشتیبانی کامل klines)
+DATA_EXCHANGE = "bybit"  # صرافی بای‌بیت بدون تحریم و با ساختار استاندارد klines
 PAIRS = ["BTC/USDT", "ETH/USDT"]
 TIMEFRAMES = ["5m", "1h"]
 
-# تنظیمات پنجره‌های زمانی (۱۲۰ روز کل، پنجره‌های ۳۰ روزه)
 TOTAL_DAYS = 120
 WINDOW_DAYS = 30
 STEP_DAYS = 30
@@ -19,6 +18,7 @@ STEP_DAYS = 30
 def run_command(command):
     """اجرای دستورات ترمینال و نمایش خروجی"""
     print(f"\n[EXEC] {' '.join(command)}")
+    # استفاده از subprocess برای مدیریت بهتر خروجی
     result = subprocess.run(command, capture_output=False, text=True)
     if result.returncode != 0:
         print(f"[ERROR] Command failed with return code {result.returncode}")
@@ -56,12 +56,12 @@ def main():
     for idx, timerange in enumerate(timeranges, start=1):
         print(f"\n>>> Running Window {idx}/{len(timeranges)}: {timerange} <<<")
         
-        # ۱. دانلود داده‌های تاریخی
+        # ۱. دانلود داده‌های تاریخی از Bybit
         download_cmd = [
             "freqtrade", "download-data",
             "--exchange", DATA_EXCHANGE,
-            "--pairs", *PAIRS,
-            "--timeframes", *TIMEFRAMES,
+            "-p", "BTC/USDT", "ETH/USDT",
+            "-t", "5m", "1h",
             "--timerange", timerange
         ]
         
