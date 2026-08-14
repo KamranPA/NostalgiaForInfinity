@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 # ==========================================
 STRATEGY_NAME = "NostalgiaForInfinityX7"
 CONFIG_FILE = "config.json"
-DATA_EXCHANGE = "bybit"  # صرافی بای‌بیت بدون تحریم و با ساختار استاندارد klines
+DATA_EXCHANGE = "okx"  # OKX دارای آرشیو کامل دیتای تاریخی و بدون محدودیت روی GitHub Actions است
 PAIRS = ["BTC/USDT", "ETH/USDT"]
 TIMEFRAMES = ["5m", "1h"]
 
@@ -18,7 +18,6 @@ STEP_DAYS = 30
 def run_command(command):
     """اجرای دستورات ترمینال و نمایش خروجی"""
     print(f"\n[EXEC] {' '.join(command)}")
-    # استفاده از subprocess برای مدیریت بهتر خروجی
     result = subprocess.run(command, capture_output=False, text=True)
     if result.returncode != 0:
         print(f"[ERROR] Command failed with return code {result.returncode}")
@@ -26,7 +25,7 @@ def run_command(command):
     return True
 
 def generate_timeranges():
-    """تولید بازه‌های زمانی برای بک‌تست پیش‌رونده"""
+    """تولید بازه‌های زمانی ۳۰ روزه برای بک‌تست پیش‌رونده"""
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=TOTAL_DAYS)
     
@@ -56,12 +55,12 @@ def main():
     for idx, timerange in enumerate(timeranges, start=1):
         print(f"\n>>> Running Window {idx}/{len(timeranges)}: {timerange} <<<")
         
-        # ۱. دانلود داده‌های تاریخی از Bybit
+        # ۱. دانلود داده‌های تاریخی از OKX
         download_cmd = [
             "freqtrade", "download-data",
             "--exchange", DATA_EXCHANGE,
-            "-p", "BTC/USDT", "ETH/USDT",
-            "-t", "5m", "1h",
+            "-p", *PAIRS,
+            "-t", *TIMEFRAMES,
             "--timerange", timerange
         ]
         
@@ -69,7 +68,7 @@ def main():
             print(f"[SKIP] Failed to download data for window {timerange}. Skipping...")
             continue
             
-        # ۲. اجرای بک‌تست
+        # ۲. اجرای بک‌تست روی بازه دانلود شده
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
