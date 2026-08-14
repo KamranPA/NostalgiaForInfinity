@@ -7,22 +7,16 @@ from datetime import datetime, timedelta, timezone
 # ==========================================
 # تنظیمات اصلی Walk-Forward Analysis
 # ==========================================
-STRATEGY_NAME = "NostalgiaForInfinityX7"
+# تغییر نام استراتژی به استراتژی پیش‌فرض برای تست سلامت
+STRATEGY_NAME = "SampleStrategy"
 CONFIG_FILE = "config_telegram.json"
 DATA_EXCHANGE = "okx"
 
-# لیست ۳۰ جفت‌ارز پرحجم و نقدشونده برای دریافت سیگنال‌های کافی
-PAIRS = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT", 
-    "DOGE/USDT", "BNB/USDT", "AVAX/USDT", "LINK/USDT", "SUI/USDT", 
-    "NEAR/USDT", "DOT/USDT", "LTC/USDT", "SHIB/USDT", "PEPE/USDT", 
-    "TRX/USDT", "UNI/USDT", "ATOM/USDT", "ETC/USDT", "APT/USDT", 
-    "FIL/USDT", "ICP/USDT", "RENDER/USDT", "BCH/USDT", "INJ/USDT", 
-    "FET/USDT", "OP/USDT", "ARB/USDT", "TIA/USDT", "STX/USDT"
-]
+# کاهش لیست به ۳ ارز برای اجرای زیر ۱ دقیقه
+PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
 
-# تایم‌فریم‌های ضروری برای محاسبه اندیکاتورهای NFIN
-TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h"]
+# استراتژی پیش‌فرض فقط به ۵ دقیقه نیاز دارد
+TIMEFRAMES = ["5m"]
 
 TOTAL_DAYS = 120
 WINDOW_DAYS = 30
@@ -92,7 +86,7 @@ def main():
     ensure_dir(RESULTS_DIR)
     
     print("=" * 60)
-    print("Starting Walk-Forward Analysis")
+    print("Starting Walk-Forward Analysis (SANITY CHECK)")
     print(f"Strategy: {STRATEGY_NAME}")
     print(f"Data Source Exchange: {DATA_EXCHANGE}")
     print("=" * 60)
@@ -100,12 +94,11 @@ def main():
     timeranges = generate_timeranges()
     summary_results = []
     
-    # دانلود دیتای ۶۰ روز قبل‌تر برای گرم کردن اندیکاتورها (Warmup)
     download_start = (timeranges[0][1] - timedelta(days=60)).strftime("%Y%m%d")
     download_end = timeranges[-1][2].strftime("%Y%m%d")
     full_download_timerange = f"{download_start}-{download_end}"
     
-    print(f"\n[INFO] Downloading complete dataset ({full_download_timerange})...")
+    print(f"\n[INFO] Downloading minimal dataset ({full_download_timerange})...")
     download_cmd = [
         "freqtrade", "download-data",
         "--exchange", DATA_EXCHANGE,
@@ -123,7 +116,6 @@ def main():
             "--config", CONFIG_FILE,
             "--strategy", STRATEGY_NAME,
             "--data-format-exchange", DATA_EXCHANGE,
-            "--timeframe-detail", "1m",
             "--export", "trades",
             "--timerange", timerange
         ]
