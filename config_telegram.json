@@ -42,30 +42,10 @@
         }
     ],
     "telegram": {
-        "enabled": true,
-        "token": "TELEGRAM_TOKEN_PLACEHOLDER",
-        "chat_id": "TELEGRAM_CHAT_ID_PLACEHOLDER",
-        "allow_custom_messages": true,
-        "notification_settings": {
-            "status": "on",
-            "warning": "on",
-            "startup": "on",
-            "entry": "on",
-            "entry_cancel": "on",
-            "entry_fill": "on",
-            "exit": "on",
-            "exit_cancel": "on",
-            "exit_fill": "on",
-            "show_candle": "off"
-        }
+        "enabled": false
     },
     "api_server": {
-        "enabled": false,
-        "listen_ip_address": "127.0.0.1",
-        "listen_port": 8080,
-        "username": "admin",
-        "password": "somethingRandomPassword123",
-        "jwt_secret_key": "somethingRandomSecretKey32CharsLong!"
+        "enabled": false
     },
     "bot_name": "Freqtrade_Signal_Bot",
     "initial_state": "running",
