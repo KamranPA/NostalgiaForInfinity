@@ -17,8 +17,15 @@ TOTAL_DAYS = 120
 WINDOW_DAYS = 30
 STEP_DAYS = 30
 
+RESULTS_DIR = os.path.join("user_data", "backtest_results")
+
+def ensure_dir(directory):
+    """اطمینان از وجود پوشه خروجی"""
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
 def run_command(command):
-    """اجرای دستورات ترمینال"""
+    """اجرای دستورات ترمینال و چاپ خروجی مستقیم در ترمینال"""
     print(f"\n[EXEC] {' '.join(command)}")
     result = subprocess.run(command, capture_output=False, text=True)
     return result.returncode == 0
@@ -41,10 +48,13 @@ def generate_timeranges():
     return timeranges
 
 def parse_latest_backtest_result():
-    """استخراج نتایج آخرین بک‌تست انجام شده"""
-    results_dir = os.path.join("user_data", "backtest_results")
-    list_of_files = glob.glob(os.path.join(results_dir, ".backtest-result-*.json"))
+    """استخراج نتایج آخرین بک‌تست انجام شده از فایل JSON"""
+    pattern1 = os.path.join(RESULTS_DIR, ".backtest-result-*.json")
+    pattern2 = os.path.join(RESULTS_DIR, "backtest-result-*.json")
+    
+    list_of_files = glob.glob(pattern1) + glob.glob(pattern2)
     if not list_of_files:
+        print("[WARNING] No backtest result file found in backtest_results folder.")
         return None
     
     latest_file = max(list_of_files, key=os.path.getctime)
@@ -56,7 +66,8 @@ def parse_latest_backtest_result():
             trades = strategy_data.get('total_trades', 0)
             profit_pct = strategy_data.get('profit_total_pct', 0.0) * 100
             profit_abs = strategy_data.get('profit_total_abs', 0.0)
-            win_rate = (strategy_data.get('wins', 0) / trades * 100) if trades > 0 else 0
+            wins = strategy_data.get('wins', 0)
+            win_rate = (wins / trades * 100) if trades > 0 else 0
             
             return {
                 "trades": trades,
@@ -65,10 +76,12 @@ def parse_latest_backtest_result():
                 "win_rate": win_rate
             }
     except Exception as e:
-        print(f"[WARNING] Could not parse results: {e}")
+        print(f"[WARNING] Failed to parse {latest_file}: {e}")
         return None
 
 def main():
+    ensure_dir(RESULTS_DIR)
+    
     print("=" * 60)
     print("Starting Walk-Forward Analysis")
     print(f"Strategy: {STRATEGY_NAME}")
@@ -94,12 +107,13 @@ def main():
             print(f"[SKIP] Failed to download data for window {timerange}.")
             continue
             
-        # ۲. اجرای بک‌تست
+        # ۲. اجرای بک‌تست همراه با ذخیره خروجی
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
             "--strategy", STRATEGY_NAME,
             "--data-format-exchange", DATA_EXCHANGE,
+            "--export", "trades",
             "--timerange", timerange
         ]
         
@@ -111,7 +125,7 @@ def main():
         else:
             print(f"[SKIP] Backtest failed for window {timerange}.")
 
-    # ۳. نمایش جدول نهایی نتایج Walk-Forward
+    # ۳. نمایش جدول نهایی تجمیعی
     print("\n" + "=" * 70)
     print("                WALK-FORWARD SUMMARY RESULTS                ")
     print("=" * 70)
