@@ -16,8 +16,7 @@ PAIRS = [
     "XRP/USDT", "ADA/USDT", "DOGE/USDT", "BNB/USDT"
 ]
 
-# اضافه شدن تایم‌فریم 1m که حیاتی‌ترین نیاز NFIN است
-TIMEFRAMES = ["1m", "5m", "15m", "1h"]
+TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h"]
 
 TOTAL_DAYS = 120
 WINDOW_DAYS = 30
@@ -64,7 +63,6 @@ def parse_latest_backtest_result():
         with open(latest_file, 'r') as f:
             data = json.load(f)
             
-            # جستجوی استراتژی موجود در فایل نتایج
             strat_key = STRATEGY_NAME if STRATEGY_NAME in data['strategy'] else list(data['strategy'].keys())[0]
             strategy_data = data['strategy'][strat_key]
             
@@ -96,12 +94,12 @@ def main():
     timeranges = generate_timeranges()
     summary_results = []
     
-    # دانلود دیتای ۶۰ روز قبل‌تر با تمام تایم‌فریم‌ها
+    # دانلود دیتای ۶۰ روز قبل‌تر برای گرم کردن اندیکاتورها (Warmup)
     download_start = (timeranges[0][1] - timedelta(days=60)).strftime("%Y%m%d")
     download_end = timeranges[-1][2].strftime("%Y%m%d")
     full_download_timerange = f"{download_start}-{download_end}"
     
-    print(f"\n[INFO] Downloading complete multi-timeframe dataset ({full_download_timerange})...")
+    print(f"\n[INFO] Downloading complete dataset ({full_download_timerange})...")
     download_cmd = [
         "freqtrade", "download-data",
         "--exchange", DATA_EXCHANGE,
@@ -114,12 +112,13 @@ def main():
     for idx, (timerange, _, _) in enumerate(timeranges, start=1):
         print(f"\n>>> Running Backtest Window {idx}/{len(timeranges)}: {timerange} <<<")
         
+        # استفاده از time-detail و data-format-exchange
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
             "--strategy", STRATEGY_NAME,
             "--data-format-exchange", DATA_EXCHANGE,
-            "-p", *PAIRS,
+            "--timeframe-detail", "1m",
             "--export", "trades",
             "--timerange", timerange
         ]
