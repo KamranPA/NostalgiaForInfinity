@@ -11,11 +11,17 @@ STRATEGY_NAME = "NostalgiaForInfinityX7"
 CONFIG_FILE = "config_telegram.json"
 DATA_EXCHANGE = "okx"
 
+# لیست ۳۰ جفت‌ارز پرحجم و نقدشونده برای دریافت سیگنال‌های کافی
 PAIRS = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", 
-    "XRP/USDT", "ADA/USDT", "DOGE/USDT", "BNB/USDT"
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT", 
+    "DOGE/USDT", "BNB/USDT", "AVAX/USDT", "LINK/USDT", "SUI/USDT", 
+    "NEAR/USDT", "DOT/USDT", "LTC/USDT", "SHIB/USDT", "PEPE/USDT", 
+    "TRX/USDT", "UNI/USDT", "ATOM/USDT", "ETC/USDT", "APT/USDT", 
+    "FIL/USDT", "ICP/USDT", "RENDER/USDT", "BCH/USDT", "INJ/USDT", 
+    "FET/USDT", "OP/USDT", "ARB/USDT", "TIA/USDT", "STX/USDT"
 ]
 
+# تایم‌فریم‌های ضروری برای محاسبه اندیکاتورهای NFIN
 TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h"]
 
 TOTAL_DAYS = 120
@@ -112,7 +118,6 @@ def main():
     for idx, (timerange, _, _) in enumerate(timeranges, start=1):
         print(f"\n>>> Running Backtest Window {idx}/{len(timeranges)}: {timerange} <<<")
         
-        # استفاده از time-detail و data-format-exchange
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
