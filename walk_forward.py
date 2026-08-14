@@ -11,14 +11,13 @@ STRATEGY_NAME = "NostalgiaForInfinityX7"
 CONFIG_FILE = "config_telegram.json"
 DATA_EXCHANGE = "okx"
 
-# افزایش لیست ارزها برای بالا رفتن شانس سیگنال‌دهی NFIN
 PAIRS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", 
     "XRP/USDT", "ADA/USDT", "DOGE/USDT", "BNB/USDT"
 ]
 
-# تایم‌فریم‌های ضروری برای اندیکاتورهای چندزمانه NostalgiaForInfinity
-TIMEFRAMES = ["5m", "15m", "1h", "4h"]
+# اضافه شدن تایم‌فریم 1m که حیاتی‌ترین نیاز NFIN است
+TIMEFRAMES = ["1m", "5m", "15m", "1h"]
 
 TOTAL_DAYS = 120
 WINDOW_DAYS = 30
@@ -64,7 +63,10 @@ def parse_latest_backtest_result():
     try:
         with open(latest_file, 'r') as f:
             data = json.load(f)
-            strategy_data = data['strategy'][STRATEGY_NAME]
+            
+            # جستجوی استراتژی موجود در فایل نتایج
+            strat_key = STRATEGY_NAME if STRATEGY_NAME in data['strategy'] else list(data['strategy'].keys())[0]
+            strategy_data = data['strategy'][strat_key]
             
             trades = strategy_data.get('total_trades', 0)
             profit_pct = strategy_data.get('profit_total_pct', 0.0) * 100
