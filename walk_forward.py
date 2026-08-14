@@ -10,8 +10,15 @@ from datetime import datetime, timedelta, timezone
 STRATEGY_NAME = "NostalgiaForInfinityX7"
 CONFIG_FILE = "config_telegram.json"
 DATA_EXCHANGE = "okx"
-PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
-TIMEFRAMES = ["5m", "1h"]
+
+# افزایش لیست ارزها برای بالا رفتن شانس سیگنال‌دهی NFIN
+PAIRS = [
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", 
+    "XRP/USDT", "ADA/USDT", "DOGE/USDT", "BNB/USDT"
+]
+
+# تایم‌فریم‌های ضروری برای اندیکاتورهای چندزمانه NostalgiaForInfinity
+TIMEFRAMES = ["5m", "15m", "1h", "4h"]
 
 TOTAL_DAYS = 120
 WINDOW_DAYS = 30
@@ -87,12 +94,12 @@ def main():
     timeranges = generate_timeranges()
     summary_results = []
     
-    # دانلود دیتای پیش‌فرض (Warmup) برای اندیکاتورهای سنگین
+    # دانلود دیتای ۶۰ روز قبل‌تر با تمام تایم‌فریم‌ها
     download_start = (timeranges[0][1] - timedelta(days=60)).strftime("%Y%m%d")
     download_end = timeranges[-1][2].strftime("%Y%m%d")
     full_download_timerange = f"{download_start}-{download_end}"
     
-    print(f"\n[INFO] Downloading full dataset for indicators ({full_download_timerange})...")
+    print(f"\n[INFO] Downloading complete multi-timeframe dataset ({full_download_timerange})...")
     download_cmd = [
         "freqtrade", "download-data",
         "--exchange", DATA_EXCHANGE,
@@ -105,7 +112,6 @@ def main():
     for idx, (timerange, _, _) in enumerate(timeranges, start=1):
         print(f"\n>>> Running Backtest Window {idx}/{len(timeranges)}: {timerange} <<<")
         
-        # اضافه کردن -p به بک‌تست برای اجبار فرکترید به استفاده از جفت‌ارزهای ما
         backtest_cmd = [
             "freqtrade", "backtesting",
             "--config", CONFIG_FILE,
