@@ -4,21 +4,19 @@ import glob
 import subprocess
 from datetime import datetime, timedelta, timezone
 
-# ==========================================
-# تنظیمات اصلی Walk-Forward Analysis
-# ==========================================
 STRATEGY_NAME = "SampleStrategy"
 CONFIG_FILE = "config_telegram.json"
 DATA_EXCHANGE = "okx"
 
-PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+# تست روی یک ارز برای تمرکز کامل موتور
+PAIRS = ["BTC/USDT"]
 TIMEFRAMES = ["5m"]
 
-TOTAL_DAYS = 120
-WINDOW_DAYS = 30
-STEP_DAYS = 30
+# بازه زمانی ثابت و بزرگ‌تر برای تست مطلق
+TIMERANGE = "20260101-20260814"
 
 RESULTS_DIR = os.path.join("user_data", "backtest_results")
+DATA_DIR = os.path.join("user_data", "data", DATA_EXCHANGE)
 
 def ensure_dir(directory):
     if not os.path.exists(directory):
@@ -29,127 +27,60 @@ def run_command(command):
     result = subprocess.run(command, capture_output=False, text=True)
     return result.returncode == 0
 
-def generate_timeranges():
-    now = datetime.now(timezone.utc)
-    end_date = now.replace(minute=0, second=0, microsecond=0)
-    start_date = end_date - timedelta(days=TOTAL_DAYS)
-    
-    timeranges = []
-    current_start = start_date
-    
-    while current_start + timedelta(days=WINDOW_DAYS) <= end_date:
-        current_end = current_start + timedelta(days=WINDOW_DAYS)
-        start_str = current_start.strftime("%Y%m%d")
-        end_str = current_end.strftime("%Y%m%d")
-        timeranges.append((f"{start_str}-{end_str}", current_start, current_end))
-        current_start += timedelta(days=STEP_DAYS)
-        
-    return timeranges
-
-def parse_latest_backtest_result():
-    pattern1 = os.path.join(RESULTS_DIR, ".backtest-result-*.json")
-    pattern2 = os.path.join(RESULTS_DIR, "backtest-result-*.json")
-    
-    list_of_files = glob.glob(pattern1) + glob.glob(pattern2)
-    if not list_of_files:
-        return None
-    
-    latest_file = max(list_of_files, key=os.path.getctime)
-    try:
-        with open(latest_file, 'r') as f:
-            data = json.load(f)
-            
-            strat_key = STRATEGY_NAME if STRATEGY_NAME in data['strategy'] else list(data['strategy'].keys())[0]
-            strategy_data = data['strategy'][strat_key]
-            
-            trades = strategy_data.get('total_trades', 0)
-            profit_pct = strategy_data.get('profit_total_pct', 0.0) * 100
-            profit_abs = strategy_data.get('profit_total_abs', 0.0)
-            wins = strategy_data.get('wins', 0)
-            win_rate = (wins / trades * 100) if trades > 0 else 0
-            
-            return {
-                "trades": trades,
-                "profit_pct": profit_pct,
-                "profit_abs": profit_abs,
-                "win_rate": win_rate
-            }
-    except Exception as e:
-        print(f"[WARNING] Could not parse results: {e}")
-        return None
-
 def main():
     ensure_dir(RESULTS_DIR)
+    ensure_dir(DATA_DIR)
     
     print("=" * 60)
-    print("Starting Walk-Forward Analysis (SANITY CHECK)")
-    print(f"Strategy: {STRATEGY_NAME}")
-    print(f"Data Source Exchange: {DATA_EXCHANGE}")
+    print("ULTIMATE DEBUG SANITY CHECK")
+    print(f"Current Directory: {os.getcwd()}")
+    print(f"Data Directory Path: {os.path.abspath(DATA_DIR)}")
     print("=" * 60)
     
-    timeranges = generate_timeranges()
-    summary_results = []
-    
-    download_start = (timeranges[0][1] - timedelta(days=60)).strftime("%Y%m%d")
-    download_end = timeranges[-1][2].strftime("%Y%m%d")
-    full_download_timerange = f"{download_start}-{download_end}"
-    
-    print(f"\n[INFO] Downloading minimal dataset ({full_download_timerange})...")
+    # ۱. دانلود اجباری دیتا با بالاترین وضوح
+    print("\n[INFO] Downloading explicit dataset...")
     download_cmd = [
         "freqtrade", "download-data",
         "--exchange", DATA_EXCHANGE,
         "-p", *PAIRS,
         "-t", *TIMEFRAMES,
-        "--timerange", full_download_timerange
+        "--timerange", TIMERANGE
     ]
     run_command(download_cmd)
     
-    for idx, (timerange, _, _) in enumerate(timeranges, start=1):
-        print(f"\n>>> Running Backtest Window {idx}/{len(timeranges)}: {timerange} <<<")
-        
-        # بدون آرگومان --exchange (چون صرافی از داخل کانفیگ خوانده می‌شود)
-        backtest_cmd = [
-            "freqtrade", "backtesting",
-            "--config", CONFIG_FILE,
-            "--strategy", STRATEGY_NAME,
-            "--data-format-exchange", DATA_EXCHANGE,
-            "--export", "trades",
-            "--timerange", timerange
-        ]
-        
-        if run_command(backtest_cmd):
-            res = parse_latest_backtest_result()
-            if res:
-                res['window'] = f"W{idx} ({timerange})"
-                summary_results.append(res)
-            else:
-                summary_results.append({
-                    'window': f"W{idx} ({timerange})",
-                    'trades': 0,
-                    'win_rate': 0.0,
-                    'profit_pct': 0.0
-                })
-        else:
-            print(f"[SKIP] Backtest failed for window {timerange}.")
-
-    # نمایش جدول نهایی
-    print("\n" + "=" * 70)
-    print("                WALK-FORWARD SUMMARY RESULTS                ")
-    print("=" * 70)
-    print(f"{'Window':<25} | {'Trades':<8} | {'Win Rate':<10} | {'Profit (%)':<12}")
-    print("-" * 70)
+    # بررسی اینکه آیا اصلا فایلی در پوشه دیتا ایجاد شده یا نه
+    downloaded_files = glob.glob(os.path.join(DATA_DIR, "*"))
+    print(f"\n[DEBUG] Files found in data directory: {downloaded_files}")
     
-    total_profit = 0
-    total_trades = 0
+    # ۲. اجرای مستقیم بک‌تست بدون حلقه‌های پیچیده و با دستور صریح
+    print(f"\n[INFO] Running direct backtest for {TIMERANGE}...")
+    backtest_cmd = [
+        "freqtrade", "backtesting",
+        "--config", CONFIG_FILE,
+        "--strategy", STRATEGY_NAME,
+        "--data-format-exchange", DATA_EXCHANGE,
+        "--timerange", TIMERANGE,
+        "--export", "trades"
+    ]
     
-    for r in summary_results:
-        print(f"{r['window']:<25} | {r['trades']:<8} | {r['win_rate']:<9.1f}% | {r['profit_pct']:<11.2f}%")
-        total_profit += r['profit_pct']
-        total_trades += r['trades']
-        
-    print("-" * 70)
-    print(f"{'TOTAL / AVG':<25} | {total_trades:<8} | {'-':<10} | {total_profit:<11.2f}%")
-    print("=" * 70)
+    run_command(backtest_cmd)
+    
+    # ۳. بررسی نتایج خروجی
+    pattern = os.path.join(RESULTS_DIR, "*.json")
+    list_of_files = glob.glob(pattern)
+    print(f"\n[DEBUG] Result JSON files found: {list_of_files}")
+    
+    if list_of_files:
+        latest_file = max(list_of_files, key=os.path.getctime)
+        print(f"\n[INFO] Reading result file: {latest_file}")
+        try:
+            with open(latest_file, 'r') as f:
+                data = json.load(f)
+                print(json.dumps(data, indent=2)[:1000]) # چاپ بخشی از نتیجه برای بررسی
+        except Exception as e:
+            print(f"[ERROR] Could not read JSON: {e}")
+    else:
+        print("\n[ERROR] No backtest result JSON file was generated!")
 
 if __name__ == "__main__":
     main()
