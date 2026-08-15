@@ -7,9 +7,9 @@ CONFIG_FILE = "configs/exampleconfig.json"
 DATA_EXCHANGE = "okx"
 
 PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"]
-TIMEFRAMES = "5m"
+# هماهنگ‌سازی تایم‌فریم با کانفیگ جدید (15m)
+TIMEFRAMES = "15m"
 
-# افزایش بازه دانلود به یک سال قبل برای تامین داده‌های تایم‌فریم 15m و گرم‌شدن کامل اندیکاتورها
 DOWNLOAD_TIMERANGE = "20240101-20260814"
 BACKTEST_TIMERANGE = "20260101-20260814"
 
@@ -19,7 +19,7 @@ def main():
     print(f"Current Directory: {os.getcwd()}")
     print("=" * 60)
     
-    print("\n[INFO] Downloading data...")
+    print("\n[INFO] Downloading 15m data...")
     download_cmd = [
         "freqtrade", "download-data",
         "--exchange", DATA_EXCHANGE,
