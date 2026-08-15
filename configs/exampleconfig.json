@@ -41,5 +41,10 @@
             "XRP/USDT"
         ],
         "pair_blacklist": []
-    }
+    },
+    "pairlists": [
+        {
+            "method": "StaticPairList"
+        }
+    ]
 }
