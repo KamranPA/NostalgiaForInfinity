@@ -9,8 +9,8 @@ DATA_EXCHANGE = "okx"
 PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"]
 TIMEFRAMES = "5m"
 
-# تاریخ دانلود از اول اکتبر ۲۰۲۵ شروع می‌شود تا 999 کندل اولِ بک‌تست کاملاً مقداردهی شوند
-DOWNLOAD_TIMERANGE = "20251001-20260814"
+# افزایش بازه دانلود به یک سال قبل برای تامین داده‌های تایم‌فریم 15m و گرم‌شدن کامل اندیکاتورها
+DOWNLOAD_TIMERANGE = "20240101-20260814"
 BACKTEST_TIMERANGE = "20260101-20260814"
 
 def main():
