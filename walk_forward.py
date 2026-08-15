@@ -1,5 +1,4 @@
 import os
-import glob
 import subprocess
 
 STRATEGY_NAME = "NostalgiaForInfinityX"
@@ -7,29 +6,30 @@ CONFIG_FILE = "configs/exampleconfig.json"
 DATA_EXCHANGE = "okx"
 
 PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"]
-# هماهنگ‌سازی تایم‌فریم با کانفیگ جدید (15m)
-TIMEFRAMES = "15m"
+
+# دانلود هر دو تایم‌فریم برای رفع خطای محاسباتی داخلی استراتژی
+TIMEFRAMES_TO_DOWNLOAD = ["5m", "15m"]
 
 DOWNLOAD_TIMERANGE = "20240101-20260814"
 BACKTEST_TIMERANGE = "20260101-20260814"
 
 def main():
     print("=" * 60)
-    print("FINAL WFA RUNNER - NOSTALGIA FOR INFINITY")
-    print(f"Current Directory: {os.getcwd()}")
+    print("FIXED WFA RUNNER - NOSTALGIA FOR INFINITY")
     print("=" * 60)
     
-    print("\n[INFO] Downloading 15m data...")
-    download_cmd = [
-        "freqtrade", "download-data",
-        "--exchange", DATA_EXCHANGE,
-        "-p", *PAIRS,
-        "-t", TIMEFRAMES,
-        "--timerange", DOWNLOAD_TIMERANGE
-    ]
-    subprocess.run(download_cmd, check=True)
+    for tf in TIMEFRAMES_TO_DOWNLOAD:
+        print(f"\n[INFO] Downloading {tf} data for all pairs...")
+        download_cmd = [
+            "freqtrade", "download-data",
+            "--exchange", DATA_EXCHANGE,
+            "-p", *PAIRS,
+            "-t", tf,
+            "--timerange", DOWNLOAD_TIMERANGE
+        ]
+        subprocess.run(download_cmd, check=True)
     
-    print(f"\n[INFO] Running backtest...")
+    print(f"\n[INFO] Running backtest on 15m timeframe...")
     backtest_cmd = [
         "freqtrade", "backtesting",
         "--config", CONFIG_FILE,
@@ -46,11 +46,6 @@ def main():
     
     print("\n--- STDERR ---")
     print(result.stderr[-3000:])
-    
-    all_files = glob.glob("user_data/**/*", recursive=True)
-    for f in all_files:
-        if os.path.isfile(f):
-            print(f" - {f}")
 
 if __name__ == "__main__":
     main()
