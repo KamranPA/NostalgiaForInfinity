@@ -9,8 +9,8 @@
     "fiat_display_currency": "USD",
     "force_entry_enable": true,
     "initial_state": "running",
-    "timeframe": "5m",
-    "startup_candle_count": 1400,
+    "timeframe": "15m",
+    "startup_candle_count": 999,
     "unfilledtimeout": {
         "entry": 3,
         "exit": 2,
