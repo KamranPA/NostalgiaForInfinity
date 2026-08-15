@@ -8,7 +8,8 @@ DATA_EXCHANGE = "okx"
 
 PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"]
 TIMEFRAMES = "5m"
-# تایمرنج دانلود دیتا را کمی عقب‌تر شروع می‌کنیم تا Warm-up استراتژی به مشکل نخورد
+
+# بازه زمانی دانلود دیتا عقب‌تر از تاریخ شروع بک‌تست است تا Warm-up به خوبی انجام شود
 DOWNLOAD_TIMERANGE = "20251201-20260814"
 BACKTEST_TIMERANGE = "20260101-20260814"
 
@@ -18,7 +19,7 @@ def main():
     print(f"Current Directory: {os.getcwd()}")
     print("=" * 60)
     
-    # ۱. دانلود دیتا با بازه کافی برای Warm-up
+    # ۱. دانلود داده‌های تاریخی با بازه کافی
     print("\n[INFO] Downloading data...")
     download_cmd = [
         "freqtrade", "download-data",
@@ -29,14 +30,13 @@ def main():
     ]
     subprocess.run(download_cmd, check=True)
     
-    # ۲. اجرای بک‌تست همراه با تعیین تعداد کندل‌های راه‌اندازی (Startup Candles)
+    # ۲. اجرای بک‌تست (پارامتر startup_candle_count از داخل کانفیگ خوانده می‌شود)
     print(f"\n[INFO] Running backtest...")
     backtest_cmd = [
         "freqtrade", "backtesting",
         "--config", CONFIG_FILE,
         "--strategy", STRATEGY_NAME,
         "--timerange", BACKTEST_TIMERANGE,
-        "--startup-candle", "400",
         "--export", "trades",
         "--export-directory", "user_data/backtest_results"
     ]
