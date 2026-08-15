@@ -10,7 +10,7 @@
     "force_entry_enable": true,
     "initial_state": "running",
     "timeframe": "5m",
-    "startup_candle_count": 400,
+    "startup_candle_count": 999,
     "unfilledtimeout": {
         "entry": 3,
         "exit": 2,
