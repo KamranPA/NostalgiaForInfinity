@@ -18,13 +18,12 @@ jobs:
           mkdir -p user_data/data
           mkdir -p user_data/configs
 
-      - name: Copy config files into user_data
+      - name: Copy existing config files
         run: |
-          cp configs/trading_mode-futures.json user_data/configs/
-          cp configs/pairlist-volume-binance-usdt.json user_data/configs/
-          cp configs/blacklist-binance.json user_data/configs/
-          cp configs/exampleconfig.json user_data/configs/
-          cp configs/exampleconfig_secret.json user_data/configs/
+          cp configs/trading_mode-futures.json user_data/configs/ || true
+          cp configs/pairlist-volume-binance-usdt.json user_data/configs/ || true
+          cp configs/blacklist-binance.json user_data/configs/ || true
+          cp configs/exampleconfig_secret.json user_data/configs/ || true
 
       - name: Create config.json
         run: |
@@ -35,7 +34,6 @@ jobs:
               "configs/trading_mode-futures.json",
               "configs/pairlist-volume-binance-usdt.json",
               "configs/blacklist-binance.json",
-              "configs/exampleconfig.json",
               "configs/exampleconfig_secret.json"
             ]
           }
@@ -47,8 +45,8 @@ jobs:
 
       - name: Show initial logs
         run: |
-          sleep 20
-          docker compose logs --tail=100
+          sleep 25
+          docker compose logs --tail=150
 
       - name: Keep bot running
         run: |
