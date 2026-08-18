@@ -12,11 +12,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create directories
+      - name: Create directories with permissions
         run: |
           mkdir -p user_data/logs
           mkdir -p user_data/data
           mkdir -p user_data/configs
+          chmod -R 777 user_data
 
       - name: Copy existing config files
         run: |
@@ -45,13 +46,13 @@ jobs:
 
       - name: Show initial logs
         run: |
-          sleep 25
-          docker compose logs --tail=150
+          sleep 30
+          docker compose logs --tail=200
 
       - name: Keep bot running
         run: |
           echo "Bot is running..."
           while true; do
             sleep 300
-            docker compose logs --tail=30
+            docker compose logs --tail=40
           done
