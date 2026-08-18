@@ -1,53 +1,60 @@
 name: Run NostalgiaForInfinityX7 Bot
 
 on:
-  workflow_dispatch:   # دستی اجرا بشه
-  # push:             # اگه می‌خوای با هر پوش خودکار اجرا بشه، این خط رو فعال کن
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 360   # حداکثر ۶ ساعت
+    timeout-minutes: 360
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create user_data directories
+      - name: Create directories
         run: |
           mkdir -p user_data/logs
           mkdir -p user_data/data
-          mkdir -p user_data/backtest_results
+          mkdir -p user_data/configs
 
-      - name: Copy main config
+      - name: Copy config files into user_data
         run: |
+          cp configs/trading_mode-futures.json user_data/configs/
+          cp configs/pairlist-volume-binance-usdt.json user_data/configs/
+          cp configs/blacklist-binance.json user_data/configs/
+          cp configs/exampleconfig.json user_data/configs/
+          cp configs/exampleconfig_secret.json user_data/configs/
           cp configs/recommended_config.json user_data/config.json
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Fix paths in config.json
+        run: |
+          cat > user_data/config.json << 'EOF'
+{
+  "strategy": "NostalgiaForInfinityX7",
+  "add_config_files": [
+    "configs/trading_mode-futures.json",
+    "configs/pairlist-volume-binance-usdt.json",
+    "configs/blacklist-binance.json",
+    "configs/exampleconfig.json",
+    "configs/exampleconfig_secret.json"
+  ]
+}
+EOF
 
-      - name: Run Freqtrade Bot (Dry-Run)
-        env:
-          FREQTRADE__STRATEGY: NostalgiaForInfinityX7
-          FREQTRADE__TELEGRAM__ENABLED: true
-          FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          FREQTRADE__TELEGRAM__CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Run Freqtrade Bot
         run: |
           docker compose up -d
 
-      - name: Show logs (first 2 minutes)
+      - name: Show initial logs
         run: |
-          sleep 30
+          sleep 20
           docker compose logs --tail=100
-          sleep 90
-          docker compose logs --tail=50
 
-      - name: Keep the bot running
+      - name: Keep bot running
         run: |
-          echo "Bot is running... Check your Telegram for signals."
-          # بات تا وقتی جاب تموم نشه اجرا می‌مونه
+          echo "Bot is running..."
           while true; do
             sleep 300
-            docker compose ps
-            docker compose logs --tail=20
+            docker compose logs --tail=30
           done
