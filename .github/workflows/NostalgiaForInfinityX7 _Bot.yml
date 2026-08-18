@@ -25,22 +25,21 @@ jobs:
           cp configs/blacklist-binance.json user_data/configs/
           cp configs/exampleconfig.json user_data/configs/
           cp configs/exampleconfig_secret.json user_data/configs/
-          cp configs/recommended_config.json user_data/config.json
 
-      - name: Fix paths in config.json
+      - name: Create config.json
         run: |
           cat > user_data/config.json << 'EOF'
-{
-  "strategy": "NostalgiaForInfinityX7",
-  "add_config_files": [
-    "configs/trading_mode-futures.json",
-    "configs/pairlist-volume-binance-usdt.json",
-    "configs/blacklist-binance.json",
-    "configs/exampleconfig.json",
-    "configs/exampleconfig_secret.json"
-  ]
-}
-EOF
+          {
+            "strategy": "NostalgiaForInfinityX7",
+            "add_config_files": [
+              "configs/trading_mode-futures.json",
+              "configs/pairlist-volume-binance-usdt.json",
+              "configs/blacklist-binance.json",
+              "configs/exampleconfig.json",
+              "configs/exampleconfig_secret.json"
+            ]
+          }
+          EOF
 
       - name: Run Freqtrade Bot
         run: |
