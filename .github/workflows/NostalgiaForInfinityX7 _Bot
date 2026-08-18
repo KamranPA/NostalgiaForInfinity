@@ -1,0 +1,53 @@
+name: Run NostalgiaForInfinityX7 Bot
+
+on:
+  workflow_dispatch:   # دستی اجرا بشه
+  # push:             # اگه می‌خوای با هر پوش خودکار اجرا بشه، این خط رو فعال کن
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # حداکثر ۶ ساعت
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create user_data directories
+        run: |
+          mkdir -p user_data/logs
+          mkdir -p user_data/data
+          mkdir -p user_data/backtest_results
+
+      - name: Copy main config
+        run: |
+          cp configs/recommended_config.json user_data/config.json
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run Freqtrade Bot (Dry-Run)
+        env:
+          FREQTRADE__STRATEGY: NostalgiaForInfinityX7
+          FREQTRADE__TELEGRAM__ENABLED: true
+          FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          FREQTRADE__TELEGRAM__CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          docker compose up -d
+
+      - name: Show logs (first 2 minutes)
+        run: |
+          sleep 30
+          docker compose logs --tail=100
+          sleep 90
+          docker compose logs --tail=50
+
+      - name: Keep the bot running
+        run: |
+          echo "Bot is running... Check your Telegram for signals."
+          # بات تا وقتی جاب تموم نشه اجرا می‌مونه
+          while true; do
+            sleep 300
+            docker compose ps
+            docker compose logs --tail=20
+          done
