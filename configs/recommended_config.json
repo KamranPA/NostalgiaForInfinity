@@ -7,12 +7,13 @@
   // copy configs/exampleconfig_secret.json to user_data/config-private.json
   // Change     "dry_run": true, to     "dry_run": false, after testing
 
+ {
   "strategy": "NostalgiaForInfinityX7",
   "add_config_files": [
-    "../configs/trading_mode-futures.json",
-    "../configs/pairlist-volume-binance-usdt.json",
-    "../configs/blacklist-binance.json",
-    "../configs/exampleconfig.json",
-    "../configs/exampleconfig_secret.json"
+    "/freqtrade/configs/trading_mode-futures.json",
+    "/freqtrade/configs/pairlist-volume-binance-usdt.json",
+    "/freqtrade/configs/blacklist-binance.json",
+    "/freqtrade/configs/exampleconfig.json",
+    "/freqtrade/configs/exampleconfig_secret.json"
   ]
 }
