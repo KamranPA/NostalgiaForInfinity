@@ -1,0 +1,105 @@
+{
+  "_COMMENT_FILE_PATH": "SAVE THIS FILE AS: config_dryrun_telegram.json — in the ROOT of your NostalgiaForInfinity repo (same folder as NostalgiaForInfinityX7.py, README.md, docker-compose.yml). NOT inside user_data/, NOT inside configs/.",
+  "$schema": "https://schema.freqtrade.io/schema.json",
+
+  "_COMMENT_purpose": "Dry-run only — no real orders are ever placed (dry_run: true). This simulates trades using live market data and sends Telegram notifications on every simulated entry/exit, exactly like real trading, but with zero capital at risk. Do not flip dry_run to false without a separate, deliberate review.",
+  "_COMMENT_restart_architecture": "This runs under a GitHub Actions cron job that restarts every ~5 hours (job time limit + schedule reliability — see backtest.yml comments). db_url points to Supabase Postgres (not local SQLite) specifically so open simulated trades survive that restart gap instead of being lost.",
+  "_COMMENT_position_adjustment": "NostalgiaForInfinityX7 requires position_adjustment_enable=true for its Grinding V2 and Buyback systems to function (per the strategy's own documentation) — without this, the strategy behaves in ways its author never intended/tested.",
+
+  "trading_mode": "spot",
+  "margin_mode": "",
+  "max_open_trades": 8,
+  "stake_currency": "USDT",
+  "stake_amount": "unlimited",
+  "tradable_balance_ratio": 0.99,
+  "fiat_display_currency": "USD",
+  "dry_run": true,
+  "dry_run_wallet": 1000,
+  "timeframe": "5m",
+  "cancel_open_orders_on_exit": true,
+  "position_adjustment_enable": true,
+  "max_entry_position_adjustment": -1,
+
+  "unfilledtimeout": {
+    "entry": 10,
+    "exit": 30
+  },
+
+  "exchange": {
+    "name": "kucoin",
+    "key": "",
+    "secret": "",
+    "ccxt_config": {},
+    "ccxt_async_config": {},
+    "pair_whitelist": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "SOL/USDT",
+      "BNB/USDT"
+    ],
+    "pair_blacklist": [
+      ".*(_PREMIUM|BEAR|BULL|DOWN|HALF|HEDGE|UP|[1235][SL])/.*"
+    ]
+  },
+  "_COMMENT_pairlist": "Starting with the same 4 liquid pairs already validated against KuCoin today, not NFI's recommended 40-80 — scale up once the dry-run/restart/Telegram architecture is confirmed stable. The blacklist regex excludes leveraged tokens, which NFI's own docs strongly recommend blacklisting.",
+
+  "entry_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1,
+    "price_last_balance": 0.0,
+    "check_depth_of_market": {
+      "enabled": false,
+      "bids_to_ask_delta": 1
+    }
+  },
+  "exit_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+
+  "pairlists": [
+    {"method": "StaticPairList"}
+  ],
+
+  "_COMMENT_telegram": "token/chat_id below are dummy placeholders satisfying the config schema's required fields. The REAL values are injected at runtime via FREQTRADE__TELEGRAM__TOKEN / FREQTRADE__TELEGRAM__CHAT_ID environment variables (sourced from GitHub Secrets in the workflow) — never commit real credentials into this file.",
+  "telegram": {
+    "enabled": true,
+    "token": "placeholder_overridden_by_env_var",
+    "chat_id": "placeholder_overridden_by_env_var",
+    "notification_settings": {
+      "status": "on",
+      "warning": "on",
+      "startup": "on",
+      "entry": "on",
+      "entry_fill": "on",
+      "entry_cancel": "on",
+      "exit": "on",
+      "exit_fill": "on",
+      "exit_cancel": "on",
+      "protection_trigger": "on",
+      "protection_trigger_global": "on"
+    }
+  },
+
+  "_COMMENT_db_url": "Real value injected via FREQTRADE__DB_URL env var (GitHub Secret), pointing at Supabase Postgres — e.g. postgresql://postgres:<password>@<project>.supabase.co:5432/postgres. This placeholder (SQLite) is never actually used at runtime.",
+  "db_url": "sqlite:///user_data/tradesv3.dryrun.sqlite",
+
+  "api_server": {
+    "enabled": false,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8080,
+    "verbosity": "error",
+    "enable_openapi": false,
+    "jwt_secret_key": "not_used_because_api_server_disabled",
+    "CORS_origins": [],
+    "username": "freqtrader",
+    "password": "not_used_because_api_server_disabled"
+  },
+
+  "bot_name": "nfi-dryrun-signals",
+  "force_entry_enable": false,
+  "initial_state": "running",
+  "internals": {"process_throttle_secs": 5}
+}
