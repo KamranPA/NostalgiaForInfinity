@@ -88,9 +88,15 @@ jobs:
         run: |
           mkdir -p user_data/strategies
           mkdir -p user_data/logs
-          # NostalgiaForInfinityX7.py lives at the repo root, per the
-          # project's own layout.
-          cp NostalgiaForInfinityX7.py user_data/strategies/
+          # NostalgiaForInfinityX7.py lives at the repo root. Some layouts
+          # of this repo already symlink it into user_data/strategies/,
+          # in which case `cp` onto itself fails with "are the same
+          # file" — only copy if the destination doesn't already exist.
+          if [ -e user_data/strategies/NostalgiaForInfinityX7.py ]; then
+            echo "Strategy file already present at destination (symlink from repo layout) — skipping copy."
+          else
+            cp NostalgiaForInfinityX7.py user_data/strategies/
+          fi
           cp config_dryrun_telegram.json user_data/config.json
 
       - name: Run Freqtrade (dry-run, background) and tail logs
