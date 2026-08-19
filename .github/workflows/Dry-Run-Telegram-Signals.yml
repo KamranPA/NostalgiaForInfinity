@@ -1,3 +1,6 @@
+# SAVE THIS FILE AS: .github/workflows/dry-run-telegram.yml
+# (create the .github/workflows/ folders if they don't exist yet, in the
+# ROOT of your NostalgiaForInfinity repo)
 name: NFI Dry-Run Telegram Signals
 
 # Architecture summary:
@@ -5,19 +8,27 @@ name: NFI Dry-Run Telegram Signals
 #   placed, regardless of anything in this workflow. Trades are simulated
 #   against live market data and reported via Telegram.
 # - GitHub Actions jobs have a hard 6-hour ceiling and aren't designed for
-#   indefinite always-on processes, so this restarts on a cron schedule
-#   instead of trying to run forever in one job.
+#   indefinite always-on processes, so this restarts periodically instead
+#   of trying to run forever in one job.
+# - Restart trigger is EXTERNAL (not GitHub's own `schedule:` cron) — an
+#   outside cron service (e.g. cron-job.org) calls GitHub's REST API every
+#   ~5 hours to fire this workflow's `workflow_dispatch` event:
+#     POST https://api.github.com/repos/<owner>/<repo>/actions/workflows/dry-run-telegram.yml/dispatches
+#     Headers: Authorization: Bearer <a GitHub Personal Access Token with
+#              'workflow' scope>, Accept: application/vnd.github+json
+#     Body:    {"ref": "main"}
+#   Store that PAT as a secret on the cron site's side, NOT in this repo.
 # - `concurrency` + `cancel-in-progress` is what actually implements
-#   "kill the old run, start the new one" — GitHub does this natively,
-#   no custom kill-old-process scripting needed.
+#   "kill the old run, start the new one" — GitHub does this natively for
+#   ANY new run in the same group, regardless of whether it was triggered
+#   by the external cron call or manually — no custom kill-old-process
+#   scripting needed.
 # - Open simulated trades survive each restart because db_url points at
 #   Supabase Postgres (set via secret), not local SQLite (which would be
 #   wiped every time the runner's filesystem is discarded).
 
 on:
-  schedule:
-    - cron: "0 */5 * * *"   # every 5 hours
-  workflow_dispatch: {}       # manual trigger for testing
+  workflow_dispatch: {}   # triggered externally by the cron site's API call
 
 concurrency:
   group: nfi-dryrun-telegram
