@@ -46,6 +46,20 @@ jobs:
     timeout-minutes: 290
 
     steps:
+      - name: Notify Telegram — workflow started
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          # Sent via a direct Bot API call, independent of Freqtrade's own
+          # "startup" notification — this confirms the workflow actually
+          # triggered even if Freqtrade later fails to start (e.g. a bad
+          # db_url) and never gets far enough to send its own message.
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🔄 NFI dry-run workflow started (run #${{ github.run_number }}). Freqtrade is now installing/starting up..." \
+            > /dev/null
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -126,3 +140,14 @@ jobs:
 
           wait $FREQTRADE_PID
           kill $TAIL_PID 2>/dev/null || true
+
+      - name: Notify Telegram — workflow failed
+        if: failure()
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="❌ NFI dry-run workflow (run #${{ github.run_number }}) FAILED. Check GitHub Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            > /dev/null
