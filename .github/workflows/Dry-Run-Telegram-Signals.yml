@@ -41,9 +41,10 @@ jobs:
   dryrun:
     runs-on: ubuntu-latest
     # Comfortably under the 6h GitHub Actions hard limit, and under the
-    # 5h cron interval too, so this job naturally winds down with margin
-    # before the next scheduled trigger would need to cancel it anyway.
-    timeout-minutes: 290
+    # 4h external-cron interval too, so this job naturally winds down
+    # with margin before the next scheduled trigger would need to
+    # cancel it anyway.
+    timeout-minutes: 230
 
     steps:
       - name: Notify Telegram — workflow started
