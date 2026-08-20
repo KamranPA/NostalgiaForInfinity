@@ -48,7 +48,7 @@ jobs:
     steps:
       - name: Notify Telegram — workflow started
         env:
-          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           # Sent via a direct Bot API call, independent of Freqtrade's own
@@ -66,7 +66,7 @@ jobs:
             -d text="🔄 NFI dry-run workflow started (run #${{ github.run_number }}). Freqtrade is now installing/starting up...")
           echo "Telegram API response: $RESPONSE"
           if ! echo "$RESPONSE" | grep -q '"ok":true'; then
-            echo "::warning::Telegram did not accept the message — see the API response above for the exact reason (common causes: wrong TELEGRAM_BOT_TOKEN secret, wrong TELEGRAM_CHAT_ID secret, or you haven't sent /start to your own bot yet in Telegram)."
+            echo "::warning::Telegram did not accept the message — see the API response above for the exact reason (common causes: wrong TELEGRAM_TOKEN secret, wrong TELEGRAM_CHAT_ID secret, or you haven't sent /start to your own bot yet in Telegram)."
           fi
 
       - name: Verify required secrets are set
@@ -74,7 +74,7 @@ jobs:
           # Catches an empty/missing secret in seconds instead of letting
           # the ~5 hour freqtrade run start with a broken config.
           MISSING=""
-          [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && MISSING="$MISSING TELEGRAM_BOT_TOKEN"
+          [ -z "${{ secrets.TELEGRAM_TOKEN }}" ] && MISSING="$MISSING TELEGRAM_TOKEN"
           [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ] && MISSING="$MISSING TELEGRAM_CHAT_ID"
           [ -z "${{ secrets.SUPABASE_DB_URL }}" ] && MISSING="$MISSING SUPABASE_DB_URL"
           if [ -n "$MISSING" ]; then
@@ -142,7 +142,7 @@ jobs:
           # FREQTRADE__<SECTION>__<KEY> environment-variable override
           # mechanism — nothing sensitive is ever written into the
           # committed config file.
-          FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           FREQTRADE__TELEGRAM__CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FREQTRADE__DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
@@ -167,7 +167,7 @@ jobs:
       - name: Notify Telegram — workflow failed
         if: failure()
         env:
-          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
