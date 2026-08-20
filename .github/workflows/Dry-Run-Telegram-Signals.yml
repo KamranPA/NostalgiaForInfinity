@@ -146,6 +146,8 @@ jobs:
           FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           FREQTRADE__TELEGRAM__CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FREQTRADE__DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           cd user_data/..
           freqtrade trade \
@@ -154,10 +156,39 @@ jobs:
             --logfile user_data/logs/freqtrade.log &
           FREQTRADE_PID=$!
 
+          # IMPORTANT: when the next scheduled run starts and the
+          # `concurrency` group cancels this run, GitHub sends a
+          # termination signal to this step's process tree with only a
+          # short grace period. By default that signal doesn't reliably
+          # reach the backgrounded freqtrade process (started with `&`),
+          # so it could get killed abruptly instead of shutting down
+          # cleanly. This trap explicitly forwards the signal to
+          # freqtrade and gives it a moment to exit gracefully (closing
+          # its DB/exchange connections, flushing logs) before the
+          # runner's own hard-kill deadline hits.
+          #
+          # Note: open simulated trades themselves are NOT at risk from
+          # an abrupt kill either way, since every trade state change is
+          # already committed to Postgres (Supabase) immediately when it
+          # happens — this trap is about a clean shutdown/log/notify, not
+          # about preventing data loss.
+          graceful_shutdown() {
+            echo "Received termination signal — forwarding to freqtrade (PID $FREQTRADE_PID) for graceful shutdown..."
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              -d text="🔁 NFI dry-run (run #${{ github.run_number }}) is handing off to a newer run — shutting down gracefully now. Open simulated trades are safe (already saved to the database)." \
+              > /dev/null || true
+            kill -TERM "$FREQTRADE_PID" 2>/dev/null || true
+            wait "$FREQTRADE_PID" 2>/dev/null
+            exit 0
+          }
+          trap graceful_shutdown SIGTERM SIGINT
+
           # Stream logs to the Actions console for the life of this job,
           # while the trade loop runs in the background. This job winds
           # down on its own via timeout-minutes above (or gets cancelled
-          # by the next scheduled run via the concurrency group).
+          # by the next scheduled run via the concurrency group, handled
+          # gracefully by the trap above).
           sleep 20
           tail -f user_data/logs/freqtrade.log &
           TAIL_PID=$!
