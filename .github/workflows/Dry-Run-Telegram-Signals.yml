@@ -55,10 +55,33 @@ jobs:
           # "startup" notification — this confirms the workflow actually
           # triggered even if Freqtrade later fails to start (e.g. a bad
           # db_url) and never gets far enough to send its own message.
-          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+          #
+          # IMPORTANT: curl exiting successfully only means the HTTP
+          # request completed — it does NOT mean Telegram accepted the
+          # message. A bad token or chat_id returns a normal HTTP response
+          # with {"ok": false, ...} in the body, which curl -s silently
+          # discards if you don't capture and check it. Do that here.
+          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
-            -d text="🔄 NFI dry-run workflow started (run #${{ github.run_number }}). Freqtrade is now installing/starting up..." \
-            > /dev/null
+            -d text="🔄 NFI dry-run workflow started (run #${{ github.run_number }}). Freqtrade is now installing/starting up...")
+          echo "Telegram API response: $RESPONSE"
+          if ! echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "::warning::Telegram did not accept the message — see the API response above for the exact reason (common causes: wrong TELEGRAM_BOT_TOKEN secret, wrong TELEGRAM_CHAT_ID secret, or you haven't sent /start to your own bot yet in Telegram)."
+          fi
+
+      - name: Verify required secrets are set
+        run: |
+          # Catches an empty/missing secret in seconds instead of letting
+          # the ~5 hour freqtrade run start with a broken config.
+          MISSING=""
+          [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && MISSING="$MISSING TELEGRAM_BOT_TOKEN"
+          [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ] && MISSING="$MISSING TELEGRAM_CHAT_ID"
+          [ -z "${{ secrets.SUPABASE_DB_URL }}" ] && MISSING="$MISSING SUPABASE_DB_URL"
+          if [ -n "$MISSING" ]; then
+            echo "::error::These GitHub Secrets are empty or not set:$MISSING — go to Settings > Secrets and variables > Actions and add them."
+            exit 1
+          fi
+          echo "All required secrets are present (values not shown here for security)."
 
       - name: Checkout repository
         uses: actions/checkout@v4
