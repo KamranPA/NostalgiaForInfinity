@@ -36,7 +36,7 @@
       ".*(_PREMIUM|BEAR|BULL|DOWN|HALF|HEDGE|UP|[1235][SL])/.*"
     ]
   },
-  "_COMMENT_pairlist": "Switched from a static 4-pair list to a dynamic VolumePairList (~100 pairs by trading volume), matching NostalgiaForInfinity's own documented recommendation of 40-80 pairs — a handful of pairs was too narrow to expect meaningful signal frequency. exchange.pair_whitelist is now empty on purpose: VolumePairList generates the whitelist itself at runtime. The blacklist regex still excludes leveraged tokens, which NFI's docs strongly recommend blacklisting.",
+  "_COMMENT_pairlist": "Switched from a static 4-pair list to a dynamic pairlist matching NostalgiaForInfinity's own official configs/pairlist-volume-binance-usdt.json exactly (see the 'pairlists' array and its comment below for the full filter chain). exchange.pair_whitelist is now empty on purpose: the pairlist chain generates the whitelist itself at runtime. The blacklist regex still excludes leveraged tokens, which NFI's docs strongly recommend blacklisting.",
 
   "entry_pricing": {
     "price_side": "same",
@@ -57,25 +57,34 @@
   "pairlists": [
     {
       "method": "VolumePairList",
-      "number_assets": 100,
+      "number_assets": 130,
       "sort_key": "quoteVolume",
-      "min_value": 0,
-      "refresh_period": 3600
+      "refresh_period": 1800
     },
-    {
-      "method": "AgeFilter",
-      "min_days_listed": 10
-    },
+    { "method": "FullTradesFilter" },
+    { "method": "AgeFilter", "min_days_listed": 60 },
     {
       "method": "PriceFilter",
-      "low_price_ratio": 0.01
+      "low_price_ratio": 0.003
     },
     {
       "method": "SpreadFilter",
       "max_spread_ratio": 0.005
+    },
+    {
+      "method": "RangeStabilityFilter",
+      "lookback_days": 3,
+      "min_rate_of_change": 0.03,
+      "max_rate_of_change": 0.95,
+      "refresh_period": 1800
+    },
+    {
+      "method": "VolumePairList",
+      "number_assets": 100,
+      "sort_key": "quoteVolume"
     }
   ],
-  "_COMMENT_filters": "AgeFilter avoids brand-new/thin-history listings; PriceFilter avoids extremely low-priced coins prone to precision issues; SpreadFilter avoids illiquid pairs with wide bid/ask spreads. These are standard, non-strategy-specific hygiene filters — they don't touch NostalgiaForInfinityX7's own entry/exit logic.",
+  "_COMMENT_filters": "This chain is now an exact match of NostalgiaForInfinity's own official configs/pairlist-volume-binance-usdt.json (only the exchange underneath is KuCoin instead of Binance — the pairlist logic itself is identical, not something we invented). Earlier drafts of this config used looser/different thresholds (AgeFilter min_days_listed:10 instead of 60, no RangeStabilityFilter, no second VolumePairList pass, no FullTradesFilter) — those were our own approximation, not the documented recommendation. Sequence: take the top 130 pairs by volume -> drop pairs a trade is already open on (FullTradesFilter) -> drop coins listed under 60 days ago (AgeFilter) -> drop very-low-priced coins prone to precision issues (PriceFilter) -> drop illiquid wide-spread pairs (SpreadFilter) -> drop pairs that are either dead-flat or wildly erratic over the last 3 days (RangeStabilityFilter) -> re-rank what's left by volume and cap at 100 (second VolumePairList pass).",
 
   "_COMMENT_telegram": "token/chat_id below are dummy placeholders satisfying the config schema's required fields. The REAL values are injected at runtime via FREQTRADE__TELEGRAM__TOKEN / FREQTRADE__TELEGRAM__CHAT_ID environment variables (sourced from GitHub Secrets in the workflow) — never commit real credentials into this file. Freqtrade listens for incoming Telegram commands (/status, /balance, /profit, etc) automatically whenever the bot process is running — no extra setup needed beyond enabled: true. The 'keyboard' below just adds quick-tap buttons in the Telegram app.",
   "telegram": {
