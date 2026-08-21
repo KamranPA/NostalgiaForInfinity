@@ -197,7 +197,7 @@ jobs:
               -d text="⚠️ NFI dry-run (run #${{ github.run_number }}) was cancelled externally (not the planned self-restart) — shutting down gracefully. Open simulated trades are safe (already saved to the database)." \
               > /dev/null || true
             kill -TERM "$FREQTRADE_PID" 2>/dev/null || true
-            wait "$FREQTRADE_PID" 2>/dev/null
+            wait "$FREQTRADE_PID" 2>/dev/null || true
             exit 0
           }
           trap external_cancel_handler SIGTERM SIGINT
@@ -206,7 +206,22 @@ jobs:
           tail -f user_data/logs/freqtrade.log &
           TAIL_PID=$!
 
-          wait $FREQTRADE_PID
+          # IMPORTANT: `|| true` here is required. GitHub Actions runs
+          # multi-line bash steps with `-e` (errexit) by default, so if
+          # `wait` returns non-zero — which happens whenever `timeout`
+          # forwards SIGTERM to freqtrade at the self-timeout deadline,
+          # even on a perfectly normal planned stop — the ENTIRE script
+          # would abort right here, skipping the "planned stop" Telegram
+          # message and the final `exit 0` below. That previously caused
+          # runs to show red/failed at the self-timeout mark even though
+          # nothing was actually wrong (observed: freqtrade's own
+          # internal shutdown sequence hit a SQLAlchemy
+          # PendingRollbackError while closing its DB connection after
+          # receiving SIGTERM — happening for a hopefully-cosmetic reason
+          # inside freqtrade/SQLAlchemy's shutdown path — but it doesn't
+          # matter here: every trade state change is already committed
+          # to Postgres before this point, so this is safe to ignore).
+          wait $FREQTRADE_PID || true
           kill $TAIL_PID 2>/dev/null || true
 
           echo "Planned self-restart: freqtrade ran for its allotted ${SELF_TIMEOUT_SECONDS}s and stopped on its own — this is expected, not a failure."
