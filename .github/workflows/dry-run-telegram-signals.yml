@@ -10,37 +10,40 @@ name: NFI Dry-Run Telegram Signals
 # - GitHub Actions jobs have a hard 6-hour ceiling and aren't designed for
 #   indefinite always-on processes, so this restarts periodically instead
 #   of trying to run forever in one job.
-# - Restart trigger is EXTERNAL (not GitHub's own `schedule:` cron) — an
-#   outside cron service (e.g. cron-job.org) calls GitHub's REST API every
-#   ~6 hours to fire this workflow's `workflow_dispatch` event:
-#     POST https://api.github.com/repos/<owner>/<repo>/actions/workflows/dry-run-telegram-signals.yml/dispatches
-#     Headers: Authorization: Bearer <a GitHub Personal Access Token with
-#              'workflow' scope>, Accept: application/vnd.github+json
-#     Body:    {"ref": "main"}
-#   Store that PAT as a secret on the cron site's side, NOT in this repo.
-# - IMPORTANT: each run stops ITSELF gracefully (via an internal 5h45m
-#   timeout, shorter than the ~6h external interval) and exits 0 on
-#   purpose — rather than waiting to be killed by the next run's
-#   `concurrency: cancel-in-progress`. GitHub Actions always marks a
-#   run's conclusion as "Cancelled" (never green/Success) when it's
-#   stopped that way, and that conclusion can't be overridden from
-#   inside the job — so self-stopping on a shorter timer is what makes
-#   each run show as a genuine green success. `concurrency` +
-#   `cancel-in-progress` are kept only as a backup safety net for
-#   abnormal cases (e.g. the external trigger firing early).
+# - SELF-QUEUEING restart chain (primary mechanism): a few minutes before
+#   this run's own internal self-timeout expires, it calls GitHub's REST
+#   API itself (using the automatic, built-in GITHUB_TOKEN — no extra
+#   secret needed) to dispatch the NEXT run of this same workflow:
+#     POST /repos/<owner>/<repo>/actions/workflows/dry-run-telegram-signals.yml/dispatches
+#   Because `concurrency.cancel-in-progress` is FALSE below, that new run
+#   doesn't cancel this one — GitHub QUEUES it instead, and starts it
+#   automatically the instant this run finishes (exit 0). Net effect:
+#   near-zero gap between runs, AND every run still completes and shows
+#   green/Success on its own terms (no run ever gets killed by another).
+# - EXTERNAL cron (e.g. cron-job.org calling the same dispatch endpoint
+#   every ~6h with a separate PAT stored on the cron site) is kept ONLY
+#   as a backup safety net, in case the self-queueing chain above ever
+#   breaks (e.g. a crash before it gets to queue the next run). Because
+#   queueing (not cancelling) is used, an extra/redundant dispatch from
+#   the backup is harmless — it just sits queued.
 # - Open simulated trades survive each restart because db_url points at
 #   Supabase Postgres (set via secret), not local SQLite (which would be
 #   wiped every time the runner's filesystem is discarded).
 
 on:
-  workflow_dispatch: {}   # triggered externally by the cron site's API call
+  workflow_dispatch: {}   # triggered by the self-queueing chain above, and by the external cron backup
 
 concurrency:
   group: nfi-dryrun-telegram
-  cancel-in-progress: true
+  # FALSE is deliberate and load-bearing: this makes a new dispatch queue
+  # behind the current run instead of killing it, which is what lets the
+  # self-queueing restart chain achieve near-zero gap without ever
+  # showing a run as "Cancelled". See architecture summary above.
+  cancel-in-progress: false
 
 permissions:
   contents: read
+  actions: write   # required so this run's own GITHUB_TOKEN can call the workflow-dispatch API to queue the next run
 
 jobs:
   dryrun:
@@ -154,29 +157,11 @@ jobs:
           FREQTRADE__DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd user_data/..
 
-          # IMPORTANT (why this run ends up green, not "Cancelled"):
-          # GitHub Actions always marks a run's conclusion as "Cancelled"
-          # if it was stopped via the `concurrency: cancel-in-progress`
-          # mechanism or via the job's own `timeout-minutes` — regardless
-          # of what exit code our script returns. That conclusion is set
-          # by GitHub's platform itself and cannot be overridden from
-          # inside the job.
-          #
-          # So instead of relying on being killed externally, this step
-          # stops itself on purpose, on a timer SHORTER than the ~4h
-          # external cron interval, then explicitly exits 0. That means:
-          #   - Every run normally finishes as a genuine, on-purpose
-          #     success (green ✅) well before the next scheduled trigger
-          #     would ever need to cancel anything.
-          #   - `concurrency: cancel-in-progress` and the job-level
-          #     `timeout-minutes` (below) remain in place purely as
-          #     backup safety nets for abnormal cases (e.g. the external
-          #     cron firing early, or this step hanging) — not as the
-          #     primary restart mechanism anymore.
-          SELF_TIMEOUT_SECONDS=$((5*3600 + 45*60))   # 5h45m — leaves ~10min buffer before both the 6h external-cron interval AND GitHub's own 6h hard cap on job runtime
+          SELF_TIMEOUT_SECONDS=$((5*3600 + 45*60))   # 5h45m — leaves ~10min buffer before both the external cron backup interval AND GitHub's own 6h hard cap on job runtime
 
           timeout --signal=TERM "${SELF_TIMEOUT_SECONDS}s" freqtrade trade \
             --config user_data/config.json \
@@ -184,12 +169,29 @@ jobs:
             --logfile user_data/logs/freqtrade.log &
           FREQTRADE_PID=$!
 
+          # Self-queueing restart: a couple minutes before THIS run plans
+          # to stop, ask GitHub to queue the NEXT run of this same
+          # workflow. Because concurrency.cancel-in-progress is false
+          # (see top of file), that new run doesn't kill this one — it
+          # waits in GitHub's queue and starts the instant this run
+          # finishes. That's what closes the gap to near-zero without
+          # ever cancelling a run.
+          QUEUE_LEAD_SECONDS=120   # queue ~2min before this run's planned stop
+          (
+            sleep $((SELF_TIMEOUT_SECONDS - QUEUE_LEAD_SECONDS))
+            echo "Queueing the next run now (this run stops in ~${QUEUE_LEAD_SECONDS}s)..."
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/dry-run-telegram-signals.yml/dispatches" \
+              -d "{\"ref\": \"${{ github.ref_name }}\"}"
+          ) &
+          QUEUE_PID=$!
+
           # Safety net only: if this run DOES get cancelled externally
           # anyway (e.g. someone manually re-triggers it early), still
           # shut down freqtrade cleanly rather than have it killed
-          # mid-write. This won't make an externally-cancelled run show
-          # green — only the self-timeout path above does that — it just
-          # avoids an abrupt kill in that edge case.
+          # mid-write.
           external_cancel_handler() {
             echo "Received external termination signal — forwarding to freqtrade (PID $FREQTRADE_PID) for graceful shutdown..."
             curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
@@ -223,11 +225,12 @@ jobs:
           # to Postgres before this point, so this is safe to ignore).
           wait $FREQTRADE_PID || true
           kill $TAIL_PID 2>/dev/null || true
+          kill $QUEUE_PID 2>/dev/null || true
 
-          echo "Planned self-restart: freqtrade ran for its allotted ${SELF_TIMEOUT_SECONDS}s and stopped on its own — this is expected, not a failure."
+          echo "Planned self-restart: freqtrade ran for its allotted ${SELF_TIMEOUT_SECONDS}s and stopped on its own — this is expected, not a failure. The next run should already be queued and will start immediately."
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
-            -d text="🔁 NFI dry-run (run #${{ github.run_number }}) completed its planned ${SELF_TIMEOUT_SECONDS}s session and is stopping on schedule. The next external cron trigger will start a fresh run shortly. Open simulated trades are safe (already saved to the database)." \
+            -d text="🔁 NFI dry-run (run #${{ github.run_number }}) completed its planned ${SELF_TIMEOUT_SECONDS}s session and is stopping on schedule. The next run was already queued a couple minutes ago and should start immediately. Open simulated trades are safe (already saved to the database)." \
             > /dev/null || true
 
           # Exit 0 no matter what freqtrade/timeout returned (e.g.
