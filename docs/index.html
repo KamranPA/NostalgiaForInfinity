@@ -47,14 +47,14 @@
 <body>
 
 <h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
-<div class="subtitle">Generated 2026-08-26 22:44:37 UTC · dry-run (simulated) — no real funds involved · KuCoin market data</div>
+<div class="subtitle">Generated 2026-08-27 04:15:58 UTC · dry-run (simulated) — no real funds involved · KuCoin market data</div>
 
 <div class="grid">
-  <div class="stat-card"><div class="label">Open Trades</div><div class="value">6</div></div>
-  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">13</div></div>
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">4</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">15</div></div>
   <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
   <div class="stat-card"><div class="label">Total Profit</div>
-    <div class="value profit-pos">+15.16 USDT</div></div>
+    <div class="value profit-pos">+15.82 USDT</div></div>
 </div>
 
 <div class="two-col">
@@ -71,12 +71,12 @@
 
         <div class="card">
           <h3>Statistical Significance</h3>
-          <p>Win-rate p-value (two-sided binomial vs. 50%): <b>0.0002</b> — statistically distinguishable from 50/50</p>
-          <p>95% bootstrap CI on mean profit/trade: <b>[1.01%, 2.93%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
+          <p>Win-rate p-value (two-sided binomial vs. 50%): <b>0.0001</b> — statistically distinguishable from 50/50</p>
+          <p>95% bootstrap CI on mean profit/trade: <b>[0.93%, 2.68%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
         </div>
 
 <div class="card">
-  <h3>Open Trades (6)</h3>
+  <h3>Open Trades (4)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
@@ -86,48 +86,32 @@
           <td>163 </td>
           <td>2026-08-22 05:31</td>
           <td>0.35982</td>
-          <td>0.31482</td>
-          <td><span class="profit-neg">-12.51%</span></td>
+          <td>0.31648</td>
+          <td><span class="profit-neg">-12.04%</span></td>
         </tr>
         <tr>
           <td>SUI/USDT</td>
           <td>144 </td>
           <td>2026-08-22 08:01</td>
           <td>0.8442</td>
-          <td>0.7543</td>
-          <td><span class="profit-neg">-10.65%</span></td>
+          <td>0.7527</td>
+          <td><span class="profit-neg">-10.84%</span></td>
         </tr>
         <tr>
           <td>ADA/USDT</td>
           <td>144 </td>
           <td>2026-08-22 08:01</td>
           <td>0.2309</td>
-          <td>0.2107</td>
-          <td><span class="profit-neg">-8.75%</span></td>
-        </tr>
-        <tr>
-          <td>WLD/USDT</td>
-          <td>144 </td>
-          <td>2026-08-22 08:01</td>
-          <td>0.4062</td>
-          <td>0.3972</td>
-          <td><span class="profit-neg">-2.22%</span></td>
+          <td>0.2105</td>
+          <td><span class="profit-neg">-8.83%</span></td>
         </tr>
         <tr>
           <td>AKE/USDT</td>
           <td>2 </td>
           <td>2026-08-26 19:05</td>
           <td>0.0077041</td>
-          <td>0.0078702</td>
-          <td><span class="profit-pos">+2.16%</span></td>
-        </tr>
-        <tr>
-          <td>EDEN/USDT</td>
-          <td>64 </td>
-          <td>2026-08-26 22:17</td>
-          <td>0.0648</td>
-          <td>0.0655</td>
-          <td><span class="profit-pos">+1.08%</span></td>
+          <td>0.0082083</td>
+          <td><span class="profit-pos">+6.54%</span></td>
         </tr>
   </table>
   </div>
@@ -176,6 +160,12 @@
           <td class="profit-pos">+2.07%</td>
         </tr>
         <tr>
+          <td>WLD/USDT</td>
+          <td>1</td>
+          <td>100%</td>
+          <td class="profit-pos">+0.12%</td>
+        </tr>
+        <tr>
           <td>XRP/USDT</td>
           <td>1</td>
           <td>100%</td>
@@ -205,16 +195,38 @@
           <td>100%</td>
           <td class="profit-pos">+1.46%</td>
         </tr>
+        <tr>
+          <td>EDEN/USDT</td>
+          <td>1</td>
+          <td>100%</td>
+          <td class="profit-pos">+1.34%</td>
+        </tr>
   </table>
   </div>
 </div>
 
 <div class="card">
-  <h3>Closed Trades (13)</h3>
+  <h3>Closed Trades (15)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
     
+        <tr>
+          <td>EDEN/USDT</td>
+          <td>64 </td>
+          <td>2026-08-26 22:17</td>
+          <td>2026-08-27 00:06</td>
+          <td class="profit-pos">+1.34%</td>
+          <td>exit_profit_long_rebuy_t_1_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td>WLD/USDT</td>
+          <td>144 </td>
+          <td>2026-08-22 08:01</td>
+          <td>2026-08-26 23:55</td>
+          <td class="profit-pos">+0.12%</td>
+          <td>exit_long_tc_d_0_100 ( 144 )</td>
+        </tr>
         <tr>
           <td>US/USDT</td>
           <td>63 </td>
@@ -331,10 +343,10 @@
 new Chart(document.getElementById('equityChart'), {
   type: 'line',
   data: {
-    labels: ["2026-08-21 18:01", "2026-08-22 00:53", "2026-08-22 05:29", "2026-08-22 18:06", "2026-08-22 17:55", "2026-08-23 21:31", "2026-08-22 08:56", "2026-08-22 12:35", "2026-08-22 18:41", "2026-08-23 04:38", "2026-08-23 15:39", "2026-08-24 02:22", "2026-08-24 23:37"],
+    labels: ["2026-08-21 18:01", "2026-08-22 00:53", "2026-08-22 05:29", "2026-08-22 18:06", "2026-08-22 17:55", "2026-08-26 23:55", "2026-08-23 21:31", "2026-08-22 08:56", "2026-08-22 12:35", "2026-08-22 18:41", "2026-08-23 04:38", "2026-08-23 15:39", "2026-08-24 02:22", "2026-08-24 23:37", "2026-08-27 00:06"],
     datasets: [{
       label: 'Cumulative profit %',
-      data: [0.186, 1.868, 2.879, 4.026, 6.091, 6.417, 7.447, 13.369, 14.507, 20.087, 20.202, 23.135, 24.598],
+      data: [0.186, 1.868, 2.879, 4.026, 6.091, 6.207, 6.533, 7.563, 13.485, 14.623, 20.203, 20.318, 23.251, 24.714, 26.054],
       borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
       fill: true, tension: 0.2, pointRadius: 2
     }]
@@ -352,9 +364,9 @@ new Chart(document.getElementById('equityChart'), {
 new Chart(document.getElementById('reasonChart'), {
   type: 'doughnut',
   data: {
-    labels: ["exit_long_normal_d_0_97 ( 5 )", "exit_long_rebuy_w_1_1 ( 65 )", "exit_long_normal_u_1 ( 4 )", "exit_long_rebuy_6_1 ( 63 )", "exit_long_tc_w_2_10 ( 144 )", "exit_long_tc_d_0_100 ( 144 )", "exit_long_tc_d_1_120 ( 144 )", "exit_long_rebuy_w_5_7 ( 64 )", "exit_long_rebuy_w_1_14 ( 64 )", "exit_long_rebuy_w_0_10 ( 65 )", "exit_long_normal_w_2_8 ( 6 )", "exit_long_rebuy_d_1_2 ( 63 )"],
+    labels: ["exit_long_normal_d_0_97 ( 5 )", "exit_long_rebuy_w_1_1 ( 65 )", "exit_long_normal_u_1 ( 4 )", "exit_long_rebuy_6_1 ( 63 )", "exit_long_tc_w_2_10 ( 144 )", "exit_long_tc_d_0_100 ( 144 )", "exit_long_tc_d_1_120 ( 144 )", "exit_long_rebuy_w_5_7 ( 64 )", "exit_long_rebuy_w_1_14 ( 64 )", "exit_long_rebuy_w_0_10 ( 65 )", "exit_long_normal_w_2_8 ( 6 )", "exit_long_rebuy_d_1_2 ( 63 )", "exit_profit_long_rebuy_t_1_1_m ( 64 )"],
     datasets: [{
-      data: [1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1],
+      data: [1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1],
       backgroundColor: ['#58a6ff','#3fb950','#f85149','#d29922','#a371f7','#39c5cf','#f778ba']
     }]
   },
