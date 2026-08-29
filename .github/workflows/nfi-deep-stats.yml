@@ -57,14 +57,13 @@ jobs:
           PART1="${OUTPUT:0:$HALF}"
           PART2="${OUTPUT:$HALF}"
 
-          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${CHAT_ID}" \
-            --data-urlencode "text=📊 NFI Deep Diagnostics (1/2)
-
-${PART1}"
+          MSG1=$(printf '📊 NFI Deep Diagnostics (1/2)\n\n%s' "$PART1")
+          MSG2=$(printf '📊 NFI Deep Diagnostics (2/2)\n\n%s' "$PART2")
 
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${CHAT_ID}" \
-            --data-urlencode "text=📊 NFI Deep Diagnostics (2/2)
+            --data-urlencode "text=${MSG1}"
 
-${PART2}"
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${MSG2}"
