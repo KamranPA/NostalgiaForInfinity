@@ -72,7 +72,7 @@ def fetch_orders(db_url: str, trade_ids):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT ft_trade_id AS trade_id, ft_order_side, order_filled_date,
-                       ft_is_entry, average, filled
+                       average, filled
                 FROM orders
                 WHERE ft_trade_id = ANY(%s)
                 ORDER BY ft_trade_id, order_filled_date ASC
@@ -259,7 +259,10 @@ def section_dca_activity(open_trades, orders_by_trade):
 
     for t in open_trades:
         fills = orders_by_trade.get(t["id"], [])
-        entries = [f for f in fills if f.get("ft_is_entry")]
+        # These are long-only spot trades, so entry fills are 'buy' orders
+        # (ft_is_entry isn't a real DB column — it's computed in freqtrade
+        # from ft_order_side == trade.entry_side, which is 'buy' for longs).
+        entries = [f for f in fills if f.get("ft_order_side") == "buy"]
         n_extra = max(0, len(entries) - 1)
         print(f"  {t['pair']:14s} total entry fills={len(entries)}  "
               f"extra DCA/rebuy fills={n_extra}")
