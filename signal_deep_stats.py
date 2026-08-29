@@ -71,11 +71,11 @@ def fetch_orders(db_url: str, trade_ids):
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                SELECT trade_id, ft_order_side, order_filled_date,
+                SELECT ft_trade_id AS trade_id, ft_order_side, order_filled_date,
                        ft_is_entry, average, filled
                 FROM orders
-                WHERE trade_id = ANY(%s)
-                ORDER BY trade_id, order_filled_date ASC
+                WHERE ft_trade_id = ANY(%s)
+                ORDER BY ft_trade_id, order_filled_date ASC
             """, (list(trade_ids),))
             rows = cur.fetchall()
     except Exception as e:
@@ -242,7 +242,7 @@ def section_time_clustering(open_trades):
         print(f"{len(tight)} gap(s) under 6h — suggests a cluster of entries fired off")
         print("the same short-lived market condition. If those clustered trades are")
         print("now all underwater together, that's more likely one correlated market")
-        print("move (e.g. a broad altcoin dip) than {len} independent strategy failures.")
+        print(f"move (e.g. a broad altcoin dip) than {len(tight)} independent strategy failures.")
     else:
         print("Opens are spread out — the current drawdown isn't from one clustered")
         print("entry burst; each trade was an independent signal.")
