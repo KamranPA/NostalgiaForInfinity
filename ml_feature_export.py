@@ -128,23 +128,90 @@ def summarize(df: pd.DataFrame):
         print(" earlier before treating any model trained on this as reliable.)")
 
 
+def build_telegram_summary(df: pd.DataFrame) -> str:
+    """Short, Telegram-friendly summary — not the full column dump."""
+    lines = []
+    lines.append("🧠 ML Feature Export — Daily Summary")
+    lines.append("")
+
+    entry_rows = df[df["custom_data_key"] == "entry_context"]
+    n_trades_with_data = entry_rows["trade_id"].nunique()
+    n_fill_rows = len(df) - len(entry_rows)
+
+    lines.append(f"Trades with logged features: {n_trades_with_data}")
+    lines.append(f"Total fill snapshots (entries+rebuys+exits): {n_fill_rows}")
+
+    if entry_rows.empty:
+        lines.append("")
+        lines.append("No entry_context rows yet. Logging only applies to trades opened")
+        lines.append("after the ml_snapshot change went live — still waiting on the")
+        lines.append("first new trade to open.")
+        return "\n".join(lines)
+
+    closed = entry_rows[entry_rows["is_open"] == False]  # noqa: E712
+    open_ = entry_rows[entry_rows["is_open"] == True]  # noqa: E712
+    lines.append(f"  closed (labeled): {len(closed)}   open (unlabeled yet): {len(open_)}")
+
+    MIN_FOR_MODEL = 100
+    lines.append("")
+    if len(closed) < MIN_FOR_MODEL:
+        lines.append(
+            f"Labeled rows: {len(closed)}/{MIN_FOR_MODEL} — still below the minimum "
+            f"sample size before any model trained on this would be meaningful."
+        )
+    else:
+        lines.append(
+            f"Labeled rows: {len(closed)} — now at/above the {MIN_FOR_MODEL} minimum "
+            f"discussed earlier. Worth revisiting whether meta-labeling is viable."
+        )
+
+    # Per-tag coverage, since that's what earlier analysis cared about most.
+    if "enter_tag" in entry_rows.columns:
+        lines.append("")
+        lines.append("By enter_tag (closed / total logged):")
+        for tag, grp in entry_rows.groupby("enter_tag"):
+            n_closed = (grp["is_open"] == False).sum()  # noqa: E712
+            lines.append(f"  tag {tag}: {n_closed}/{len(grp)}")
+
+    # Basic feature completeness check — flags if BTC/indicator columns
+    # are coming back empty, which would mean the logging silently broke.
+    key_cols = ["rsi_14", "btc_rsi_14", "ema_20"]
+    lines.append("")
+    lines.append("Feature health check (non-null rate):")
+    for c in key_cols:
+        if c in entry_rows.columns:
+            rate = entry_rows[c].notna().mean() * 100 if len(entry_rows) else 0
+            lines.append(f"  {c}: {rate:.0f}%")
+        else:
+            lines.append(f"  {c}: MISSING COLUMN")
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
 
     db_url = sys.argv[1]
-    out_path = sys.argv[2] if len(sys.argv) > 2 else None
+    remaining = sys.argv[2:]
+    telegram_mode = "--telegram" in remaining
+    out_path = next((a for a in remaining if not a.startswith("--")), None)
 
     df = fetch_snapshots(db_url)
     if df.empty:
-        print("No ml_snapshot/entry_context custom_data found yet.")
-        print("Make sure the updated NostalgiaForInfinityX7.py is deployed and at least")
-        print("one trade has opened since then.")
+        msg = (
+            "No ml_snapshot/entry_context custom_data found yet.\n"
+            "Make sure the updated NostalgiaForInfinityX7.py is deployed and at least\n"
+            "one trade has opened since then."
+        )
+        print(msg)
         sys.exit(0)
 
-    summarize(df)
-
-    if out_path:
-        df.to_csv(out_path, index=False)
-        print(f"\nWrote {len(df)} rows to {out_path}")
+    if telegram_mode:
+        print(build_telegram_summary(df))
+    else:
+        summarize(df)
+        if out_path:
+            df.to_csv(out_path, index=False)
+            print(f"\nWrote {len(df)} rows to {out_path}")
