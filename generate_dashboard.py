@@ -53,6 +53,73 @@ def fetch_trades(db_url: str):
         conn.close()
 
 
+def fetch_entry_fills(db_url: str, trade_ids):
+    """Per-trade history of entry (DCA/rebuy) fills, so capital-days can
+    use how much was ACTUALLY locked at each point in time — not just
+    the trade's final/current stake_amount applied to its whole duration.
+    A trade that grew from 100 -> 500 USDT over several rebuys had far
+    less capital tied up in its early days than its final size suggests;
+    using the final size for the entire holding period overstates
+    capital-days (and understates the return-per-capital-day rate).
+
+    Returns {trade_id: [(fill_time, cumulative_cost_after_this_fill), ...]}
+    sorted by fill_time. Falls back to None (caller uses stake_amount ×
+    full duration as before) if the orders table can't be read.
+    """
+    if not trade_ids:
+        return {}
+    conn = psycopg2.connect(db_url)
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT ft_trade_id, order_filled_date, cost, average, filled
+                FROM orders
+                WHERE ft_trade_id = ANY(%s) AND ft_order_side = 'buy'
+                  AND order_filled_date IS NOT NULL
+                ORDER BY ft_trade_id, order_filled_date ASC
+            """, (list(trade_ids),))
+            rows = cur.fetchall()
+    except Exception as e:
+        print(f"  (could not read orders table for capital-over-time reconstruction: {e})")
+        return {}
+    finally:
+        conn.close()
+
+    by_trade = {}
+    running_cost = {}
+    for r in rows:
+        tid = r["ft_trade_id"]
+        fill_cost = to_float(r["cost"])
+        if fill_cost <= 0:
+            # Fallback if 'cost' wasn't populated for this fill: reconstruct
+            # from average price × filled amount.
+            fill_cost = to_float(r["average"]) * to_float(r["filled"])
+        running_cost[tid] = running_cost.get(tid, 0.0) + fill_cost
+        by_trade.setdefault(tid, []).append((r["order_filled_date"], running_cost[tid]))
+    return by_trade
+
+
+def capital_days_for_trade(fills, open_date, end_date, fallback_stake, fallback_days):
+    """Integrate stake-locked × time using the ACTUAL step function of
+    capital committed over the trade's life (each DCA fill raises the
+    'locked capital' step). Falls back to a flat stake×duration estimate
+    if no fill history is available."""
+    if not fills:
+        return fallback_stake * fallback_days
+
+    total = 0.0
+    prev_time = open_date
+    prev_cost = 0.0
+    for fill_time, cumulative_cost in fills:
+        seg_days = duration_days(prev_time, fill_time)
+        total += prev_cost * seg_days  # capital locked BEFORE this fill landed
+        prev_time = fill_time
+        prev_cost = cumulative_cost
+    # Final segment: from the last fill to close/now, at the final size.
+    total += prev_cost * duration_days(prev_time, end_date)
+    return total
+
+
 def fetch_live_prices(pairs):
     """Best-effort live price fetch for unrealized P/L on open trades.
     Returns {pair: last_price} — pairs that fail to fetch are simply
@@ -99,6 +166,41 @@ def bootstrap_ci(profits: np.ndarray, n_boot: int = 10000, alpha: float = 0.05):
 
 
 # ----------------------------------------------------------------------
+# Capital efficiency (opportunity cost of locked-up slots)
+# ------------------------------------------------------------
+# "Total profit" on its own hides how long capital sat idle to earn it.
+# A trade that ties up a slot for 5 days to make +0.1% is a much worse
+# use of capital than one that makes +0.1% in 10 minutes and frees the
+# slot for the next signal. These helpers turn profit + duration into
+# a single comparable rate, and flag trades whose slot has been stuck
+# far longer than the strategy's typical hold time.
+# ----------------------------------------------------------------------
+
+STUCK_MULTIPLIER = 5    # flag an open trade as "stuck" once its age exceeds
+                         # this many multiples of the median closed-trade
+                         # holding time (falls back to a flat 2-day cutoff
+                         # when there isn't enough closed-trade history yet).
+STUCK_HARD_CAP_DAYS = 3  # ...but never let one slow outlier in the closed
+                          # history push the threshold above this, or a
+                          # single long-but-legitimate trade could mask a
+                          # genuinely stuck one with too little data.
+
+
+def duration_days(start, end):
+    if start is None or end is None:
+        return 0.0
+    delta = end - start
+    return max(delta.total_seconds() / 86400.0, 0.0)
+
+
+def to_float(x, default=0.0):
+    try:
+        return float(x) if x is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+# ----------------------------------------------------------------------
 # HTML building
 # ----------------------------------------------------------------------
 
@@ -121,7 +223,7 @@ def fmt_pct(x, signed=True):
     return f"{sign}{x*100:.2f}%"
 
 
-def build_html(trades, live_prices, generated_at):
+def build_html(trades, live_prices, entry_fills, generated_at):
     open_trades = [t for t in trades if t["is_open"]]
     closed_trades = [t for t in trades if not t["is_open"]]
     closed_with_profit = [t for t in closed_trades if t["close_profit"] is not None]
@@ -180,27 +282,139 @@ def build_html(trades, live_prices, generated_at):
           <p>⚠️ Only {n} closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
         </div>"""
 
-    # Open trades rows (with live unrealized P/L)
+    # --- Capital efficiency: closed trades ---
+    # capital-days = stake tied up × how long it was tied up for. This is
+    # the denominator that turns raw profit into a rate comparable across
+    # trades of wildly different holding times.
+    closed_capital_days = 0.0
+    for t in closed_with_profit:
+        fills = entry_fills.get(t["id"])
+        closed_capital_days += capital_days_for_trade(
+            fills, t["open_date"], t["close_date"],
+            fallback_stake=to_float(t["stake_amount"]),
+            fallback_days=duration_days(t["open_date"], t["close_date"]),
+        )
+    realized_abs = sum(to_float(t["close_profit_abs"]) for t in closed_with_profit)
+    realized_rate_per_capital_day = (realized_abs / closed_capital_days) if closed_capital_days > 0 else None
+
+    closed_durations_days = [
+        duration_days(t["open_date"], t["close_date"]) for t in closed_with_profit
+    ]
+    median_closed_duration = float(np.median(closed_durations_days)) if closed_durations_days else None
+    if median_closed_duration:
+        stuck_threshold_days = min(max(median_closed_duration * STUCK_MULTIPLIER, 0.5), STUCK_HARD_CAP_DAYS)
+    else:
+        stuck_threshold_days = 2.0
+
+    # --- Capital efficiency: open trades (unrealized) ---
+    now_utc = datetime.now(timezone.utc)
+    open_unrealized_abs_total = 0.0
+    open_capital_days = 0.0
+    open_capital_locked_total = 0.0
+    stuck_trades = []
+
     open_rows_html = ""
     for t in open_trades:
+        stake = to_float(t["stake_amount"])  # current/final size — shown as-is in the table
+        open_date = t["open_date"]
+        open_date_aware = open_date.replace(tzinfo=timezone.utc) if open_date and open_date.tzinfo is None else open_date
+        age_days = duration_days(open_date_aware, now_utc)
+
+        fills = entry_fills.get(t["id"])
+        trade_capital_days = capital_days_for_trade(
+            fills, open_date_aware, now_utc,
+            fallback_stake=stake, fallback_days=age_days,
+        )
+
+        open_capital_locked_total += stake
+        open_capital_days += trade_capital_days
+        is_stuck = age_days > stuck_threshold_days
+        if is_stuck:
+            stuck_trades.append(t)
+
         live = live_prices.get(t["pair"])
         if live and t["open_rate"]:
             unreal_pct = (live - t["open_rate"]) / t["open_rate"]
+            unreal_abs = stake * unreal_pct
+            open_unrealized_abs_total += unreal_abs
             unreal_cls = "profit-pos" if unreal_pct > 0 else "profit-neg"
-            unreal_str = f'<span class="{unreal_cls}">{fmt_pct(unreal_pct)}</span>'
+            unreal_str = f'<span class="{unreal_cls}">{fmt_pct(unreal_pct)} ({unreal_abs:+.2f} USDT)</span>'
             live_str = f"{live:.6g}"
         else:
             unreal_str = '<span class="muted">live price unavailable</span>'
             live_str = '<span class="muted">—</span>'
+
+        age_str = f"{age_days:.1f}d"
+        stuck_badge = ' <span class="stuck-badge" title="Open far longer than this strategy\'s typical hold time">🐌 stuck</span>' if is_stuck else ""
+
         open_rows_html += f"""
         <tr>
           <td>{esc(t['pair'])}</td>
           <td>{esc(t['enter_tag'])}</td>
           <td>{fmt_dt(t['open_date'])}</td>
+          <td>{age_str}{stuck_badge}</td>
+          <td>{stake:.2f} USDT</td>
           <td>{t['open_rate']:.6g}</td>
           <td>{live_str}</td>
           <td>{unreal_str}</td>
         </tr>"""
+
+    true_total_abs = realized_abs + open_unrealized_abs_total
+    total_capital_days = closed_capital_days + open_capital_days
+    blended_rate_per_capital_day = (true_total_abs / total_capital_days) if total_capital_days > 0 else None
+
+    def annualized(rate_per_day):
+        if rate_per_day is None:
+            return None
+        return rate_per_day * 365 * 100  # simple (non-compounded) extrapolation, illustrative only
+
+    stuck_capital = sum(to_float(t["stake_amount"]) for t in stuck_trades)
+    stuck_pct_of_open_capital = (
+        (stuck_capital / open_capital_locked_total * 100) if open_capital_locked_total > 0 else 0
+    )
+
+    capital_eff_html = f"""
+    <div class="card">
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Realized Profit</div>
+          <div class="value {'profit-pos' if realized_abs >= 0 else 'profit-neg'}">{realized_abs:+.2f} USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unrealized P/L (open)</div>
+          <div class="value {'profit-pos' if open_unrealized_abs_total >= 0 else 'profit-neg'}">{open_unrealized_abs_total:+.2f} USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">{open_capital_locked_total:.2f} USDT currently locked in open trades</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">True Total (realized + unrealized)</div>
+          <div class="value {'profit-pos' if true_total_abs >= 0 else 'profit-neg'}">{true_total_abs:+.2f} USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stuck Trades</div>
+          <div class="value {'profit-neg' if stuck_trades else ''}">{len(stuck_trades)} / {len(open_trades)}</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">{stuck_pct_of_open_capital:.0f}% of open capital, open &gt;{stuck_threshold_days:.1f}d</div>
+        </div>
+      </div>
+      <p style="margin-top:16px;margin-bottom:4px;">
+        Realized return per capital-day: <b>{f'{realized_rate_per_capital_day*100:.4f}%' if realized_rate_per_capital_day is not None else '—'}</b>
+        {f'(≈ {annualized(realized_rate_per_capital_day):.1f}%/yr if repeated — simple, non-compounded extrapolation)' if realized_rate_per_capital_day is not None else ''}
+      </p>
+      <p style="margin-bottom:4px;">
+        Blended return per capital-day (incl. unrealized): <b>{f'{blended_rate_per_capital_day*100:.4f}%' if blended_rate_per_capital_day is not None else '—'}</b>
+        {f'(≈ {annualized(blended_rate_per_capital_day):.1f}%/yr equivalent)' if blended_rate_per_capital_day is not None else ''}
+      </p>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
+        fill (so a trade that grew from 100 → 500 USDT over several rebuys is charged the
+        smaller amount for its early days, not its final size for the whole holding period).
+        This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be compared
+        fairly, and it's why "Total Profit" alone can look fine while several slots are
+        quietly stuck.
+      </p>
+    </div>"""
 
     # Closed trades rows
     closed_rows_html = ""
@@ -270,6 +484,11 @@ def build_html(trades, live_prices, generated_at):
   .profit-pos {{ color: var(--pos); font-weight: 600; }}
   .profit-neg {{ color: var(--neg); font-weight: 600; }}
   .muted {{ color: var(--muted); }}
+  .stuck-badge {{
+    display: inline-block; background: rgba(248,81,73,0.15); color: var(--neg);
+    border: 1px solid rgba(248,81,73,0.35); border-radius: 4px;
+    font-size: 0.7rem; padding: 1px 6px; margin-left: 4px; white-space: nowrap;
+  }}
   .chart-wrap {{ position: relative; height: 300px; }}
   .two-col {{ display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }}
   @media (max-width: 800px) {{ .two-col {{ grid-template-columns: 1fr; }} }}
@@ -285,9 +504,12 @@ def build_html(trades, live_prices, generated_at):
   <div class="stat-card"><div class="label">Open Trades</div><div class="value">{len(open_trades)}</div></div>
   <div class="stat-card"><div class="label">Closed Trades</div><div class="value">{len(closed_trades)}</div></div>
   <div class="stat-card"><div class="label">Win Rate</div><div class="value">{win_rate*100:.1f}%</div></div>
-  <div class="stat-card"><div class="label">Total Profit</div>
-    <div class="value {'profit-pos' if total_profit_abs >= 0 else 'profit-neg'}">{total_profit_abs:+.2f} USDT</div></div>
+  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
+    <div class="value {'profit-pos' if total_profit_abs >= 0 else 'profit-neg'}">{total_profit_abs:+.2f} USDT</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
 </div>
+
+{capital_eff_html}
 
 <div class="two-col">
   <div class="card">
@@ -306,8 +528,8 @@ def build_html(trades, live_prices, generated_at):
   <h3>Open Trades ({len(open_trades)})</h3>
   <div class="table-scroll">
   <table>
-    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
-    {open_rows_html if open_rows_html else '<tr><td colspan="6" class="muted">No open trades</td></tr>'}
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
+    {open_rows_html if open_rows_html else '<tr><td colspan="8" class="muted">No open trades</td></tr>'}
   </table>
   </div>
 </div>
@@ -385,9 +607,10 @@ def main(db_url: str, output_path: str):
     print(f"Fetched {len(trades)} trade records ({len(open_pairs)} open pairs).")
 
     live_prices = fetch_live_prices(open_pairs) if open_pairs else {}
+    entry_fills = fetch_entry_fills(db_url, [t["id"] for t in trades])
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    html = build_html(trades, live_prices, generated_at)
+    html = build_html(trades, live_prices, entry_fills, generated_at)
 
     with open(output_path, "w") as f:
         f.write(html)
