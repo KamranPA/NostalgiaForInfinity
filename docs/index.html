@@ -38,6 +38,11 @@
   .profit-pos { color: var(--pos); font-weight: 600; }
   .profit-neg { color: var(--neg); font-weight: 600; }
   .muted { color: var(--muted); }
+  .stuck-badge {
+    display: inline-block; background: rgba(248,81,73,0.15); color: var(--neg);
+    border: 1px solid rgba(248,81,73,0.35); border-radius: 4px;
+    font-size: 0.7rem; padding: 1px 6px; margin-left: 4px; white-space: nowrap;
+  }
   .chart-wrap { position: relative; height: 300px; }
   .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
   @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
@@ -47,15 +52,59 @@
 <body>
 
 <h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
-<div class="subtitle">Generated 2026-09-01 07:19:16 UTC · dry-run (simulated) — no real funds involved · KuCoin market data</div>
+<div class="subtitle">Generated 2026-09-01 08:24:21 UTC · dry-run (simulated) — no real funds involved · KuCoin market data</div>
 
 <div class="grid">
-  <div class="stat-card"><div class="label">Open Trades</div><div class="value">6</div></div>
-  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">19</div></div>
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">5</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">20</div></div>
   <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
-  <div class="stat-card"><div class="label">Total Profit</div>
-    <div class="value profit-pos">+25.16 USDT</div></div>
+  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
+    <div class="value profit-pos">+25.23 USDT</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
 </div>
+
+
+    <div class="card">
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Realized Profit</div>
+          <div class="value profit-pos">+25.23 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unrealized P/L (open)</div>
+          <div class="value profit-neg">-23.39 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">322.35 USDT currently locked in open trades</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">True Total (realized + unrealized)</div>
+          <div class="value profit-pos">+1.84 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stuck Trades</div>
+          <div class="value profit-neg">4 / 5</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">91% of open capital, open &gt;0.5d</div>
+        </div>
+      </div>
+      <p style="margin-top:16px;margin-bottom:4px;">
+        Realized return per capital-day: <b>1.6712%</b>
+        (≈ 610.0%/yr if repeated — simple, non-compounded extrapolation)
+      </p>
+      <p style="margin-bottom:4px;">
+        Blended return per capital-day (incl. unrealized): <b>0.0216%</b>
+        (≈ 7.9%/yr equivalent)
+      </p>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
+        fill (so a trade that grew from 100 → 500 USDT over several rebuys is charged the
+        smaller amount for its early days, not its final size for the whole holding period).
+        This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be compared
+        fairly, and it's why "Total Profit" alone can look fine while several slots are
+        quietly stuck.
+      </p>
+    </div>
 
 <div class="two-col">
   <div class="card">
@@ -72,62 +121,64 @@
         <div class="card">
           <h3>Statistical Significance</h3>
           <p>Win-rate p-value (two-sided binomial vs. 50%): <b>0.0000</b> — statistically distinguishable from 50/50</p>
-          <p>95% bootstrap CI on mean profit/trade: <b>[1.16%, 3.14%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
+          <p>95% bootstrap CI on mean profit/trade: <b>[1.09%, 2.98%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
         </div>
 
 <div class="card">
-  <h3>Open Trades (6)</h3>
+  <h3>Open Trades (5)</h3>
   <div class="table-scroll">
   <table>
-    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
     
         <tr>
           <td>KAITO/USDT</td>
           <td>163 </td>
           <td>2026-08-22 05:31</td>
+          <td>10.1d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
+          <td>74.92 USDT</td>
           <td>0.35982</td>
-          <td>0.30156</td>
-          <td><span class="profit-neg">-16.19%</span></td>
+          <td>0.30203</td>
+          <td><span class="profit-neg">-16.06% (-12.03 USDT)</span></td>
         </tr>
         <tr>
           <td>SUI/USDT</td>
           <td>144 </td>
           <td>2026-08-22 08:01</td>
+          <td>10.0d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
+          <td>66.07 USDT</td>
           <td>0.8147</td>
-          <td>0.7323</td>
-          <td><span class="profit-neg">-10.11%</span></td>
+          <td>0.7221</td>
+          <td><span class="profit-neg">-11.37% (-7.51 USDT)</span></td>
         </tr>
         <tr>
           <td>ADA/USDT</td>
           <td>144 </td>
           <td>2026-08-22 08:01</td>
+          <td>10.0d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
+          <td>65.19 USDT</td>
           <td>0.2233</td>
-          <td>0.2012</td>
-          <td><span class="profit-neg">-9.90%</span></td>
+          <td>0.1984</td>
+          <td><span class="profit-neg">-11.15% (-7.27 USDT)</span></td>
         </tr>
         <tr>
           <td>AKE/USDT</td>
           <td>2 </td>
           <td>2026-08-26 19:05</td>
+          <td>5.6d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
+          <td>86.28 USDT</td>
           <td>0.0084743</td>
-          <td>0.0089035</td>
-          <td><span class="profit-pos">+5.06%</span></td>
-        </tr>
-        <tr>
-          <td>UAI/USDT</td>
-          <td>65 </td>
-          <td>2026-08-31 06:40</td>
-          <td>0.39094</td>
-          <td>0.3843</td>
-          <td><span class="profit-neg">-1.70%</span></td>
+          <td>0.0089837</td>
+          <td><span class="profit-pos">+6.01% (+5.19 USDT)</span></td>
         </tr>
         <tr>
           <td>TRIA/USDT</td>
           <td>63 </td>
           <td>2026-09-01 07:01</td>
+          <td>0.1d</td>
+          <td>29.90 USDT</td>
           <td>0.00443</td>
-          <td>0.004398</td>
-          <td><span class="profit-neg">-0.72%</span></td>
+          <td>0.004168</td>
+          <td><span class="profit-neg">-5.91% (-1.77 USDT)</span></td>
         </tr>
   </table>
   </div>
@@ -241,16 +292,30 @@
           <td>100%</td>
           <td class="profit-pos">+8.31%</td>
         </tr>
+        <tr>
+          <td>UAI/USDT</td>
+          <td>1</td>
+          <td>100%</td>
+          <td class="profit-pos">+0.11%</td>
+        </tr>
   </table>
   </div>
 </div>
 
 <div class="card">
-  <h3>Closed Trades (19)</h3>
+  <h3>Closed Trades (20)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
     
+        <tr>
+          <td>UAI/USDT</td>
+          <td>65 </td>
+          <td>2026-08-31 06:40</td>
+          <td>2026-09-01 07:47</td>
+          <td class="profit-pos">+0.11%</td>
+          <td>exit_long_rebuy_d_0_42 ( 65 )</td>
+        </tr>
         <tr>
           <td>ZORA/USDT</td>
           <td>64 </td>
@@ -415,10 +480,10 @@
 new Chart(document.getElementById('equityChart'), {
   type: 'line',
   data: {
-    labels: ["2026-08-21 18:01", "2026-08-22 00:53", "2026-08-22 05:29", "2026-08-22 18:06", "2026-08-22 17:55", "2026-08-26 23:55", "2026-08-23 21:31", "2026-08-22 08:56", "2026-08-22 12:35", "2026-08-22 18:41", "2026-08-23 04:38", "2026-08-23 15:39", "2026-08-24 02:22", "2026-08-24 23:37", "2026-08-27 00:06", "2026-08-30 08:30", "2026-08-29 18:31", "2026-08-30 20:35", "2026-08-31 01:46"],
+    labels: ["2026-08-21 18:01", "2026-08-22 00:53", "2026-08-22 05:29", "2026-08-22 18:06", "2026-08-22 17:55", "2026-08-26 23:55", "2026-08-23 21:31", "2026-08-22 08:56", "2026-08-22 12:35", "2026-08-22 18:41", "2026-08-23 04:38", "2026-08-23 15:39", "2026-08-24 02:22", "2026-08-24 23:37", "2026-08-27 00:06", "2026-08-30 08:30", "2026-08-29 18:31", "2026-08-30 20:35", "2026-08-31 01:46", "2026-09-01 07:47"],
     datasets: [{
       label: 'Cumulative profit %',
-      data: [0.186, 1.868, 2.879, 4.026, 6.091, 6.207, 6.533, 7.563, 13.485, 14.623, 20.203, 20.318, 23.251, 24.714, 26.054, 28.796, 30.32, 30.526, 38.838],
+      data: [0.186, 1.868, 2.879, 4.026, 6.091, 6.207, 6.533, 7.563, 13.485, 14.623, 20.203, 20.318, 23.251, 24.714, 26.054, 28.796, 30.32, 30.526, 38.838, 38.952],
       borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
       fill: true, tension: 0.2, pointRadius: 2
     }]
@@ -436,9 +501,9 @@ new Chart(document.getElementById('equityChart'), {
 new Chart(document.getElementById('reasonChart'), {
   type: 'doughnut',
   data: {
-    labels: ["exit_long_normal_d_0_97 ( 5 )", "exit_long_rebuy_w_1_1 ( 65 )", "exit_long_normal_u_1 ( 4 )", "exit_long_rebuy_6_1 ( 63 )", "exit_long_tc_w_2_10 ( 144 )", "exit_long_tc_d_0_100 ( 144 )", "exit_long_tc_d_1_120 ( 144 )", "exit_long_rebuy_w_5_7 ( 64 )", "exit_long_rebuy_w_1_14 ( 64 )", "exit_long_rebuy_w_0_10 ( 65 )", "exit_long_normal_w_2_8 ( 6 )", "exit_long_rebuy_d_1_2 ( 63 )", "exit_profit_long_rebuy_t_1_1_m ( 64 )", "exit_long_normal_d_3_130 ( 3 )", "exit_long_quick_d_1_120 ( 46 )", "exit_profit_long_rebuy_t_0_2_m ( 64 )", "exit_long_rebuy_w_7_17 ( 64 )"],
+    labels: ["exit_long_normal_d_0_97 ( 5 )", "exit_long_rebuy_w_1_1 ( 65 )", "exit_long_normal_u_1 ( 4 )", "exit_long_rebuy_6_1 ( 63 )", "exit_long_tc_w_2_10 ( 144 )", "exit_long_tc_d_0_100 ( 144 )", "exit_long_tc_d_1_120 ( 144 )", "exit_long_rebuy_w_5_7 ( 64 )", "exit_long_rebuy_w_1_14 ( 64 )", "exit_long_rebuy_w_0_10 ( 65 )", "exit_long_normal_w_2_8 ( 6 )", "exit_long_rebuy_d_1_2 ( 63 )", "exit_profit_long_rebuy_t_1_1_m ( 64 )", "exit_long_normal_d_3_130 ( 3 )", "exit_long_quick_d_1_120 ( 46 )", "exit_profit_long_rebuy_t_0_2_m ( 64 )", "exit_long_rebuy_w_7_17 ( 64 )", "exit_long_rebuy_d_0_42 ( 65 )"],
     datasets: [{
-      data: [1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+      data: [1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
       backgroundColor: ['#58a6ff','#3fb950','#f85149','#d29922','#a371f7','#39c5cf','#f778ba']
     }]
   },
