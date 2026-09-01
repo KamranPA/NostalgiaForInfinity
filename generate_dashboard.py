@@ -186,7 +186,22 @@ STUCK_HARD_CAP_DAYS = 3  # ...but never let one slow outlier in the closed
                           # genuinely stuck one with too little data.
 
 
+def to_aware_utc(dt):
+    """Postgres can hand back naive or aware datetimes depending on the
+    column type, and this script mixes values from several queries
+    (trades.open_date, orders.order_filled_date, datetime.now()) — so
+    every datetime gets normalized here rather than trusting call sites
+    to do it consistently."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def duration_days(start, end):
+    start = to_aware_utc(start)
+    end = to_aware_utc(end)
     if start is None or end is None:
         return 0.0
     delta = end - start
