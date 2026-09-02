@@ -215,6 +215,40 @@ def to_float(x, default=0.0):
         return default
 
 
+# Tag-family ranges, confirmed from NostalgiaForInfinityX7.py's own
+# long_*_mode_tags lists. Purely cosmetic (labels a tag number with the
+# human-readable mode it belongs to) — never used for any calculation.
+TAG_FAMILIES = [
+    (1, 13, "Normal"),
+    (21, 26, "Pump"),
+    (41, 53, "Quick"),
+    (61, 65, "Rebuy"),
+    (81, 82, "High Profit"),
+    (101, 110, "Rapid"),
+    (120, 120, "Grind"),
+    (121, 121, "BTC"),
+    (141, 145, "Top Coins"),
+    (161, 173, "Scalp"),
+]
+
+
+def tag_family_name(enter_tag):
+    try:
+        n = int(str(enter_tag).strip())
+    except (TypeError, ValueError):
+        return None
+    for lo, hi, name in TAG_FAMILIES:
+        if lo <= n <= hi:
+            return name
+    return None
+
+
+def fmt_tag(enter_tag):
+    fam = tag_family_name(enter_tag)
+    tag_str = esc(str(enter_tag)) if enter_tag is not None else "—"
+    return f"{tag_str} <span class=\"muted\">({fam})</span>" if fam else tag_str
+
+
 # ----------------------------------------------------------------------
 # HTML building
 # ----------------------------------------------------------------------
@@ -238,7 +272,7 @@ def fmt_pct(x, signed=True):
     return f"{sign}{x*100:.2f}%"
 
 
-def build_html(trades, live_prices, entry_fills, generated_at):
+def build_html(trades, live_prices, entry_fills, portfolio_cfg, generated_at):
     open_trades = [t for t in trades if t["is_open"]]
     closed_trades = [t for t in trades if not t["is_open"]]
     closed_with_profit = [t for t in closed_trades if t["close_profit"] is not None]
@@ -266,6 +300,19 @@ def build_html(trades, live_prices, entry_fills, generated_at):
         arr = np.array(plist)
         w = int((arr > 0).sum())
         pair_rows.append((pair, len(arr), w / len(arr), arr.mean()))
+
+    # Tag-family breakdown (closed trades) — same idea as
+    # signal_deep_stats.py's section 1, folded into the main dashboard so
+    # it's visible without a separate script/Telegram message.
+    open_tag_set = {str(t["enter_tag"]) for t in open_trades if t["enter_tag"] is not None}
+    tag_stats = {}
+    for t in closed_with_profit:
+        tag_stats.setdefault(str(t["enter_tag"]), []).append(float(t["close_profit"]))
+    tag_rows = []
+    for tag, plist in sorted(tag_stats.items(), key=lambda x: -sum(x[1])):
+        arr = np.array(plist)
+        w = int((arr > 0).sum())
+        tag_rows.append((tag, len(arr), w / len(arr), arr.mean(), arr.sum(), tag in open_tag_set))
 
     # Exit reason breakdown
     reason_counts = {}
@@ -362,12 +409,17 @@ def build_html(trades, live_prices, entry_fills, generated_at):
         age_str = f"{age_days:.1f}d"
         stuck_badge = ' <span class="stuck-badge" title="Open far longer than this strategy\'s typical hold time">🐌 stuck</span>' if is_stuck else ""
 
+        n_entry_fills = len(fills) if fills else 1
+        n_rebuys = max(n_entry_fills - 1, 0)
+        rebuy_str = f"{n_rebuys}" if fills else '<span class="muted">n/a</span>'
+
         open_rows_html += f"""
         <tr>
           <td>{esc(t['pair'])}</td>
-          <td>{esc(t['enter_tag'])}</td>
+          <td>{fmt_tag(t['enter_tag'])}</td>
           <td>{fmt_dt(t['open_date'])}</td>
           <td>{age_str}{stuck_badge}</td>
+          <td>{rebuy_str}</td>
           <td>{stake:.2f} USDT</td>
           <td>{t['open_rate']:.6g}</td>
           <td>{live_str}</td>
@@ -431,6 +483,30 @@ def build_html(trades, live_prices, entry_fills, generated_at):
       </p>
     </div>"""
 
+    max_open_trades = portfolio_cfg.get("max_open_trades", 8)
+    dry_run_wallet = portfolio_cfg.get("dry_run_wallet", 1000.0)
+    slots_used = len(open_trades)
+    slots_free = max(max_open_trades - slots_used, 0)
+    slots_pct = (slots_used / max_open_trades * 100) if max_open_trades > 0 else 0
+    wallet_pct = (open_capital_locked_total / dry_run_wallet * 100) if dry_run_wallet > 0 else 0
+
+    portfolio_html = f"""
+    <div class="card">
+      <h3>Portfolio Utilization</h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Slots Used</div>
+          <div class="value">{slots_used} / {max_open_trades}</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">{slots_free} free — {slots_pct:.0f}% deployed</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Capital Deployed</div>
+          <div class="value">{open_capital_locked_total:.2f} / {dry_run_wallet:.0f} USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">{wallet_pct:.0f}% of dry-run wallet</div>
+        </div>
+      </div>
+    </div>"""
+
     # Closed trades rows
     closed_rows_html = ""
     for t in sorted(closed_trades, key=lambda x: x["close_date"] or datetime.min, reverse=True):
@@ -439,7 +515,7 @@ def build_html(trades, live_prices, entry_fills, generated_at):
         closed_rows_html += f"""
         <tr>
           <td>{esc(t['pair'])}</td>
-          <td>{esc(t['enter_tag'])}</td>
+          <td>{fmt_tag(t['enter_tag'])}</td>
           <td>{fmt_dt(t['open_date'])}</td>
           <td>{fmt_dt(t['close_date'])}</td>
           <td class="{cls}">{fmt_pct(profit)}</td>
@@ -455,6 +531,19 @@ def build_html(trades, live_prices, entry_fills, generated_at):
           <td>{cnt}</td>
           <td>{wr*100:.0f}%</td>
           <td class="{cls}">{fmt_pct(avg)}</td>
+        </tr>"""
+
+    tag_rows_html = ""
+    for tag, cnt, wr, avg, total, in_use in tag_rows:
+        cls = "profit-pos" if avg > 0 else "profit-neg"
+        in_use_badge = ' <span class="stuck-badge" style="background:rgba(88,166,255,0.15);color:#58a6ff;border-color:rgba(88,166,255,0.35);">● open now</span>' if in_use else ""
+        tag_rows_html += f"""
+        <tr>
+          <td>{fmt_tag(tag)}{in_use_badge}</td>
+          <td>{cnt}</td>
+          <td>{wr*100:.0f}%</td>
+          <td class="{cls}">{fmt_pct(avg)}</td>
+          <td class="{cls}">{fmt_pct(total, signed=True)}</td>
         </tr>"""
 
     total_profit_abs = sum(float(t["close_profit_abs"] or 0) for t in closed_with_profit)
@@ -526,6 +615,8 @@ def build_html(trades, live_prices, entry_fills, generated_at):
 
 {capital_eff_html}
 
+{portfolio_html}
+
 <div class="two-col">
   <div class="card">
     <h3>Equity Curve (cumulative %, closed trades)</h3>
@@ -543,8 +634,18 @@ def build_html(trades, live_prices, entry_fills, generated_at):
   <h3>Open Trades ({len(open_trades)})</h3>
   <div class="table-scroll">
   <table>
-    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
-    {open_rows_html if open_rows_html else '<tr><td colspan="8" class="muted">No open trades</td></tr>'}
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
+    {open_rows_html if open_rows_html else '<tr><td colspan="9" class="muted">No open trades</td></tr>'}
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Tag Family Performance (closed trades) <span class="muted" style="font-weight:400;font-size:0.75rem;">— ● open now marks a tag currently held by an open trade</span></h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
+    {tag_rows_html if tag_rows_html else '<tr><td colspan="5" class="muted">No closed trades yet</td></tr>'}
   </table>
   </div>
 </div>
@@ -564,6 +665,7 @@ def build_html(trades, live_prices, entry_fills, generated_at):
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
+
     {closed_rows_html if closed_rows_html else '<tr><td colspan="6" class="muted">No closed trades yet</td></tr>'}
   </table>
   </div>
@@ -616,6 +718,25 @@ new Chart(document.getElementById('reasonChart'), {{
     return html
 
 
+def load_portfolio_config(config_path: str = "config_dryrun_telegram.json"):
+    """Reads max_open_trades / dry_run_wallet straight from the bot's own
+    config so the dashboard never has these hardcoded and drifting out of
+    sync. Falls back to sane defaults (matching the current known config)
+    if the file has moved, been renamed, or the keys aren't there --
+    never crashes the whole dashboard generation over a cosmetic stat."""
+    defaults = {"max_open_trades": 8, "dry_run_wallet": 1000.0}
+    try:
+        with open(config_path) as f:
+            cfg = json.load(f)
+        return {
+            "max_open_trades": int(cfg.get("max_open_trades", defaults["max_open_trades"])),
+            "dry_run_wallet": to_float(cfg.get("dry_run_wallet"), defaults["dry_run_wallet"]),
+        }
+    except Exception as e:
+        print(f"  (could not read {config_path} for portfolio stats, using defaults: {e})")
+        return defaults
+
+
 def main(db_url: str, output_path: str):
     trades = fetch_trades(db_url)
     open_pairs = list({t["pair"] for t in trades if t["is_open"]})
@@ -623,9 +744,10 @@ def main(db_url: str, output_path: str):
 
     live_prices = fetch_live_prices(open_pairs) if open_pairs else {}
     entry_fills = fetch_entry_fills(db_url, [t["id"] for t in trades])
+    portfolio_cfg = load_portfolio_config()
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    html = build_html(trades, live_prices, entry_fills, generated_at)
+    html = build_html(trades, live_prices, entry_fills, portfolio_cfg, generated_at)
 
     with open(output_path, "w") as f:
         f.write(html)
