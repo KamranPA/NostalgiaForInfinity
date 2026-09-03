@@ -12,8 +12,11 @@ Builds a complete, self-contained HTML dashboard for the NFI dry-run bot:
   - Exit-reason breakdown chart
   - The same statistical-significance checks as signal_stats.py
 
-Reads from the same Postgres database the bot itself uses — this script
-is entirely read-only and never writes to the database or the exchange.
+Reads from the same Postgres database the bot itself uses. The only write
+this script performs is appending one row per run to its own dedicated
+nfi_dashboard_snapshots table (auto-created if missing), used purely for
+the "True Total & Stuck Trades Over Time" trend chart — it never touches
+`trades`, `orders`, or anything the running bot reads or writes.
 
 Usage:
     python generate_dashboard.py "<postgres-connection-string>" <output_html_path>
@@ -49,6 +52,101 @@ def fetch_trades(db_url: str):
                 ORDER BY open_date ASC
             """)
             return cur.fetchall()
+    finally:
+        conn.close()
+
+
+# ----------------------------------------------------------------------
+# Historical snapshots (trend over time)
+# ------------------------------------------------------------
+# The dashboard is otherwise a pure snapshot — it can't show whether the
+# "True Total" / stuck-trade situation is improving or getting worse
+# without something to compare against. This adds one small extra table
+# to the SAME Supabase database (created automatically if it doesn't
+# exist yet) that a new row gets appended to on every dashboard run.
+# This is the one piece of this script that writes to the database — it
+# only ever INSERTs into its own dedicated table and never touches
+# `trades`/`orders`/anything the bot itself reads or writes.
+# ----------------------------------------------------------------------
+
+SNAPSHOT_HISTORY_LIMIT = 180  # ~7.5 days of hourly snapshots — plenty for
+                               # a trend chart without the table or the
+                               # page growing unbounded forever.
+
+
+def ensure_snapshot_table(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS nfi_dashboard_snapshots (
+                id SERIAL PRIMARY KEY,
+                snapshot_time TIMESTAMP NOT NULL,
+                open_trades INT NOT NULL,
+                closed_trades INT NOT NULL,
+                win_rate DOUBLE PRECISION,
+                realized_profit_abs DOUBLE PRECISION,
+                unrealized_pl_abs DOUBLE PRECISION,
+                true_total_abs DOUBLE PRECISION,
+                stuck_trades INT,
+                open_capital_locked DOUBLE PRECISION
+            )
+        """)
+    conn.commit()
+
+
+def fetch_snapshot_history(db_url: str, limit: int = SNAPSHOT_HISTORY_LIMIT):
+    """Past dashboard runs, oldest first, for the trend chart. Returns an
+    empty list (never raises) if the table doesn't exist yet — e.g. the
+    very first time this runs after deploying this feature."""
+    try:
+        conn = psycopg2.connect(db_url)
+    except Exception as e:
+        print(f"  (could not connect for snapshot history: {e})")
+        return []
+    try:
+        ensure_snapshot_table(conn)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT snapshot_time, true_total_abs, stuck_trades,
+                       realized_profit_abs, unrealized_pl_abs
+                FROM nfi_dashboard_snapshots
+                ORDER BY snapshot_time DESC
+                LIMIT %s
+            """, (limit,))
+            rows = cur.fetchall()
+        return list(reversed(rows))  # oldest first, for left-to-right charting
+    except Exception as e:
+        print(f"  (could not read snapshot history, starting fresh: {e})")
+        return []
+    finally:
+        conn.close()
+
+
+def record_snapshot(db_url: str, metrics: dict):
+    """Appends one row for this run. Failures here must never take down
+    dashboard generation — the dashboard itself is far more important
+    than the trend chart having an unbroken history."""
+    try:
+        conn = psycopg2.connect(db_url)
+    except Exception as e:
+        print(f"  (could not connect to record snapshot: {e})")
+        return
+    try:
+        ensure_snapshot_table(conn)
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO nfi_dashboard_snapshots
+                    (snapshot_time, open_trades, closed_trades, win_rate,
+                     realized_profit_abs, unrealized_pl_abs, true_total_abs,
+                     stuck_trades, open_capital_locked)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                metrics["snapshot_time"], metrics["open_trades"], metrics["closed_trades"],
+                metrics["win_rate"], metrics["realized_profit_abs"], metrics["unrealized_pl_abs"],
+                metrics["true_total_abs"], metrics["stuck_trades"], metrics["open_capital_locked"],
+            ))
+        conn.commit()
+    except Exception as e:
+        print(f"  (could not record snapshot, continuing anyway: {e})")
     finally:
         conn.close()
 
@@ -272,7 +370,7 @@ def fmt_pct(x, signed=True):
     return f"{sign}{x*100:.2f}%"
 
 
-def build_html(trades, live_prices, entry_fills, portfolio_cfg, generated_at):
+def build_html(trades, live_prices, entry_fills, portfolio_cfg, snapshot_history, generated_at):
     open_trades = [t for t in trades if t["is_open"]]
     closed_trades = [t for t in trades if not t["is_open"]]
     closed_with_profit = [t for t in closed_trades if t["close_profit"] is not None]
@@ -439,6 +537,31 @@ def build_html(trades, live_prices, entry_fills, portfolio_cfg, generated_at):
     stuck_pct_of_open_capital = (
         (stuck_capital / open_capital_locked_total * 100) if open_capital_locked_total > 0 else 0
     )
+
+    # This run's snapshot — returned to the caller so main() can persist
+    # it (this function itself never writes to the database).
+    current_snapshot = {
+        "snapshot_time": datetime.now(timezone.utc),
+        "open_trades": len(open_trades),
+        "closed_trades": len(closed_trades),
+        "win_rate": win_rate,
+        "realized_profit_abs": realized_abs,
+        "unrealized_pl_abs": open_unrealized_abs_total,
+        "true_total_abs": true_total_abs,
+        "stuck_trades": len(stuck_trades),
+        "open_capital_locked": open_capital_locked_total,
+    }
+
+    # Trend chart data: past runs (from the DB) + this run, so the chart
+    # is never one point behind even on the very first deploy.
+    trend_points = list(snapshot_history) + [current_snapshot]
+    trend_labels = [
+        (p["snapshot_time"].strftime("%m-%d %H:%M") if hasattr(p["snapshot_time"], "strftime") else str(p["snapshot_time"]))
+        for p in trend_points
+    ]
+    trend_true_total = [round(to_float(p["true_total_abs"]), 2) for p in trend_points]
+    trend_stuck = [int(p["stuck_trades"]) if p["stuck_trades"] is not None else 0 for p in trend_points]
+    has_trend_history = len(trend_points) >= 2
 
     capital_eff_html = f"""
     <div class="card">
@@ -628,6 +751,11 @@ def build_html(trades, live_prices, entry_fills, portfolio_cfg, generated_at):
   </div>
 </div>
 
+<div class="card">
+  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
+  {'<div class="chart-wrap"><canvas id="trendChart"></canvas></div>' if has_trend_history else '<p class="muted">Not enough history yet — this chart fills in as more dashboard runs are recorded (one point per run).</p>'}
+</div>
+
 {sig_html}
 
 <div class="card">
@@ -711,11 +839,44 @@ new Chart(document.getElementById('reasonChart'), {{
     plugins: {{ legend: {{ position: 'bottom', labels: {{ color: '#c9d1d9', font: {{ size: 10 }} }} }} }}
   }}
 }});
+
+{f'''
+new Chart(document.getElementById('trendChart'), {{
+  type: 'bar',
+  data: {{
+    labels: {json.dumps(trend_labels)},
+    datasets: [
+      {{
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: {json.dumps(trend_true_total)},
+        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      }},
+      {{
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: {json.dumps(trend_stuck)},
+        backgroundColor: 'rgba(248,81,73,0.35)', order: 2
+      }}
+    ]
+  }},
+  options: {{
+    responsive: true, maintainAspectRatio: false,
+    scales: {{
+      x: {{ ticks: {{ color: '#8b949e', maxTicksLimit: 8 }}, grid: {{ color: '#30363d' }} }},
+      y: {{ position: 'left', ticks: {{ color: '#8b949e' }}, grid: {{ color: '#30363d' }},
+           title: {{ display: true, text: 'USDT', color: '#8b949e' }} }},
+      y1: {{ position: 'right', ticks: {{ color: '#8b949e', stepSize: 1 }}, grid: {{ display: false }},
+            title: {{ display: true, text: 'Stuck Trades', color: '#8b949e' }} }}
+    }},
+    plugins: {{ legend: {{ labels: {{ color: '#c9d1d9' }} }} }}
+  }}
+}});
+''' if has_trend_history else ''}
 </script>
 
 </body>
 </html>"""
-    return html
+    return html, current_snapshot
 
 
 def load_portfolio_config(config_path: str = "config_dryrun_telegram.json"):
@@ -745,13 +906,18 @@ def main(db_url: str, output_path: str):
     live_prices = fetch_live_prices(open_pairs) if open_pairs else {}
     entry_fills = fetch_entry_fills(db_url, [t["id"] for t in trades])
     portfolio_cfg = load_portfolio_config()
+    snapshot_history = fetch_snapshot_history(db_url)
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    html = build_html(trades, live_prices, entry_fills, portfolio_cfg, generated_at)
+    html, current_snapshot = build_html(
+        trades, live_prices, entry_fills, portfolio_cfg, snapshot_history, generated_at
+    )
 
     with open(output_path, "w") as f:
         f.write(html)
     print(f"Dashboard written to {output_path}")
+
+    record_snapshot(db_url, current_snapshot)
 
 
 if __name__ == "__main__":
