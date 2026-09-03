@@ -52,7 +52,7 @@
 <body>
 
 <h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
-<div class="subtitle">Generated 2026-09-03 06:53:21 UTC · dry-run (simulated) — no real funds involved · KuCoin market data</div>
+<div class="subtitle">Generated 2026-09-03 06:57:55 UTC · dry-run (simulated) — no real funds involved · KuCoin market data</div>
 
 <div class="grid">
   <div class="stat-card"><div class="label">Open Trades</div><div class="value">4</div></div>
@@ -74,12 +74,12 @@
         </div>
         <div class="stat-card">
           <div class="label">Unrealized P/L (open)</div>
-          <div class="value profit-neg">-23.76 USDT</div>
+          <div class="value profit-neg">-23.83 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">325.09 USDT currently locked in open trades</div>
         </div>
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
-          <div class="value profit-pos">+3.53 USDT</div>
+          <div class="value profit-pos">+3.46 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
         </div>
         <div class="stat-card">
@@ -93,8 +93,8 @@
         (≈ 229.7%/yr if repeated — simple, non-compounded extrapolation)
       </p>
       <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>0.0337%</b>
-        (≈ 12.3%/yr equivalent)
+        Blended return per capital-day (incl. unrealized): <b>0.0330%</b>
+        (≈ 12.0%/yr equivalent)
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
@@ -134,6 +134,11 @@
   </div>
 </div>
 
+<div class="card">
+  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
+  <p class="muted">Not enough history yet — this chart fills in as more dashboard runs are recorded (one point per run).</p>
+</div>
+
 
         <div class="card">
           <h3>Statistical Significance</h3>
@@ -166,8 +171,8 @@
           <td>7</td>
           <td>63.40 USDT</td>
           <td>0.8046</td>
-          <td>0.7648</td>
-          <td><span class="profit-neg">-4.95% (-3.14 USDT)</span></td>
+          <td>0.7652</td>
+          <td><span class="profit-neg">-4.90% (-3.10 USDT)</span></td>
         </tr>
         <tr>
           <td>ADA/USDT</td>
@@ -177,8 +182,8 @@
           <td>10</td>
           <td>119.55 USDT</td>
           <td>0.2091</td>
-          <td>0.2051</td>
-          <td><span class="profit-neg">-1.91% (-2.29 USDT)</span></td>
+          <td>0.2049</td>
+          <td><span class="profit-neg">-2.01% (-2.40 USDT)</span></td>
         </tr>
         <tr>
           <td>TRIA/USDT</td>
@@ -188,8 +193,8 @@
           <td>1</td>
           <td>59.80 USDT</td>
           <td>0.004188</td>
-          <td>0.003796</td>
-          <td><span class="profit-neg">-9.36% (-5.60 USDT)</span></td>
+          <td>0.003797</td>
+          <td><span class="profit-neg">-9.34% (-5.58 USDT)</span></td>
         </tr>
   </table>
   </div>
@@ -618,6 +623,8 @@ new Chart(document.getElementById('reasonChart'), {
     plugins: { legend: { position: 'bottom', labels: { color: '#c9d1d9', font: { size: 10 } } } }
   }
 });
+
+
 </script>
 
 </body>
