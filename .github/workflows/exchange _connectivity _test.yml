@@ -1,0 +1,65 @@
+# SAVE THIS FILE AS: .github/workflows/exchange-connectivity-test.yml
+# (in .github/workflows/, alongside the other workflow files)
+name: Exchange Connectivity Test (diagnostic, no trading)
+
+# Manual only. This does NOT touch freqtrade, the bot, or any database —
+# it just checks, from a GitHub Actions runner, whether each exchange's
+# PUBLIC (no API key needed) futures market-data endpoint is reachable
+# or geo-blocked (HTTP 451 / connection refused). Takes a few seconds.
+# Run this once, read the log output, then we pick a futures exchange
+# based on real results instead of guessing.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  connectivity-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Show runner's outbound IP (for reference only)
+        run: |
+          echo "This runner's outbound IP (informational only):"
+          curl -s https://api.ipify.org || echo "(could not determine)"
+          echo ""
+
+      - name: Test each exchange's public futures endpoint
+        run: |
+          set +e  # don't stop on individual curl failures — we want all results
+
+          test_endpoint () {
+            NAME="$1"
+            URL="$2"
+            echo "----------------------------------------"
+            echo "Testing: $NAME"
+            echo "URL: $URL"
+            HTTP_CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" --max-time 10 "$URL")
+            CURL_EXIT=$?
+            if [ "$CURL_EXIT" -ne 0 ]; then
+              echo "RESULT: connection failed (curl exit code $CURL_EXIT) — likely network-level block or timeout"
+            elif [ "$HTTP_CODE" = "451" ]; then
+              echo "RESULT: HTTP 451 — Unavailable For Legal Reasons (geo-blocked, confirmed)"
+            elif [ "$HTTP_CODE" = "200" ]; then
+              echo "RESULT: HTTP 200 — reachable, NOT blocked"
+            else
+              echo "RESULT: HTTP $HTTP_CODE — unexpected, check response body below"
+            fi
+            echo "Response body (first 300 chars):"
+            head -c 300 /tmp/resp.txt
+            echo ""
+            echo ""
+          }
+
+          test_endpoint "Binance Futures"   "https://fapi.binance.com/fapi/v1/ping"
+          test_endpoint "Bybit"             "https://api.bybit.com/v5/market/time"
+          test_endpoint "OKX"               "https://www.okx.com/api/v5/public/time"
+          test_endpoint "Gate.io"           "https://api.gateio.ws/api/v4/spot/time"
+          test_endpoint "Kraken Futures"    "https://futures.kraken.com/derivatives/api/v3/instruments"
+
+          echo "----------------------------------------"
+          echo "Done. Scroll up to see each exchange's RESULT line."
+          echo "Paste this whole log back for interpretation."
