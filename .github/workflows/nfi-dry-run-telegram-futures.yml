@@ -1,0 +1,174 @@
+# SAVE THIS FILE AS: .github/workflows/dry-run-telegram-futures.yml
+# (in .github/workflows/, alongside dry-run-telegram-signals.yml)
+name: NFI Futures Dry-Run Telegram Signals (OKX)
+
+# Same architecture as dry-run-telegram-signals.yml (the spot workflow) —
+# see that file's header comment for the full explanation of the
+# self-queueing restart chain. Key differences here:
+#   - config_dryrun_futures.json instead of config_dryrun_telegram.json
+#   - db_url comes from a SEPARATE secret (SUPABASE_DB_URL_FUTURES) so
+#     futures trades never land in the same database/table as spot trades
+#   - concurrency group is separate (nfi-dryrun-futures) so this doesn't
+#     interfere with the spot workflow's own restart chain
+#   - reuses the SAME Telegram bot/chat as spot — messages are
+#     distinguished by bot_name (nfi-dryrun-futures-okx) inside the config
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: nfi-dryrun-futures
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dryrun-futures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Notify Telegram — futures workflow started
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🔄 NFI FUTURES (OKX) dry-run workflow started (run #${{ github.run_number }}). Freqtrade is now installing/starting up...")
+          echo "Telegram API response: $RESPONSE"
+          if ! echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "::warning::Telegram did not accept the message — check TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets."
+          fi
+
+      - name: Verify required secrets are set
+        run: |
+          MISSING=""
+          [ -z "${{ secrets.TELEGRAM_TOKEN }}" ] && MISSING="$MISSING TELEGRAM_TOKEN"
+          [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ] && MISSING="$MISSING TELEGRAM_CHAT_ID"
+          [ -z "${{ secrets.SUPABASE_DB_URL_FUTURES }}" ] && MISSING="$MISSING SUPABASE_DB_URL_FUTURES"
+          if [ -n "$MISSING" ]; then
+            echo "::error::These GitHub Secrets are empty or not set:$MISSING — go to Settings > Secrets and variables > Actions and add them. SUPABASE_DB_URL_FUTURES must point to a DIFFERENT database than SUPABASE_DB_URL (spot) — see config_dryrun_futures.json's comments for why."
+            exit 1
+          fi
+          echo "All required secrets are present (values not shown here for security)."
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-nfi-futures-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-nfi-futures-
+
+      - name: Install TA-Lib system library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential wget
+          wget -q http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+          tar -xzf ta-lib-0.4.0-src.tar.gz
+          cd ta-lib
+          ./configure --prefix=/usr
+          make
+          sudo make install
+          cd ..
+
+      - name: Install Freqtrade + dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install freqtrade
+          pip install psycopg2-binary
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Prepare Freqtrade user_data layout
+        run: |
+          mkdir -p user_data/strategies
+          mkdir -p user_data/logs
+          # Same strategy file as spot — it auto-detects futures mode
+          # from trading_mode in the config, no separate strategy needed.
+          if [ -e user_data/strategies/NostalgiaForInfinityX7.py ]; then
+            echo "Strategy file already present at destination (symlink from repo layout) — skipping copy."
+          else
+            cp NostalgiaForInfinityX7.py user_data/strategies/
+          fi
+          cp config_dryrun_futures.json user_data/config.json
+
+      - name: Run Freqtrade (dry-run, background) and tail logs
+        env:
+          FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          FREQTRADE__TELEGRAM__CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FREQTRADE__DB_URL: ${{ secrets.SUPABASE_DB_URL_FUTURES }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd user_data/..
+
+          SELF_TIMEOUT_SECONDS=$((5*3600 + 45*60))
+
+          timeout --signal=TERM "${SELF_TIMEOUT_SECONDS}s" freqtrade trade \
+            --config user_data/config.json \
+            --strategy NostalgiaForInfinityX7 \
+            --logfile user_data/logs/freqtrade.log &
+          FREQTRADE_PID=$!
+
+          QUEUE_LEAD_SECONDS=120
+          (
+            sleep $((SELF_TIMEOUT_SECONDS - QUEUE_LEAD_SECONDS))
+            echo "Queueing the next run now (this run stops in ~${QUEUE_LEAD_SECONDS}s)..."
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/dry-run-telegram-futures.yml/dispatches" \
+              -d "{\"ref\": \"${{ github.ref_name }}\"}"
+          ) &
+          QUEUE_PID=$!
+
+          external_cancel_handler() {
+            echo "Received external termination signal — forwarding to freqtrade (PID $FREQTRADE_PID) for graceful shutdown..."
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              -d text="⚠️ NFI FUTURES (OKX) dry-run (run #${{ github.run_number }}) was cancelled externally — shutting down gracefully. Open simulated trades are safe (already saved to the database)." \
+              > /dev/null || true
+            kill -TERM "$FREQTRADE_PID" 2>/dev/null || true
+            wait "$FREQTRADE_PID" 2>/dev/null || true
+            exit 0
+          }
+          trap external_cancel_handler SIGTERM SIGINT
+
+          sleep 20
+          tail -f user_data/logs/freqtrade.log &
+          TAIL_PID=$!
+
+          wait $FREQTRADE_PID || true
+          kill $TAIL_PID 2>/dev/null || true
+          kill $QUEUE_PID 2>/dev/null || true
+
+          echo "Planned self-restart: freqtrade ran for its allotted ${SELF_TIMEOUT_SECONDS}s and stopped on its own — this is expected, not a failure."
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🔁 NFI FUTURES (OKX) dry-run (run #${{ github.run_number }}) completed its planned ${SELF_TIMEOUT_SECONDS}s session and is stopping on schedule. The next run was already queued and should start immediately." \
+            > /dev/null || true
+
+          exit 0
+
+      - name: Notify Telegram — futures workflow failed
+        if: failure()
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="❌ NFI FUTURES (OKX) dry-run workflow (run #${{ github.run_number }}) FAILED. Check GitHub Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            > /dev/null
