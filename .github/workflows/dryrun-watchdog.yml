@@ -50,7 +50,11 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Check and restart spot dry-run if it has stopped
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -60,6 +64,7 @@ jobs:
             "${{ github.ref_name }}"
 
       - name: Check and restart futures dry-run if it has stopped
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
