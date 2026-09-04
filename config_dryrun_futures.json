@@ -58,7 +58,7 @@
       "method": "VolumePairList",
       "number_assets": 130,
       "sort_key": "quoteVolume",
-      "refresh_period": 1800,
+      "refresh_period": 86400,
       "lookback_days": 1
     },
     {
@@ -81,13 +81,14 @@
       "lookback_days": 3,
       "min_rate_of_change": 0.03,
       "max_rate_of_change": 0.95,
-      "refresh_period": 1800
+      "refresh_period": 86400
     },
     {
       "method": "VolumePairList",
       "number_assets": 100,
       "sort_key": "quoteVolume",
-      "lookback_days": 1
+      "lookback_days": 1,
+      "refresh_period": 86400
     }
   ],
   "_COMMENT_telegram": "Reuses the SAME Telegram bot/chat as the spot dry-run (same TELEGRAM_TOKEN / TELEGRAM_CHAT_ID secrets) — bot_name below is what distinguishes futures messages from spot ones in that same chat. token/chat_id below are dummy placeholders satisfying the config schema; real values come from FREQTRADE__TELEGRAM__TOKEN / FREQTRADE__TELEGRAM__CHAT_ID env vars.",
