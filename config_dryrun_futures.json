@@ -1,14 +1,12 @@
 {
   "_COMMENT_FILE_PATH": "SAVE THIS FILE AS: config_dryrun_futures.json — in the ROOT of your NostalgiaForInfinity repo (same folder as NostalgiaForInfinityX7.py, config_dryrun_telegram.json). NOT inside user_data/, NOT inside configs/.",
   "$schema": "https://schema.freqtrade.io/schema.json",
-
   "_COMMENT_purpose": "Dry-run only — no real orders are ever placed (dry_run: true). Runs the SAME strategy file (NostalgiaForInfinityX7.py) as config_dryrun_telegram.json, but with trading_mode=futures on OKX instead of spot on KuCoin, so the two can be compared side by side on the same strategy logic. The strategy auto-detects futures mode from trading_mode below (is_futures_mode / can_short) — no code changes needed.",
   "_COMMENT_why_okx_not_binance": "Binance Futures has the strongest official backtest numbers for this strategy, but its public API returns HTTP 451 (geo-blocked) from GitHub Actions runners (Azure US datacenters are inside Binance's 'Restricted Location' list per their Terms of Service) — confirmed via a live connectivity test, not assumed. Bybit is blocked the same way. OKX, Gate.io, and Kraken Futures were all confirmed reachable; OKX was chosen for its broader freqtrade support (e.g. stoploss_on_exchange works on both its spot and futures markets).",
   "_COMMENT_separate_database": "IMPORTANT: futures trades must never land in the same `trades` table as spot trades, or every stats/dashboard script that assumes one trading mode breaks. Instead of a second Supabase project, this reuses the SAME Supabase project/database as spot, but writes into a separate Postgres SCHEMA called `futures` (spot stays in the default `public` schema) — fully isolated tables, same project, same SUPABASE_DB_URL secret. The schema-selection happens in the workflow file (dry-run-telegram-futures.yml), not here, by appending ?options=-csearch_path=futures to the connection string at runtime. One-time setup required: run `CREATE SCHEMA IF NOT EXISTS futures;` once in the Supabase SQL Editor before the first run.",
   "_COMMENT_restart_architecture": "Same self-queueing restart chain as the spot workflow — see dry-run-telegram-futures.yml for details. Open simulated trades survive restarts because db_url points at Postgres, not local SQLite.",
   "_COMMENT_position_adjustment": "NostalgiaForInfinityX7 requires position_adjustment_enable=true for its Grinding V2 and Buyback systems to function, in futures exactly as in spot.",
   "_COMMENT_leverage": "futures_mode_leverage (and its rebuy/grind variants) are set INSIDE the strategy file itself (NostalgiaForInfinityX7.py), not here — default is 3.0x. This config only turns futures mode on; it doesn't control the leverage multiplier.",
-
   "trading_mode": "futures",
   "margin_mode": "isolated",
   "max_open_trades": 8,
@@ -22,12 +20,10 @@
   "cancel_open_orders_on_exit": true,
   "position_adjustment_enable": true,
   "max_entry_position_adjustment": -1,
-
   "unfilledtimeout": {
     "entry": 10,
     "exit": 30
   },
-
   "exchange": {
     "name": "okx",
     "key": "",
@@ -41,8 +37,7 @@
       ".*(_PREMIUM|BEAR|BULL|DOWN|HALF|HEDGE|UP|[1235][SL])/.*"
     ]
   },
-  "_COMMENT_pairlist": "Same pairlist filter chain as the spot config (see its comment for the full rationale) — kept identical on purpose so any difference in results traces back to spot-vs-futures mechanics, not a different pair selection process.",
-
+  "_COMMENT_pairlist": "Same pairlist filter chain as the spot config (see its comment for the full rationale), with ONE required difference: both VolumePairList entries below have lookback_days=1 added. Without it, freqtrade fails at startup with 'Exchange OKX does not support dynamic whitelist in this configuration' — OKX's futures/swap ticker data doesn't expose quoteVolume in the live-ticker format VolumePairList defaults to, so it must be switched to candle-based ('advanced mode') volume calculation instead. Confirmed via an actual failed run's log, not assumed.",
   "entry_pricing": {
     "price_side": "same",
     "use_order_book": true,
@@ -58,16 +53,21 @@
     "use_order_book": true,
     "order_book_top": 1
   },
-
   "pairlists": [
     {
       "method": "VolumePairList",
       "number_assets": 130,
       "sort_key": "quoteVolume",
-      "refresh_period": 1800
+      "refresh_period": 1800,
+      "lookback_days": 1
     },
-    { "method": "FullTradesFilter" },
-    { "method": "AgeFilter", "min_days_listed": 60 },
+    {
+      "method": "FullTradesFilter"
+    },
+    {
+      "method": "AgeFilter",
+      "min_days_listed": 60
+    },
     {
       "method": "PriceFilter",
       "low_price_ratio": 0.003
@@ -86,19 +86,31 @@
     {
       "method": "VolumePairList",
       "number_assets": 100,
-      "sort_key": "quoteVolume"
+      "sort_key": "quoteVolume",
+      "lookback_days": 1
     }
   ],
-
   "_COMMENT_telegram": "Reuses the SAME Telegram bot/chat as the spot dry-run (same TELEGRAM_TOKEN / TELEGRAM_CHAT_ID secrets) — bot_name below is what distinguishes futures messages from spot ones in that same chat. token/chat_id below are dummy placeholders satisfying the config schema; real values come from FREQTRADE__TELEGRAM__TOKEN / FREQTRADE__TELEGRAM__CHAT_ID env vars.",
   "telegram": {
     "enabled": true,
     "token": "placeholder_overridden_by_env_var",
     "chat_id": "placeholder_overridden_by_env_var",
     "keyboard": [
-      ["/daily", "/stats", "/balance", "/profit"],
-      ["/status table", "/performance"],
-      ["/reload_config", "/count", "/logs"]
+      [
+        "/daily",
+        "/stats",
+        "/balance",
+        "/profit"
+      ],
+      [
+        "/status table",
+        "/performance"
+      ],
+      [
+        "/reload_config",
+        "/count",
+        "/logs"
+      ]
     ],
     "notification_settings": {
       "status": "on",
@@ -114,10 +126,8 @@
       "protection_trigger_global": "on"
     }
   },
-
-  "_COMMENT_db_url": "Real value injected via FREQTRADE__DB_URL env var (GitHub Secret SUPABASE_DB_URL_FUTURES — a SEPARATE Supabase project from the spot one, see _COMMENT_separate_database above). This placeholder (SQLite) is never actually used at runtime.",
+  "_COMMENT_db_url": "Real value injected via FREQTRADE__DB_URL env var, built at runtime in dry-run-telegram-futures.yml from the SAME SUPABASE_DB_URL secret spot uses, with ?options=-csearch_path=futures appended so it lands in the separate 'futures' schema (see _COMMENT_separate_database above). This placeholder (SQLite) is never actually used at runtime.",
   "db_url": "sqlite:///user_data/tradesv3.dryrun_futures.sqlite",
-
   "api_server": {
     "enabled": false,
     "listen_ip_address": "127.0.0.1",
@@ -129,9 +139,10 @@
     "username": "freqtrader",
     "password": "not_used_because_api_server_disabled"
   },
-
   "bot_name": "nfi-dryrun-futures-okx",
   "force_entry_enable": false,
   "initial_state": "running",
-  "internals": {"process_throttle_secs": 5}
+  "internals": {
+    "process_throttle_secs": 5
+  }
 }
