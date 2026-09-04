@@ -48,12 +48,27 @@ jobs:
           MISSING=""
           [ -z "${{ secrets.TELEGRAM_TOKEN }}" ] && MISSING="$MISSING TELEGRAM_TOKEN"
           [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ] && MISSING="$MISSING TELEGRAM_CHAT_ID"
-          [ -z "${{ secrets.SUPABASE_DB_URL_FUTURES }}" ] && MISSING="$MISSING SUPABASE_DB_URL_FUTURES"
+          [ -z "${{ secrets.SUPABASE_DB_URL }}" ] && MISSING="$MISSING SUPABASE_DB_URL"
           if [ -n "$MISSING" ]; then
-            echo "::error::These GitHub Secrets are empty or not set:$MISSING — go to Settings > Secrets and variables > Actions and add them. SUPABASE_DB_URL_FUTURES must point to a DIFFERENT database than SUPABASE_DB_URL (spot) — see config_dryrun_futures.json's comments for why."
+            echo "::error::These GitHub Secrets are empty or not set:$MISSING — go to Settings > Secrets and variables > Actions and add them. No NEW secret is needed for futures — it reuses the same SUPABASE_DB_URL as spot, just written into a separate 'futures' schema (see next steps)."
             exit 1
           fi
           echo "All required secrets are present (values not shown here for security)."
+
+      - name: Ensure the 'futures' schema exists (one-time, idempotent)
+        env:
+          BASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          pip install psycopg2-binary --quiet
+          python3 - <<'PYEOF'
+          import os, psycopg2
+          conn = psycopg2.connect(os.environ["BASE_DB_URL"])
+          conn.autocommit = True
+          with conn.cursor() as cur:
+              cur.execute("CREATE SCHEMA IF NOT EXISTS futures;")
+          conn.close()
+          print("Confirmed: schema 'futures' exists (created now, or already existed).")
+          PYEOF
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -107,12 +122,23 @@ jobs:
         env:
           FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           FREQTRADE__TELEGRAM__CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          FREQTRADE__DB_URL: ${{ secrets.SUPABASE_DB_URL_FUTURES }}
+          BASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd user_data/..
+
+          # Reuse the SAME Supabase connection as spot, but redirect all
+          # of freqtrade's tables into the 'futures' Postgres schema via
+          # the standard libpq 'options' connection parameter — so spot
+          # (schema: public) and futures (schema: futures) never mix,
+          # without needing a second database or a second secret.
+          if [[ "$BASE_DB_URL" == *"?"* ]]; then
+            export FREQTRADE__DB_URL="${BASE_DB_URL}&options=-csearch_path%3Dfutures"
+          else
+            export FREQTRADE__DB_URL="${BASE_DB_URL}?options=-csearch_path%3Dfutures"
+          fi
 
           SELF_TIMEOUT_SECONDS=$((5*3600 + 45*60))
 
