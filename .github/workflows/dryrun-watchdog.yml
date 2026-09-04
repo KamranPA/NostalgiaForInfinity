@@ -1,0 +1,85 @@
+# SAVE THIS FILE AS: .github/workflows/dryrun-watchdog.yml
+# (in .github/workflows/, alongside the other workflow files)
+name: Dry-Run Watchdog (safety net, internal cron)
+
+# WHY THIS EXISTS
+# ------------------------------------------------------------
+# Both dry-run-telegram-signals.yml (spot) and dry-run-telegram-futures.yml
+# (futures) keep themselves alive by dispatching their own next run a
+# couple minutes before each ~5h45m session ends. That self-queueing
+# chain works well, but has one gap: if a run ever crashes BEFORE it
+# reaches the point where it queues its successor (an unexpected error,
+# a runner problem, etc.), nothing restarts it — the chain just stops.
+#
+# This workflow is that missing safety net, running natively inside
+# GitHub Actions on a schedule (no external cron-job.org or similar
+# service needed).
+#
+# WHY IT WON'T CAUSE THE INTERFERENCE THE OLD EXTERNAL CRON DID
+# ------------------------------------------------------------
+# The old external cron just blindly fired workflow_dispatch on a timer,
+# regardless of whether a run was already active. Because the dry-run
+# workflows' concurrency groups queue (rather than cancel) new dispatches,
+# every one of those blind pings queued up ANOTHER pending run behind the
+# currently-executing one — so by the time the current session's own
+# self-queue fired too, several duplicate runs could be stacked up,
+# causing rapid, unwanted restarts instead of smooth ~5h45m sessions.
+#
+# This workflow avoids that by checking each dry-run workflow's most
+# recent runs via the GitHub API FIRST. It only dispatches a new run if
+# NONE of the recent runs are still active (in_progress / queued /
+# waiting / requested / pending). If a session (or its own queued
+# successor) is already active, it does nothing this cycle.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # checks every 30 minutes; only ACTS when something's actually stuck
+  workflow_dispatch: {}       # for manually testing the check logic on demand
+
+concurrency:
+  group: nfi-dryrun-watchdog
+  cancel-in-progress: true    # safe to cancel a stale check — it's stateless, just re-run's fine
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check and restart spot dry-run if it has stopped
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .github/workflows/scripts/watchdog_check.sh \
+            "dry-run-telegram-signals.yml" \
+            "${{ github.repository }}" \
+            "${{ github.ref_name }}"
+
+      - name: Check and restart futures dry-run if it has stopped
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .github/workflows/scripts/watchdog_check.sh \
+            "dry-run-telegram-futures.yml" \
+            "${{ github.repository }}" \
+            "${{ github.ref_name }}"
+
+      - name: Notify Telegram if anything was restarted by the watchdog
+        if: always()
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ ! -f /tmp/watchdog_restarted.txt ]; then
+            echo "Nothing was restarted this cycle — no notification needed."
+            exit 0
+          fi
+          RESTARTED=$(paste -sd ', ' /tmp/watchdog_restarted.txt)
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🛡️ Watchdog restarted a dry-run that had stopped unexpectedly: ${RESTARTED}. Check the Actions tab if this happens repeatedly — it usually means something is crashing before it can queue its own next run." \
+            > /dev/null || true
