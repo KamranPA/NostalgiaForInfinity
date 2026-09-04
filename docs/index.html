@@ -52,7 +52,7 @@
 <body>
 
 <h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
-<div class="subtitle">Generated 2026-09-04 21:15:17 UTC · dry-run (simulated) — no real funds involved · KuCoin market data</div>
+<div class="subtitle">Generated 2026-09-04 23:44:55 UTC · dry-run (simulated) — no real funds involved · KuCoin market data</div>
 
 <div class="grid">
   <div class="stat-card"><div class="label">Open Trades</div><div class="value">3</div></div>
@@ -74,12 +74,12 @@
         </div>
         <div class="stat-card">
           <div class="label">Unrealized P/L (open)</div>
-          <div class="value profit-neg">-18.91 USDT</div>
+          <div class="value profit-neg">-19.11 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">232.29 USDT currently locked in open trades</div>
         </div>
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
-          <div class="value profit-pos">+11.43 USDT</div>
+          <div class="value profit-pos">+11.23 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
         </div>
         <div class="stat-card">
@@ -93,8 +93,8 @@
         (≈ 245.1%/yr if repeated — simple, non-compounded extrapolation)
       </p>
       <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>0.0979%</b>
-        (≈ 35.7%/yr equivalent)
+        Blended return per capital-day (incl. unrealized): <b>0.0956%</b>
+        (≈ 34.9%/yr equivalent)
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
@@ -156,34 +156,34 @@
           <td>KAITO/USDT</td>
           <td>163  <span class="muted">(Scalp)</span></td>
           <td>2026-08-22 05:31</td>
-          <td>13.7d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
+          <td>13.8d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
           <td>3</td>
           <td>82.34 USDT</td>
           <td>0.35308</td>
-          <td>0.30012</td>
-          <td><span class="profit-neg">-15.00% (-12.35 USDT)</span></td>
+          <td>0.30267</td>
+          <td><span class="profit-neg">-14.28% (-11.76 USDT)</span></td>
         </tr>
         <tr>
           <td>SUI/USDT</td>
           <td>144  <span class="muted">(Top Coins)</span></td>
           <td>2026-08-22 08:01</td>
-          <td>13.6d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
+          <td>13.7d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
           <td>11</td>
           <td>87.61 USDT</td>
           <td>0.7943</td>
-          <td>0.757</td>
-          <td><span class="profit-neg">-4.70% (-4.11 USDT)</span></td>
+          <td>0.7549</td>
+          <td><span class="profit-neg">-4.96% (-4.35 USDT)</span></td>
         </tr>
         <tr>
           <td>ADA/USDT</td>
           <td>144  <span class="muted">(Top Coins)</span></td>
           <td>2026-08-22 08:01</td>
-          <td>13.6d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
+          <td>13.7d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
           <td>16</td>
           <td>62.33 USDT</td>
           <td>0.2218</td>
-          <td>0.2131</td>
-          <td><span class="profit-neg">-3.92% (-2.45 USDT)</span></td>
+          <td>0.2111</td>
+          <td><span class="profit-neg">-4.82% (-3.01 USDT)</span></td>
         </tr>
   </table>
   </div>
@@ -646,17 +646,17 @@ new Chart(document.getElementById('reasonChart'), {
 new Chart(document.getElementById('trendChart'), {
   type: 'bar',
   data: {
-    labels: ["09-03 06:57", "09-03 11:56", "09-03 16:00", "09-03 19:15", "09-03 22:18", "09-04 00:48", "09-04 05:32", "09-04 10:40", "09-04 14:48", "09-04 18:07", "09-04 21:15"],
+    labels: ["09-03 06:57", "09-03 11:56", "09-03 16:00", "09-03 19:15", "09-03 22:18", "09-04 00:48", "09-04 05:32", "09-04 10:40", "09-04 14:48", "09-04 18:07", "09-04 21:15", "09-04 23:44"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [3.46, 3.96, 8.96, 9.67, 10.36, 11.45, 13.0, 12.83, 3.04, 11.54, 11.43],
+        data: [3.46, 3.96, 8.96, 9.67, 10.36, 11.45, 13.0, 12.83, 3.04, 11.54, 11.43, 11.23],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3],
+        data: [4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
