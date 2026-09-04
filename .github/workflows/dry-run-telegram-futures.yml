@@ -32,7 +32,7 @@ jobs:
     steps:
       - name: Notify Telegram — futures workflow started
         env:
-          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN_FUTURES }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
@@ -40,13 +40,13 @@ jobs:
             -d text="🔄 NFI FUTURES (OKX) dry-run workflow started (run #${{ github.run_number }}). Freqtrade is now installing/starting up...")
           echo "Telegram API response: $RESPONSE"
           if ! echo "$RESPONSE" | grep -q '"ok":true'; then
-            echo "::warning::Telegram did not accept the message — check TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets."
+            echo "::warning::Telegram did not accept the message — check TELEGRAM_TOKEN_FUTURES/TELEGRAM_CHAT_ID secrets."
           fi
 
       - name: Verify required secrets are set
         run: |
           MISSING=""
-          [ -z "${{ secrets.TELEGRAM_TOKEN }}" ] && MISSING="$MISSING TELEGRAM_TOKEN"
+          [ -z "${{ secrets.TELEGRAM_TOKEN_FUTURES }}" ] && MISSING="$MISSING TELEGRAM_TOKEN_FUTURES"
           [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ] && MISSING="$MISSING TELEGRAM_CHAT_ID"
           [ -z "${{ secrets.SUPABASE_DB_URL }}" ] && MISSING="$MISSING SUPABASE_DB_URL"
           if [ -n "$MISSING" ]; then
@@ -120,10 +120,10 @@ jobs:
 
       - name: Run Freqtrade (dry-run, background) and tail logs
         env:
-          FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN_FUTURES }}
           FREQTRADE__TELEGRAM__CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN_FUTURES }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -191,7 +191,7 @@ jobs:
       - name: Notify Telegram — futures workflow failed
         if: failure()
         env:
-          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN_FUTURES }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
