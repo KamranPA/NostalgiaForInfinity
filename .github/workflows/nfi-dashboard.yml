@@ -39,12 +39,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install psycopg2-binary numpy ccxt
 
-      - name: Generate dashboard
+      - name: Generate combined dashboard (spot + futures)
         env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           mkdir -p docs
-          python generate_dashboard.py "$DB_URL" docs/index.html
+
+          # Spot reads the default 'public' schema (no change needed).
+          SPOT_DB_URL="$BASE_DB_URL"
+
+          # Futures reads the separate 'futures' schema in the SAME
+          # Supabase project — same trick used in
+          # dry-run-telegram-futures.yml, so both the bot and this
+          # dashboard agree on where futures data lives.
+          if [[ "$BASE_DB_URL" == *"?"* ]]; then
+            FUTURES_DB_URL="${BASE_DB_URL}&options=-csearch_path%3Dfutures"
+          else
+            FUTURES_DB_URL="${BASE_DB_URL}?options=-csearch_path%3Dfutures"
+          fi
+
+          python generate_dashboard.py "$SPOT_DB_URL" "$FUTURES_DB_URL" docs/index.html
 
       - name: Commit and push docs/index.html
         run: |
