@@ -15,7 +15,9 @@ name: NFI Dashboard
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "0 * * * *"   # regenerate every hour — cheap and fast (~1 min), unlike the 6h trading job
+    - cron: "0 */3 * * *"   # every 3 hours (was hourly) — cut back after hitting the free-tier
+                              # egress quota; still catches most meaningful state changes for a
+                              # strategy where trades typically stay open for hours, not minutes
 
 permissions:
   contents: write   # needed to commit the generated docs/index.html back to the repo
