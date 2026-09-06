@@ -144,6 +144,6 @@
   "force_entry_enable": false,
   "initial_state": "running",
   "internals": {
-    "process_throttle_secs": 5
+    "process_throttle_secs": 30
   }
 }
