@@ -33,7 +33,9 @@ name: Dry-Run Watchdog (safety net, internal cron)
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # checks every 30 minutes; only ACTS when something's actually stuck
+    - cron: "0 * * * *"   # checks every hour (was 30 min) — cut back after hitting the free-tier
+                            # egress quota; still well within the ~5h45m session length as a
+                            # safety net, just slightly slower to notice a stopped run
   workflow_dispatch: {}       # for manually testing the check logic on demand
 
 concurrency:
