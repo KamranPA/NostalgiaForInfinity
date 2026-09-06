@@ -70,6 +70,35 @@ jobs:
           print("Confirmed: schema 'futures' exists (created now, or already existed).")
           PYEOF
 
+      - name: DIAGNOSTIC — verify the search_path trick actually works
+        env:
+          BASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Builds the EXACT same URL freqtrade will connect with later in
+          # this workflow, then asks Postgres directly what schema is
+          # actually active — no more guessing based on pooler-mode theory.
+          if [[ "$BASE_DB_URL" == *"?"* ]]; then
+            TEST_URL="${BASE_DB_URL}&options=-csearch_path%3Dfutures"
+          else
+            TEST_URL="${BASE_DB_URL}?options=-csearch_path%3Dfutures"
+          fi
+          python3 - <<PYEOF
+          import psycopg2
+          conn = psycopg2.connect("$TEST_URL")
+          with conn.cursor() as cur:
+              cur.execute("SELECT current_schema(), current_setting('search_path');")
+              schema, search_path = cur.fetchone()
+              print(f"current_schema() = {schema}")
+              print(f"search_path setting = {search_path}")
+              if schema == "futures":
+                  print("RESULT: OK — the options=-csearch_path trick IS working over this connection.")
+              else:
+                  print("RESULT: PROBLEM — connection did NOT land in the 'futures' schema. "
+                        "The options parameter is being ignored (likely a pooler-mode limitation), "
+                        "not a config typo.")
+          conn.close()
+          PYEOF
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
