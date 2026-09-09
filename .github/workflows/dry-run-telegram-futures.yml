@@ -151,6 +151,13 @@ jobs:
           fi
           cp config_dryrun_futures.json user_data/config.json
 
+      - name: Clean old database to prevent KeyValueStore errors
+        run: |
+          # Remove local SQLite database if it exists (from previous runs)
+          rm -f tradesv3.sqlite
+          rm -f user_data/tradesv3.sqlite
+          echo "Old database files cleaned (if any existed)."
+
       - name: Run Freqtrade (dry-run, background) and tail logs
         env:
           FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN_FUTURES }}
@@ -228,4 +235,4 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
             -d text="❌ NFI FUTURES (OKX) dry-run workflow (run #${{ github.run_number }}) FAILED. Check GitHub Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            > /dev/null
+            > /dev/null || true
