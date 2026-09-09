@@ -43,23 +43,20 @@ jobs:
 
       - name: Generate combined dashboard (spot + futures)
         env:
-          BASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SPOT_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          FUTURES_DB_URL: ${{ secrets.SUPABASE_DB_URL_FUTURES }}
         run: |
           mkdir -p docs
 
-          # Spot reads the default 'public' schema (no change needed).
-          SPOT_DB_URL="$BASE_DB_URL"
-
-          # Futures reads the separate 'futures' schema in the SAME
-          # Supabase project — same trick used in
-          # dry-run-telegram-futures.yml, so both the bot and this
-          # dashboard agree on where futures data lives.
-          if [[ "$BASE_DB_URL" == *"?"* ]]; then
-            FUTURES_DB_URL="${BASE_DB_URL}&options=-csearch_path%3Dfutures"
-          else
-            FUTURES_DB_URL="${BASE_DB_URL}?options=-csearch_path%3Dfutures"
-          fi
-
+          # Spot reads the default 'public' schema via the regular
+          # postgres user (unchanged).
+          #
+          # Futures uses the dedicated futures_bot role (same one
+          # dry-run-telegram-futures.yml uses), whose search_path is
+          # fixed server-side to the 'futures' schema — NOT the
+          # ?options=-csearch_path=... connection-string trick, which
+          # was confirmed (via a live diagnostic query) to be silently
+          # ignored by Supabase's pooler, even in Session pooler mode.
           python generate_dashboard.py "$SPOT_DB_URL" "$FUTURES_DB_URL" docs/index.html
 
       - name: Commit and push docs/index.html
