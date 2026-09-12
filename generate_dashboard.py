@@ -2,199 +2,93 @@
 generate_dashboard.py
 
 Builds ONE combined, self-contained HTML dashboard covering BOTH the spot
-(KuCoin) and futures (OKX) dry-run bots side by side:
-  - A top "Spot vs Futures" comparison bar (win rate, True Total, capital
-    efficiency, stuck trades) for an at-a-glance comparison
-  - Then a full section per market (same content each side always had):
-    summary cards, Capital Efficiency, Portfolio Utilization, equity
-    curve, exit-reason chart, True-Total-over-time trend chart,
-    statistical significance, open/closed trades tables, tag-family and
-    per-pair breakdowns
+(KuCoin) and futures (OKX) dry-run bots side by side.
 
-Reads from the same Postgres database/project for both — spot's tables
-live in the default `public` schema, futures' in a separate `futures`
-schema (same database, fully isolated tables, no new project needed).
-The only writes this script performs are appending one row per run to
-each market's own nfi_dashboard_snapshots table (auto-created if
-missing) — never touches `trades`, `orders`, or anything the running
-bots read or write.
+ARCHITECTURE (as of the SQLite migration):
+Both bots now persist their live trading state as a LOCAL SQLite file,
+carried across each ~5h45m restart via a dedicated git branch
+(state-spot / state-futures) — see dry-run-telegram-signals.yml and
+dry-run-telegram-futures.yml for why (freqtrade's own internal
+polling/Telegram-RPC loop was generating millions of tiny queries per
+session against Postgres, which is harmless locally but blew through
+Supabase's free-tier egress quota repeatedly).
+
+This script READS those two SQLite files (read-only — it never writes
+back into either bot's live state, to avoid any risk of racing with a
+bot's own save-state step). It maintains its OWN separate history file
+(a third SQLite file, on its own `dashboard-history` git branch) purely
+for the "True Total & Stuck Trades Over Time" trend chart — this keeps
+the dashboard's own bookkeeping completely isolated from both bots'
+live state, so there's never a write conflict between three independent
+git-branch writers.
 
 Usage:
-    python generate_dashboard.py "<spot-db-url>" "<futures-db-url>" <output_html_path>
+    python generate_dashboard.py <spot_sqlite_path> <futures_sqlite_path> <history_sqlite_path> <output_html_path>
+
+The calling workflow is responsible for extracting spot_sqlite_path from
+the state-spot branch, futures_sqlite_path from state-futures, and
+history_sqlite_path from dashboard-history (or a fresh empty path if
+that branch doesn't exist yet) — see nfi-dashboard.yml.
 """
 
 import sys
 import json
+import sqlite3
 from datetime import datetime, timezone
 
 import numpy as np
 
-try:
-    import psycopg2
-    import psycopg2.extras
-except ImportError:
-    print("Missing dependency. Install with: pip install psycopg2-binary --break-system-packages")
-    sys.exit(1)
-
 
 # ----------------------------------------------------------------------
-# Data fetching
+# Data fetching (SQLite — each bot's own local state file)
 # ----------------------------------------------------------------------
 
-def fetch_trades(db_url: str):
-    conn = psycopg2.connect(db_url)
+def parse_sqlite_datetime(value):
+    """freqtrade/SQLAlchemy stores datetimes in SQLite as plain text
+    (e.g. '2026-09-06 15:01:05.140768' or without the microseconds) —
+    unlike psycopg2, sqlite3 hands these back as raw strings, not
+    datetime objects, so every date column needs to go through this."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT id, pair, is_open, enter_tag, exit_reason,
-                       open_date, close_date, open_rate, close_rate,
-                       amount, stake_amount, close_profit, close_profit_abs
-                FROM trades
-                ORDER BY open_date ASC
-            """)
-            return cur.fetchall()
-    finally:
-        conn.close()
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
 
 
-# ----------------------------------------------------------------------
-# Historical snapshots (trend over time)
-# ------------------------------------------------------------
-# The dashboard is otherwise a pure snapshot — it can't show whether the
-# "True Total" / stuck-trade situation is improving or getting worse
-# without something to compare against. This adds one small extra table
-# (per market's own schema/database) that a new row gets appended to on
-# every dashboard run. This is the only thing this script ever writes —
-# it only ever INSERTs into its own dedicated table and never touches
-# `trades`/`orders`/anything the bot itself reads or writes.
-# ----------------------------------------------------------------------
-
-SNAPSHOT_HISTORY_LIMIT = 180  # ~7.5 days of hourly snapshots — plenty for
-                               # a trend chart without the table or the
-                               # page growing unbounded forever.
-
-
-def ensure_snapshot_table(conn):
-    with conn.cursor() as cur:
+def fetch_trades(db_path: str):
+    if not db_path:
+        return []
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        cur = conn.cursor()
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS nfi_dashboard_snapshots (
-                id SERIAL PRIMARY KEY,
-                snapshot_time TIMESTAMP NOT NULL,
-                open_trades INT NOT NULL,
-                closed_trades INT NOT NULL,
-                win_rate DOUBLE PRECISION,
-                realized_profit_abs DOUBLE PRECISION,
-                unrealized_pl_abs DOUBLE PRECISION,
-                true_total_abs DOUBLE PRECISION,
-                stuck_trades INT,
-                open_capital_locked DOUBLE PRECISION
-            )
+            SELECT id, pair, is_open, enter_tag, exit_reason,
+                   open_date, close_date, open_rate, close_rate,
+                   amount, stake_amount, close_profit, close_profit_abs
+            FROM trades
+            ORDER BY open_date ASC
         """)
-    conn.commit()
-
-
-def fetch_snapshot_history(db_url: str, limit: int = SNAPSHOT_HISTORY_LIMIT):
-    """Past dashboard runs, oldest first, for the trend chart. Returns an
-    empty list (never raises) if the table doesn't exist yet — e.g. the
-    very first time this runs after deploying this feature."""
-    try:
-        conn = psycopg2.connect(db_url)
-    except Exception as e:
-        print(f"  (could not connect for snapshot history: {e})")
-        return []
-    try:
-        ensure_snapshot_table(conn)
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT snapshot_time, true_total_abs, stuck_trades,
-                       realized_profit_abs, unrealized_pl_abs
-                FROM nfi_dashboard_snapshots
-                ORDER BY snapshot_time DESC
-                LIMIT %s
-            """, (limit,))
-            rows = cur.fetchall()
-        return list(reversed(rows))  # oldest first, for left-to-right charting
-    except Exception as e:
-        print(f"  (could not read snapshot history, starting fresh: {e})")
+        rows = [dict(r) for r in cur.fetchall()]
+    except sqlite3.OperationalError as e:
+        print(f"  (could not read trades from {db_path}: {e})")
         return []
     finally:
         conn.close()
 
-
-def record_snapshot(db_url: str, metrics: dict):
-    """Appends one row for this run. Failures here must never take down
-    dashboard generation — the dashboard itself is far more important
-    than the trend chart having an unbroken history."""
-    try:
-        conn = psycopg2.connect(db_url)
-    except Exception as e:
-        print(f"  (could not connect to record snapshot: {e})")
-        return
-    try:
-        ensure_snapshot_table(conn)
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO nfi_dashboard_snapshots
-                    (snapshot_time, open_trades, closed_trades, win_rate,
-                     realized_profit_abs, unrealized_pl_abs, true_total_abs,
-                     stuck_trades, open_capital_locked)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                metrics["snapshot_time"], metrics["open_trades"], metrics["closed_trades"],
-                metrics["win_rate"], metrics["realized_profit_abs"], metrics["unrealized_pl_abs"],
-                metrics["true_total_abs"], metrics["stuck_trades"], metrics["open_capital_locked"],
-            ))
-        conn.commit()
-    except Exception as e:
-        print(f"  (could not record snapshot, continuing anyway: {e})")
-    finally:
-        conn.close()
-
-
-def fetch_entry_fills(db_url: str, trade_ids):
-    """Per-trade history of entry (DCA/rebuy) fills, so capital-days can
-    use how much was ACTUALLY locked at each point in time — not just
-    the trade's final/current stake_amount applied to its whole duration.
-    A trade that grew from 100 -> 500 USDT over several rebuys had far
-    less capital tied up in its early days than its final size suggests;
-    using the final size for the entire holding period overstates
-    capital-days (and understates the return-per-capital-day rate).
-
-    Returns {trade_id: [(fill_time, cumulative_cost_after_this_fill), ...]}
-    sorted by fill_time. Falls back to None (caller uses stake_amount ×
-    full duration as before) if the orders table can't be read.
-    """
-    if not trade_ids:
-        return {}
-    conn = psycopg2.connect(db_url)
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT ft_trade_id, order_filled_date, cost, average, filled
-                FROM orders
-                WHERE ft_trade_id = ANY(%s) AND ft_order_side = 'buy'
-                  AND order_filled_date IS NOT NULL
-                ORDER BY ft_trade_id, order_filled_date ASC
-            """, (list(trade_ids),))
-            rows = cur.fetchall()
-    except Exception as e:
-        print(f"  (could not read orders table for capital-over-time reconstruction: {e})")
-        return {}
-    finally:
-        conn.close()
-
-    by_trade = {}
-    running_cost = {}
     for r in rows:
-        tid = r["ft_trade_id"]
-        fill_cost = to_float(r["cost"])
-        if fill_cost <= 0:
-            # Fallback if 'cost' wasn't populated for this fill: reconstruct
-            # from average price × filled amount.
-            fill_cost = to_float(r["average"]) * to_float(r["filled"])
-        running_cost[tid] = running_cost.get(tid, 0.0) + fill_cost
-        by_trade.setdefault(tid, []).append((r["order_filled_date"], running_cost[tid]))
-    return by_trade
+        r["is_open"] = bool(r["is_open"])
+        r["open_date"] = parse_sqlite_datetime(r["open_date"])
+        r["close_date"] = parse_sqlite_datetime(r["close_date"])
+    return rows
 
 
 def capital_days_for_trade(fills, open_date, end_date, fallback_stake, fallback_days):
@@ -218,18 +112,50 @@ def capital_days_for_trade(fills, open_date, end_date, fallback_stake, fallback_
     return total
 
 
+def fetch_entry_fills(db_path: str, trade_ids):
+    """Per-trade history of entry (DCA/rebuy) fills, so capital-days can
+    use how much was ACTUALLY locked at each point in time — not just
+    the trade's final/current stake_amount applied to its whole duration.
+    Returns {trade_id: [(fill_time, cumulative_cost_after_this_fill), ...]}
+    sorted by fill_time. Falls back to {} (caller uses stake_amount ×
+    full duration) if the orders table can't be read."""
+    if not trade_ids or not db_path:
+        return {}
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        placeholders = ",".join("?" * len(trade_ids))
+        cur = conn.cursor()
+        cur.execute(f"""
+            SELECT ft_trade_id, order_filled_date, cost, average, filled
+            FROM orders
+            WHERE ft_trade_id IN ({placeholders}) AND ft_order_side = 'buy'
+              AND order_filled_date IS NOT NULL
+            ORDER BY ft_trade_id, order_filled_date ASC
+        """, list(trade_ids))
+        rows = [dict(r) for r in cur.fetchall()]
+    except sqlite3.OperationalError as e:
+        print(f"  (could not read orders table for capital-over-time reconstruction: {e})")
+        return {}
+    finally:
+        conn.close()
+
+    by_trade = {}
+    running_cost = {}
+    for r in rows:
+        tid = r["ft_trade_id"]
+        fill_cost = to_float(r["cost"])
+        if fill_cost <= 0:
+            fill_cost = to_float(r["average"]) * to_float(r["filled"])
+        running_cost[tid] = running_cost.get(tid, 0.0) + fill_cost
+        fill_time = parse_sqlite_datetime(r["order_filled_date"])
+        by_trade.setdefault(tid, []).append((fill_time, running_cost[tid]))
+    return by_trade
+
+
 def fetch_live_prices(pairs, exchange_id="kucoin", ccxt_options=None):
     """Best-effort live price fetch for unrealized P/L on open trades.
-    Returns {pair: last_price} — pairs that fail to fetch are simply
-    omitted, and the dashboard shows 'live price unavailable' for those
-    rather than crashing the whole report.
-
-    exchange_id/ccxt_options let this work for either market: spot uses
-    plain ccxt.kucoin(); futures uses ccxt.okx() with
-    options={'defaultType': 'swap'} so symbols resolve against OKX's
-    perpetual-swap market (matching freqtrade's own futures pair format,
-    e.g. 'BTC/USDT:USDT') instead of its spot market.
-    """
+    Unchanged by the SQLite migration — this never touched Postgres."""
     prices = {}
     try:
         import ccxt
@@ -248,16 +174,98 @@ def fetch_live_prices(pairs, exchange_id="kucoin", ccxt_options=None):
 
 
 # ----------------------------------------------------------------------
-# Stats (same methodology as signal_stats.py)
+# Historical snapshots (trend over time) — the dashboard's OWN file
+# ------------------------------------------------------------
+# Kept in a separate SQLite file (its own dashboard-history git branch)
+# rather than inside either bot's live state file, so this script never
+# risks a write conflict with a bot's own save-state step. A `mode`
+# column distinguishes spot rows from futures rows within the one file.
 # ----------------------------------------------------------------------
 
-def binomial_test_two_sided(k: int, n: int, p: float = 0.5) -> float:
-    from math import comb
-    def pmf(x):
-        return comb(n, x) * (p ** x) * ((1 - p) ** (n - x))
-    obs_p = pmf(k)
-    total = sum(pmf(x) for x in range(n + 1) if pmf(x) <= obs_p + 1e-12)
-    return min(1.0, total)
+SNAPSHOT_HISTORY_LIMIT = 180  # ~ a couple weeks of 3-hourly snapshots per
+                               # mode — plenty for a trend chart without
+                               # the file growing unbounded forever.
+
+
+def ensure_snapshot_table(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS nfi_dashboard_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mode TEXT NOT NULL,
+            snapshot_time TEXT NOT NULL,
+            open_trades INTEGER NOT NULL,
+            closed_trades INTEGER NOT NULL,
+            win_rate REAL,
+            realized_profit_abs REAL,
+            unrealized_pl_abs REAL,
+            true_total_abs REAL,
+            stuck_trades INTEGER,
+            open_capital_locked REAL
+        )
+    """)
+    conn.commit()
+
+
+def fetch_snapshot_history(history_db_path: str, mode_id: str, limit: int = SNAPSHOT_HISTORY_LIMIT):
+    """Past dashboard runs for this mode, oldest first, for the trend
+    chart. Returns [] (never raises) if the history file/table doesn't
+    exist yet — e.g. the very first run after deploying this feature."""
+    try:
+        conn = sqlite3.connect(history_db_path)
+        conn.row_factory = sqlite3.Row
+    except Exception as e:
+        print(f"  (could not open history file for {mode_id}: {e})")
+        return []
+    try:
+        ensure_snapshot_table(conn)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT snapshot_time, true_total_abs, stuck_trades,
+                   realized_profit_abs, unrealized_pl_abs
+            FROM nfi_dashboard_snapshots
+            WHERE mode = ?
+            ORDER BY snapshot_time DESC
+            LIMIT ?
+        """, (mode_id, limit))
+        rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            r["snapshot_time"] = parse_sqlite_datetime(r["snapshot_time"])
+        return list(reversed(rows))
+    except Exception as e:
+        print(f"  (could not read snapshot history for {mode_id}, starting fresh: {e})")
+        return []
+    finally:
+        conn.close()
+
+
+def record_snapshot(history_db_path: str, mode_id: str, metrics: dict):
+    """Appends one row for this run/mode. Failures here must never take
+    down dashboard generation — the dashboard itself matters far more
+    than the trend chart having an unbroken history."""
+    try:
+        conn = sqlite3.connect(history_db_path)
+    except Exception as e:
+        print(f"  (could not open history file to record snapshot for {mode_id}: {e})")
+        return
+    try:
+        ensure_snapshot_table(conn)
+        conn.execute("""
+            INSERT INTO nfi_dashboard_snapshots
+                (mode, snapshot_time, open_trades, closed_trades, win_rate,
+                 realized_profit_abs, unrealized_pl_abs, true_total_abs,
+                 stuck_trades, open_capital_locked)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            mode_id, metrics["snapshot_time"].isoformat(),
+            metrics["open_trades"], metrics["closed_trades"],
+            metrics["win_rate"], metrics["realized_profit_abs"], metrics["unrealized_pl_abs"],
+            metrics["true_total_abs"], metrics["stuck_trades"], metrics["open_capital_locked"],
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"  (could not record snapshot for {mode_id}, continuing anyway: {e})")
+    finally:
+        conn.close()
 
 
 def bootstrap_ci(profits: np.ndarray, n_boot: int = 10000, alpha: float = 0.05):
@@ -1022,19 +1030,19 @@ def load_portfolio_config(config_path: str):
         return defaults
 
 
-def build_one_mode(db_url, mode_id, mode_title, market_note, config_path,
+def build_one_mode(sqlite_path, history_db_path, mode_id, mode_title, market_note, config_path,
                     live_price_exchange_id, live_price_ccxt_options):
-    trades = fetch_trades(db_url)
+    trades = fetch_trades(sqlite_path)
     open_pairs = list({t["pair"] for t in trades if t["is_open"]})
-    print(f"[{mode_id}] Fetched {len(trades)} trade records ({len(open_pairs)} open pairs).")
+    print(f"[{mode_id}] Fetched {len(trades)} trade records from {sqlite_path} ({len(open_pairs)} open pairs).")
 
     live_prices = (
         fetch_live_prices(open_pairs, live_price_exchange_id, live_price_ccxt_options)
         if open_pairs else {}
     )
-    entry_fills = fetch_entry_fills(db_url, [t["id"] for t in trades])
+    entry_fills = fetch_entry_fills(sqlite_path, [t["id"] for t in trades])
     portfolio_cfg = load_portfolio_config(config_path)
-    snapshot_history = fetch_snapshot_history(db_url)
+    snapshot_history = fetch_snapshot_history(history_db_path, mode_id)
 
     bundle = build_mode_section(
         trades, live_prices, entry_fills, portfolio_cfg, snapshot_history,
@@ -1043,15 +1051,15 @@ def build_one_mode(db_url, mode_id, mode_title, market_note, config_path,
     return bundle
 
 
-def main(spot_db_url: str, futures_db_url: str, output_path: str):
+def main(spot_sqlite_path: str, futures_sqlite_path: str, history_db_path: str, output_path: str):
     spot_bundle = build_one_mode(
-        spot_db_url, "spot", "🟢 SPOT — KuCoin",
+        spot_sqlite_path, history_db_path, "spot", "🟢 SPOT — KuCoin",
         "KuCoin spot market · no leverage",
         "config_dryrun_telegram.json",
         live_price_exchange_id="kucoin", live_price_ccxt_options=None,
     )
     futures_bundle = build_one_mode(
-        futures_db_url, "futures", "🟣 FUTURES — OKX",
+        futures_sqlite_path, history_db_path, "futures", "🟣 FUTURES — OKX",
         "OKX perpetual swaps · isolated margin · 3x leverage (default)",
         "config_dryrun_futures.json",
         live_price_exchange_id="okx", live_price_ccxt_options={"defaultType": "swap"},
@@ -1064,12 +1072,15 @@ def main(spot_db_url: str, futures_db_url: str, output_path: str):
         f.write(html)
     print(f"Combined dashboard written to {output_path}")
 
-    record_snapshot(spot_db_url, spot_bundle["current_snapshot"])
-    record_snapshot(futures_db_url, futures_bundle["current_snapshot"])
+    # Both modes' new snapshot rows land in the SAME history file (distinct
+    # via the mode column) — the calling workflow commits this one file
+    # back to the dashboard-history branch after this script returns.
+    record_snapshot(history_db_path, "spot", spot_bundle["current_snapshot"])
+    record_snapshot(history_db_path, "futures", futures_bundle["current_snapshot"])
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         print(__doc__)
         sys.exit(1)
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    main(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
