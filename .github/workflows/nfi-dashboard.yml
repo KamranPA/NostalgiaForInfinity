@@ -1,26 +1,28 @@
 # SAVE THIS FILE AS: .github/workflows/nfi-dashboard.yml
-# (in the ROOT of your NostalgiaForInfinity repo, alongside the other
-# workflow files)
+# (in .github/workflows/, alongside the other workflow files)
 name: NFI Dashboard
 
-# Generates docs/index.html from the live Supabase database and commits
-# it back to the repo. GitHub Pages (once enabled — see setup note below)
-# then serves that file automatically at:
-#   https://<username>.github.io/NostalgiaForInfinity/
+# Reads BOTH bots' live trading state directly from their SQLite state
+# branches (state-spot / state-futures — the same files
+# dry-run-telegram-signals.yml / dry-run-telegram-futures.yml persist
+# across restarts) instead of a Postgres database. This never touches
+# Postgres at all anymore — that whole layer (Supabase, schemas, the
+# futures_bot role) was retired after it caused repeated free-tier
+# egress quota problems (freqtrade's own internal polling loop was
+# generating millions of tiny queries per session).
 #
-# This workflow only READS from the database (via generate_dashboard.py)
-# and only ever writes docs/index.html in this repo — it never touches
-# the running bot or places any orders.
+# This workflow's OWN read/write is to a THIRD, separate branch
+# (dashboard-history) that holds nothing but the trend-chart history —
+# kept apart from both bots' live state files so there's never a write
+# race between three independent things updating git branches.
 
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "0 */3 * * *"   # every 3 hours (was hourly) — cut back after hitting the free-tier
-                              # egress quota; still catches most meaningful state changes for a
-                              # strategy where trades typically stay open for hours, not minutes
+    - cron: "0 */3 * * *"   # every 3 hours
 
 permissions:
-  contents: write   # needed to commit the generated docs/index.html back to the repo
+  contents: write   # needed to commit the updated dashboard-history file back
 
 jobs:
   dashboard:
@@ -30,6 +32,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed to fetch the state-spot/state-futures/dashboard-history branches
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,36 +43,68 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install psycopg2-binary numpy ccxt
+          pip install numpy ccxt
+
+      - name: Fetch spot and futures SQLite state
+        run: |
+          mkdir -p /tmp/dashboard_data
+
+          git fetch origin state-spot 2>/dev/null && \
+            git show origin/state-spot:tradesv3.dryrun.sqlite > /tmp/dashboard_data/spot.sqlite 2>/dev/null && \
+            echo "Spot state found ($(du -h /tmp/dashboard_data/spot.sqlite | cut -f1))." || \
+            echo "No spot state yet (bot may not have completed a session yet) — dashboard will show it as empty."
+
+          git fetch origin state-futures 2>/dev/null && \
+            git show origin/state-futures:tradesv3.dryrun_futures.sqlite > /tmp/dashboard_data/futures.sqlite 2>/dev/null && \
+            echo "Futures state found ($(du -h /tmp/dashboard_data/futures.sqlite | cut -f1))." || \
+            echo "No futures state yet (bot may not have completed a session yet) — dashboard will show it as empty."
+
+      - name: Fetch (or initialize) dashboard history
+        run: |
+          git fetch origin dashboard-history 2>/dev/null && \
+            git show origin/dashboard-history:history.sqlite > /tmp/dashboard_data/history.sqlite 2>/dev/null && \
+            echo "Existing dashboard history found ($(du -h /tmp/dashboard_data/history.sqlite | cut -f1))." || \
+            echo "No dashboard history yet — trend chart will start fresh from this run."
 
       - name: Generate combined dashboard (spot + futures)
-        env:
-          SPOT_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          FUTURES_DB_URL: ${{ secrets.SUPABASE_DB_URL_FUTURES }}
         run: |
           mkdir -p docs
-
-          # Spot reads the default 'public' schema via the regular
-          # postgres user (unchanged).
-          #
-          # Futures uses the dedicated futures_bot role (same one
-          # dry-run-telegram-futures.yml uses), whose search_path is
-          # fixed server-side to the 'futures' schema — NOT the
-          # ?options=-csearch_path=... connection-string trick, which
-          # was confirmed (via a live diagnostic query) to be silently
-          # ignored by Supabase's pooler, even in Session pooler mode.
-          python generate_dashboard.py "$SPOT_DB_URL" "$FUTURES_DB_URL" docs/index.html
+          python generate_dashboard.py \
+            /tmp/dashboard_data/spot.sqlite \
+            /tmp/dashboard_data/futures.sqlite \
+            /tmp/dashboard_data/history.sqlite \
+            docs/index.html
 
       - name: Commit and push docs/index.html
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/index.html
-          # Only commit if the file actually changed — avoids empty
-          # no-op commits cluttering history when nothing new happened.
-          if git diff --cached --quiet; then
-            echo "No changes to the dashboard — skipping commit."
-          else
-            git commit -m "chore: update NFI dashboard [skip ci]"
-            git push
+          git diff --cached --quiet && echo "No dashboard changes to commit." || \
+            (git commit -m "Update dashboard $(date -u +%Y-%m-%dT%H:%M:%SZ)" --quiet && git push origin HEAD:${{ github.ref_name }})
+
+      - name: Save updated dashboard history
+        if: always()
+        run: |
+          if [ ! -f /tmp/dashboard_data/history.sqlite ]; then
+            echo "No history file produced — skipping history save."
+            exit 0
           fi
+          # Unlike the bots' own state branches (force-pushed, single
+          # commit each time, since only the LATEST live state matters),
+          # this branch keeps a normal, incrementally-growing commit
+          # history — that's what lets the trend chart accumulate points
+          # over time instead of only ever showing one snapshot.
+          git fetch origin dashboard-history 2>/dev/null
+          if git show-ref --verify --quiet refs/remotes/origin/dashboard-history; then
+            git checkout -B dashboard-history origin/dashboard-history --quiet
+          else
+            git checkout --orphan dashboard-history --quiet
+            git rm -rf . > /dev/null 2>&1 || true
+          fi
+          cp /tmp/dashboard_data/history.sqlite history.sqlite
+          git add history.sqlite
+          git diff --cached --quiet && echo "No history changes to commit." || \
+            git commit -m "history sync $(date -u +%Y-%m-%dT%H:%M:%SZ) run #${{ github.run_number }}" --quiet
+          git push origin dashboard-history --quiet
+          echo "Dashboard history saved."
