@@ -95,7 +95,7 @@ jobs:
           # this branch keeps a normal, incrementally-growing commit
           # history — that's what lets the trend chart accumulate points
           # over time instead of only ever showing one snapshot.
-          git fetch origin dashboard-history 2>/dev/null
+          git fetch origin dashboard-history 2>/dev/null || true
           if git show-ref --verify --quiet refs/remotes/origin/dashboard-history; then
             git checkout -B dashboard-history origin/dashboard-history --quiet
           else
