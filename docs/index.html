@@ -56,7 +56,7 @@
 <body>
 
 <h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
-<div class="subtitle">Generated 2026-09-13 00:34:37 UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
+<div class="subtitle">Generated 2026-09-13 03:57:44 UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
 
 
 <div class="card">
@@ -160,7 +160,7 @@
 
 <div class="card">
   <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
-  <p class="muted">Not enough history yet — this chart fills in as more dashboard runs are recorded (one point per run).</p>
+  <div class="chart-wrap"><canvas id="trendChart_spot"></canvas></div>
 </div>
 
 
@@ -296,7 +296,7 @@
 
 <div class="card">
   <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
-  <p class="muted">Not enough history yet — this chart fills in as more dashboard runs are recorded (one point per run).</p>
+  <div class="chart-wrap"><canvas id="trendChart_futures"></canvas></div>
 </div>
 
 
@@ -389,6 +389,37 @@ new Chart(document.getElementById('reasonChart_spot'), {
 });
 
 
+new Chart(document.getElementById('trendChart_spot'), {
+  type: 'bar',
+  data: {
+    labels: ["09-13 00:34", "09-13 03:57"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [0.0, 0.0],
+        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0],
+        backgroundColor: 'rgba(248,81,73,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#8b949e', maxTicksLimit: 8 }, grid: { color: '#30363d' } },
+      y: { position: 'left', ticks: { color: '#8b949e' }, grid: { color: '#30363d' },
+           title: { display: true, text: 'USDT', color: '#8b949e' } },
+      y1: { position: 'right', ticks: { color: '#8b949e', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#8b949e' } }
+    },
+    plugins: { legend: { labels: { color: '#c9d1d9' } } }
+  }
+});
+
 
 
 new Chart(document.getElementById('equityChart_futures'), {
@@ -427,6 +458,37 @@ new Chart(document.getElementById('reasonChart_futures'), {
   }
 });
 
+
+new Chart(document.getElementById('trendChart_futures'), {
+  type: 'bar',
+  data: {
+    labels: ["09-13 00:34", "09-13 03:57"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [0.0, 0.0],
+        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0],
+        backgroundColor: 'rgba(248,81,73,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#8b949e', maxTicksLimit: 8 }, grid: { color: '#30363d' } },
+      y: { position: 'left', ticks: { color: '#8b949e' }, grid: { color: '#30363d' },
+           title: { display: true, text: 'USDT', color: '#8b949e' } },
+      y1: { position: 'right', ticks: { color: '#8b949e', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#8b949e' } }
+    },
+    plugins: { legend: { labels: { color: '#c9d1d9' } } }
+  }
+});
 
 
 </script>
