@@ -56,7 +56,7 @@
 <body>
 
 <h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
-<div class="subtitle">Generated 2026-09-13 11:21:44 UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
+<div class="subtitle">Generated 2026-09-13 15:52:03 UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
 
 
 <div class="card">
@@ -392,17 +392,17 @@ new Chart(document.getElementById('reasonChart_spot'), {
 new Chart(document.getElementById('trendChart_spot'), {
   type: 'bar',
   data: {
-    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21"],
+    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0],
+        data: [0.0, 0.0, 0.0, 0.0],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0],
+        data: [0, 0, 0, 0],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
@@ -462,17 +462,17 @@ new Chart(document.getElementById('reasonChart_futures'), {
 new Chart(document.getElementById('trendChart_futures'), {
   type: 'bar',
   data: {
-    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21"],
+    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0],
+        data: [0.0, 0.0, 0.0, 0.0],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0],
+        data: [0, 0, 0, 0],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
