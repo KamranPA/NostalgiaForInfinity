@@ -8,33 +8,38 @@ ARCHITECTURE (as of the SQLite migration):
 Both bots now persist their live trading state as a LOCAL SQLite file,
 carried across each ~5h45m restart via a dedicated git branch
 (state-spot / state-futures) — see dry-run-telegram-signals.yml and
-dry-run-telegram-futures.yml for why (freqtrade's own internal
-polling/Telegram-RPC loop was generating millions of tiny queries per
-session against Postgres, which is harmless locally but blew through
-Supabase's free-tier egress quota repeatedly).
+dry-run-telegram-futures.yml.
 
 This script READS those two SQLite files (read-only — it never writes
-back into either bot's live state, to avoid any risk of racing with a
-bot's own save-state step). It maintains its OWN separate history file
-(a third SQLite file, on its own `dashboard-history` git branch) purely
-for the "True Total & Stuck Trades Over Time" trend chart — this keeps
-the dashboard's own bookkeeping completely isolated from both bots'
-live state, so there's never a write conflict between three independent
-git-branch writers.
+back into either bot's live state). It maintains its OWN separate history
+file (a third SQLite file, on its own `dashboard-history` git branch)
+purely for the "True Total & Stuck Trades Over Time" trend chart.
+
+MERGE NOTE (2026-09-14): this version absorbs everything that used to
+live in the three standalone scripts signal_stats.py, signal_deep_stats.py
+and ml_feature_export.py, which are now retired (along with their
+nfi-signal-stats.yml / nfi-deep-stats.yml / nfi-ml-feature-summary.yml
+workflows):
+  - signal_stats.py's numbers were already fully covered by this
+    dashboard (win rate, per-pair, exit reasons, significance).
+  - signal_deep_stats.py's extra diagnostics are now their own cards
+    per mode: Duration vs Outcome correlation, Time-Clustering of open
+    trades, and DCA/Rebuy activity on open trades.
+  - ml_feature_export.py's CSV export is UNCHANGED and still a separate
+    script/workflow (its output is a downloadable file, not something
+    that belongs on an HTML page) — but its daily Telegram summary is
+    now redundant with the new "ML Data Readiness" card added here, so
+    that summary step can be dropped from the export workflow if desired.
 
 Usage:
     python generate_dashboard.py <spot_sqlite_path> <futures_sqlite_path> <history_sqlite_path> <output_html_path>
-
-The calling workflow is responsible for extracting spot_sqlite_path from
-the state-spot branch, futures_sqlite_path from state-futures, and
-history_sqlite_path from dashboard-history (or a fresh empty path if
-that branch doesn't exist yet) — see nfi-dashboard.yml.
 """
 
 import sys
 import json
 import sqlite3
 from datetime import datetime, timezone
+from collections import defaultdict
 
 import numpy as np
 
@@ -71,7 +76,7 @@ def fetch_trades(db_path: str):
     try:
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, pair, is_open, enter_tag, exit_reason,
+            SELECT id, pair, is_open, is_short, enter_tag, exit_reason,
                    open_date, close_date, open_rate, close_rate,
                    amount, stake_amount, close_profit, close_profit_abs
             FROM trades
@@ -86,6 +91,7 @@ def fetch_trades(db_path: str):
 
     for r in rows:
         r["is_open"] = bool(r["is_open"])
+        r["is_short"] = bool(r.get("is_short") or False)
         r["open_date"] = parse_sqlite_datetime(r["open_date"])
         r["close_date"] = parse_sqlite_datetime(r["close_date"])
     return rows
@@ -114,11 +120,11 @@ def capital_days_for_trade(fills, open_date, end_date, fallback_stake, fallback_
 
 def fetch_entry_fills(db_path: str, trade_ids):
     """Per-trade history of entry (DCA/rebuy) fills, so capital-days can
-    use how much was ACTUALLY locked at each point in time — not just
-    the trade's final/current stake_amount applied to its whole duration.
-    Returns {trade_id: [(fill_time, cumulative_cost_after_this_fill), ...]}
-    sorted by fill_time. Falls back to {} (caller uses stake_amount ×
-    full duration) if the orders table can't be read."""
+    use how much was ACTUALLY locked at each point in time. Returns
+    {trade_id: [(fill_time, cumulative_cost_after_this_fill), ...]}
+    sorted by fill_time. Falls back to {} if the orders table can't be
+    read. NOTE: entry side is 'buy' for longs, 'sell' for shorts — the
+    caller passes is_short per trade separately (see fetch_all_fills)."""
     if not trade_ids or not db_path:
         return {}
     conn = sqlite3.connect(db_path)
@@ -127,10 +133,9 @@ def fetch_entry_fills(db_path: str, trade_ids):
         placeholders = ",".join("?" * len(trade_ids))
         cur = conn.cursor()
         cur.execute(f"""
-            SELECT ft_trade_id, order_filled_date, cost, average, filled
+            SELECT ft_trade_id, order_filled_date, cost, average, filled, ft_order_side
             FROM orders
-            WHERE ft_trade_id IN ({placeholders}) AND ft_order_side = 'buy'
-              AND order_filled_date IS NOT NULL
+            WHERE ft_trade_id IN ({placeholders}) AND order_filled_date IS NOT NULL
             ORDER BY ft_trade_id, order_filled_date ASC
         """, list(trade_ids))
         rows = [dict(r) for r in cur.fetchall()]
@@ -140,22 +145,45 @@ def fetch_entry_fills(db_path: str, trade_ids):
     finally:
         conn.close()
 
-    by_trade = {}
+    return rows
+
+
+def build_fill_maps(all_fill_rows, trades_by_id):
+    """Splits the raw orders rows into two maps this script needs:
+      1. entry_fills: {trade_id: [(fill_time, cumulative_cost), ...]} —
+         only ENTRY-side fills (buy for longs, sell for shorts), used
+         for capital-days integration.
+      2. fills_by_trade: {trade_id: [raw fill dict, ...]} — ALL fills
+         (entry sides only, same filter), used by the DCA/rebuy activity
+         card to just count them.
+    """
+    entry_fills = defaultdict(list)
+    fills_by_trade = defaultdict(list)
     running_cost = {}
-    for r in rows:
+
+    for r in all_fill_rows:
         tid = r["ft_trade_id"]
+        trade = trades_by_id.get(tid)
+        if trade is None:
+            continue
+        entry_side = "sell" if trade["is_short"] else "buy"
+        if r["ft_order_side"] != entry_side:
+            continue
+
         fill_cost = to_float(r["cost"])
         if fill_cost <= 0:
             fill_cost = to_float(r["average"]) * to_float(r["filled"])
         running_cost[tid] = running_cost.get(tid, 0.0) + fill_cost
         fill_time = parse_sqlite_datetime(r["order_filled_date"])
-        by_trade.setdefault(tid, []).append((fill_time, running_cost[tid]))
-    return by_trade
+
+        entry_fills[tid].append((fill_time, running_cost[tid]))
+        fills_by_trade[tid].append(r)
+
+    return dict(entry_fills), dict(fills_by_trade)
 
 
 def fetch_live_prices(pairs, exchange_id="kucoin", ccxt_options=None):
-    """Best-effort live price fetch for unrealized P/L on open trades.
-    Unchanged by the SQLite migration — this never touched Postgres."""
+    """Best-effort live price fetch for unrealized P/L on open trades."""
     prices = {}
     try:
         import ccxt
@@ -174,17 +202,260 @@ def fetch_live_prices(pairs, exchange_id="kucoin", ccxt_options=None):
 
 
 # ----------------------------------------------------------------------
-# Historical snapshots (trend over time) — the dashboard's OWN file
-# ------------------------------------------------------------
-# Kept in a separate SQLite file (its own dashboard-history git branch)
-# rather than inside either bot's live state file, so this script never
-# risks a write conflict with a bot's own save-state step. A `mode`
-# column distinguishes spot rows from futures rows within the one file.
+# ML Data Readiness (absorbed from ml_feature_export.py's summary)
 # ----------------------------------------------------------------------
 
-SNAPSHOT_HISTORY_LIMIT = 180  # ~ a couple weeks of 3-hourly snapshots per
-                               # mode — plenty for a trend chart without
-                               # the file growing unbounded forever.
+ML_MIN_FOR_MODEL = 100
+ML_HEALTH_CHECK_KEYS = ["rsi_14", "btc_rsi_14", "ema_20"]
+
+
+def fetch_ml_readiness(db_path: str):
+    """Reads entry_context custom_data rows to summarize how much labeled
+    training data has accumulated — the dashboard-card version of what
+    ml_feature_export.py's --telegram summary used to print. The full
+    per-row CSV export itself is unchanged and stays a separate script,
+    since a downloadable file isn't something an HTML card can replace."""
+    result = {
+        "available": False,
+        "n_trades_with_data": 0,
+        "n_closed": 0,
+        "n_open": 0,
+        "feature_health": {},
+        "per_tag": [],  # [(tag, n_closed, n_total), ...]
+    }
+    if not db_path:
+        return result
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT cd.ft_trade_id, cd.cd_value, t.enter_tag, t.is_open
+            FROM trade_custom_data cd
+            JOIN trades t ON t.id = cd.ft_trade_id
+            WHERE cd.cd_key = 'entry_context'
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+    except sqlite3.OperationalError as e:
+        print(f"  (could not read trade_custom_data for ML readiness: {e})")
+        return result
+    finally:
+        conn.close()
+
+    if not rows:
+        return result
+
+    result["available"] = True
+    parsed = []
+    for r in rows:
+        try:
+            snapshot = json.loads(r["cd_value"])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(snapshot, dict):
+            continue
+        parsed.append({
+            "trade_id": r["ft_trade_id"],
+            "enter_tag": r["enter_tag"],
+            "is_open": bool(r["is_open"]),
+            **snapshot,
+        })
+
+    result["n_trades_with_data"] = len({p["trade_id"] for p in parsed})
+    closed = [p for p in parsed if not p["is_open"]]
+    open_ = [p for p in parsed if p["is_open"]]
+    result["n_closed"] = len(closed)
+    result["n_open"] = len(open_)
+
+    for key in ML_HEALTH_CHECK_KEYS:
+        present = [p for p in parsed if key in p]
+        if not present:
+            result["feature_health"][key] = None  # missing column entirely
+        else:
+            non_null = sum(1 for p in present if p[key] is not None)
+            result["feature_health"][key] = (non_null / len(parsed)) * 100 if parsed else 0
+
+    by_tag = defaultdict(lambda: [0, 0])  # tag -> [n_closed, n_total]
+    for p in parsed:
+        tag = p["enter_tag"]
+        by_tag[tag][1] += 1
+        if not p["is_open"]:
+            by_tag[tag][0] += 1
+    result["per_tag"] = sorted(
+        [(tag, n[0], n[1]) for tag, n in by_tag.items()],
+        key=lambda x: -x[2],
+    )
+
+    return result
+
+
+def build_ml_readiness_html(readiness: dict):
+    if not readiness["available"]:
+        return """
+    <div class="card">
+      <h3>🧠 ML Data Readiness</h3>
+      <p class="muted">No entry_context rows yet — this means no trade has opened since the
+      strategy's ml_snapshot logging was deployed. Data starts accumulating from the next
+      new trade onward; existing trades from before the change won't have it retroactively.</p>
+    </div>"""
+
+    n_closed = readiness["n_closed"]
+    progress_note = (
+        f"{n_closed}/{ML_MIN_FOR_MODEL} — below the minimum sample size before any model "
+        f"trained on this would be meaningful."
+        if n_closed < ML_MIN_FOR_MODEL else
+        f"{n_closed} — at/above the {ML_MIN_FOR_MODEL} minimum discussed earlier. "
+        f"Worth revisiting whether meta-labeling is viable."
+    )
+
+    health_rows = ""
+    for key, pct in readiness["feature_health"].items():
+        if pct is None:
+            health_rows += f'<tr><td>{key}</td><td class="profit-neg">MISSING COLUMN</td></tr>'
+        else:
+            cls = "profit-pos" if pct >= 95 else ("profit-neg" if pct < 50 else "")
+            health_rows += f'<tr><td>{key}</td><td class="{cls}">{pct:.0f}%</td></tr>'
+
+    tag_rows = ""
+    for tag, n_closed_tag, n_total in readiness["per_tag"][:12]:
+        tag_rows += f'<tr><td>{esc(str(tag))}</td><td>{n_closed_tag}/{n_total}</td></tr>'
+
+    return f"""
+    <div class="card">
+      <h3>🧠 ML Data Readiness <span class="muted" style="font-weight:400;font-size:0.75rem;">— labeled feature data logged via entry_context/ml_snapshot custom_data</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Trades With Logged Features</div>
+          <div class="value">{readiness['n_trades_with_data']}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Labeled (Closed)</div>
+          <div class="value">{n_closed}</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">{progress_note}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unlabeled (Open)</div>
+          <div class="value">{readiness['n_open']}</div>
+        </div>
+      </div>
+      <div class="two-col" style="margin-top:16px;">
+        <div>
+          <p class="muted" style="font-size:0.8rem;margin-bottom:4px;">Feature health check (non-null rate)</p>
+          <table><tr><th>Feature</th><th>Coverage</th></tr>{health_rows}</table>
+        </div>
+        <div>
+          <p class="muted" style="font-size:0.8rem;margin-bottom:4px;">By enter_tag (closed / total logged)</p>
+          <table><tr><th>Tag</th><th>Closed/Total</th></tr>{tag_rows if tag_rows else '<tr><td colspan="2" class="muted">No data</td></tr>'}</table>
+        </div>
+      </div>
+    </div>"""
+
+
+# ----------------------------------------------------------------------
+# Duration/Clustering/DCA diagnostics (absorbed from signal_deep_stats.py)
+# ----------------------------------------------------------------------
+
+def build_duration_outcome_html(closed_with_profit):
+    n = len(closed_with_profit)
+    if n < 3:
+        return """
+    <div class="card">
+      <h3>Duration vs Outcome</h3>
+      <p class="muted">Not enough closed trades with duration data yet.</p>
+    </div>"""
+
+    durs = np.array([duration_days(t["open_date"], t["close_date"]) * 24 for t in closed_with_profit])
+    profits = np.array([float(t["close_profit"]) for t in closed_with_profit])
+    corr = float(np.corrcoef(durs, profits)[0, 1])
+
+    if corr < -0.3:
+        note = ("Negative correlation: trades that stayed open longer tended to profit less — "
+                "consistent with slow-closing trades sitting in unusually weak territory.")
+    elif corr > 0.3:
+        note = "Positive correlation: longer-held trades actually did better — patience has paid off so far."
+    else:
+        note = "No strong linear relationship between duration and outcome — duration alone isn't a reliable signal here."
+
+    fastest = ", ".join(f"{d:.1f}h" for d in np.sort(durs)[:3])
+    slowest = ", ".join(f"{d:.1f}h" for d in np.sort(durs)[-3:])
+
+    return f"""
+    <div class="card">
+      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across {n} closed trades</span></h3>
+      <p>Correlation(duration, profit): <b>{corr:+.3f}</b></p>
+      <p class="muted" style="font-size:0.85rem;">{note}</p>
+      <p style="font-size:0.85rem;">Fastest closes: {fastest} &nbsp;|&nbsp; Slowest closes: {slowest}</p>
+    </div>"""
+
+
+def build_time_clustering_html(open_trades):
+    dated = [(t["pair"], t["open_date"]) for t in open_trades if t["open_date"]]
+    dated.sort(key=lambda x: x[1])
+    if len(dated) < 2:
+        return """
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <p class="muted">Not enough open trades to check clustering.</p>
+    </div>"""
+
+    gaps_hours = [
+        (dated[i][1] - dated[i - 1][1]).total_seconds() / 3600.0
+        for i in range(1, len(dated))
+    ]
+    tight = [g for g in gaps_hours if g < 6]
+
+    rows = "".join(f"<tr><td>{esc(pair)}</td><td>{fmt_dt(d)}</td></tr>" for pair, d in dated)
+
+    if tight:
+        note = (f"{len(tight)} gap(s) under 6h — suggests a cluster of entries fired off the same "
+                f"short-lived market condition. If those clustered trades are underwater together, "
+                f"that's more likely one correlated market move than {len(tight)} independent failures.")
+    else:
+        note = "Opens are spread out — no clustered entry burst; each trade was an independent signal."
+
+    return f"""
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <div class="table-scroll"><table><tr><th>Pair</th><th>Opened</th></tr>{rows}</table></div>
+      <p class="muted" style="font-size:0.85rem;margin-top:8px;">{note}</p>
+    </div>"""
+
+
+def build_dca_activity_html(open_trades, fills_by_trade):
+    if not fills_by_trade:
+        return """
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <p class="muted">Orders table not available/readable this run — skipped.</p>
+    </div>"""
+
+    rows = ""
+    for t in open_trades:
+        fills = fills_by_trade.get(t["id"], [])
+        n_extra = max(0, len(fills) - 1)
+        note = (
+            "still on original entry; rebuy logic hasn't triggered yet"
+            if n_extra == 0 else ""
+        )
+        rows += f"<tr><td>{esc(t['pair'])}</td><td>{len(fills)}</td><td>{n_extra}</td><td class=\"muted\">{note}</td></tr>"
+
+    return f"""
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <div class="table-scroll">
+      <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
+      {rows if rows else '<tr><td colspan="4" class="muted">No open trades</td></tr>'}
+      </table>
+      </div>
+    </div>"""
+
+
+# ----------------------------------------------------------------------
+# Historical snapshots (trend over time) — the dashboard's OWN file
+# ----------------------------------------------------------------------
+
+SNAPSHOT_HISTORY_LIMIT = 180
 
 
 def ensure_snapshot_table(conn):
@@ -207,9 +478,6 @@ def ensure_snapshot_table(conn):
 
 
 def fetch_snapshot_history(history_db_path: str, mode_id: str, limit: int = SNAPSHOT_HISTORY_LIMIT):
-    """Past dashboard runs for this mode, oldest first, for the trend
-    chart. Returns [] (never raises) if the history file/table doesn't
-    exist yet — e.g. the very first run after deploying this feature."""
     try:
         conn = sqlite3.connect(history_db_path)
         conn.row_factory = sqlite3.Row
@@ -239,9 +507,6 @@ def fetch_snapshot_history(history_db_path: str, mode_id: str, limit: int = SNAP
 
 
 def record_snapshot(history_db_path: str, mode_id: str, metrics: dict):
-    """Appends one row for this run/mode. Failures here must never take
-    down dashboard generation — the dashboard itself matters far more
-    than the trend chart having an unbroken history."""
     try:
         conn = sqlite3.connect(history_db_path)
     except Exception as e:
@@ -268,6 +533,15 @@ def record_snapshot(history_db_path: str, mode_id: str, metrics: dict):
         conn.close()
 
 
+def binomial_test_two_sided(k: int, n: int, p: float = 0.5) -> float:
+    from math import comb
+    def pmf(x):
+        return comb(n, x) * (p ** x) * ((1 - p) ** (n - x))
+    obs_p = pmf(k)
+    total = sum(pmf(x) for x in range(n + 1) if pmf(x) <= obs_p + 1e-12)
+    return min(1.0, total)
+
+
 def bootstrap_ci(profits: np.ndarray, n_boot: int = 10000, alpha: float = 0.05):
     n = len(profits)
     rng = np.random.default_rng(42)
@@ -280,32 +554,14 @@ def bootstrap_ci(profits: np.ndarray, n_boot: int = 10000, alpha: float = 0.05):
 
 
 # ----------------------------------------------------------------------
-# Capital efficiency (opportunity cost of locked-up slots)
-# ------------------------------------------------------------
-# "Total profit" on its own hides how long capital sat idle to earn it.
-# A trade that ties up a slot for 5 days to make +0.1% is a much worse
-# use of capital than one that makes +0.1% in 10 minutes and frees the
-# slot for the next signal. These helpers turn profit + duration into
-# a single comparable rate, and flag trades whose slot has been stuck
-# far longer than the strategy's typical hold time.
+# Capital efficiency
 # ----------------------------------------------------------------------
 
-STUCK_MULTIPLIER = 5    # flag an open trade as "stuck" once its age exceeds
-                         # this many multiples of the median closed-trade
-                         # holding time (falls back to a flat 2-day cutoff
-                         # when there isn't enough closed-trade history yet).
-STUCK_HARD_CAP_DAYS = 3  # ...but never let one slow outlier in the closed
-                          # history push the threshold above this, or a
-                          # single long-but-legitimate trade could mask a
-                          # genuinely stuck one with too little data.
+STUCK_MULTIPLIER = 5
+STUCK_HARD_CAP_DAYS = 3
 
 
 def to_aware_utc(dt):
-    """Postgres can hand back naive or aware datetimes depending on the
-    column type, and this script mixes values from several queries
-    (trades.open_date, orders.order_filled_date, datetime.now()) — so
-    every datetime gets normalized here rather than trusting call sites
-    to do it consistently."""
     if dt is None:
         return None
     if dt.tzinfo is None:
@@ -329,31 +585,13 @@ def to_float(x, default=0.0):
         return default
 
 
-# Tag-family ranges, confirmed from NostalgiaForInfinityX7.py's own
-# long_*_mode_tags lists. Purely cosmetic (labels a tag number with the
-# human-readable mode it belongs to) — never used for any calculation.
-# Futures-only short-side tags (501-671) are included too, since the
-# futures market can hold short positions the spot market never can.
 TAG_FAMILIES = [
-    (1, 13, "Normal"),
-    (21, 26, "Pump"),
-    (41, 53, "Quick"),
-    (61, 65, "Rebuy"),
-    (81, 82, "High Profit"),
-    (101, 110, "Rapid"),
-    (120, 120, "Grind"),
-    (121, 121, "BTC"),
-    (141, 145, "Top Coins"),
-    (161, 173, "Scalp"),
-    (501, 513, "Short Normal"),
-    (521, 526, "Short Pump"),
-    (541, 553, "Short Quick"),
-    (561, 565, "Short Rebuy"),
-    (581, 582, "Short High Profit"),
-    (601, 610, "Short Rapid"),
-    (620, 620, "Short Grind"),
-    (621, 621, "Short BTC"),
-    (641, 645, "Short Top Coins"),
+    (1, 13, "Normal"), (21, 26, "Pump"), (41, 53, "Quick"), (61, 65, "Rebuy"),
+    (81, 82, "High Profit"), (101, 110, "Rapid"), (120, 120, "Grind"), (121, 121, "BTC"),
+    (141, 145, "Top Coins"), (161, 173, "Scalp"),
+    (501, 513, "Short Normal"), (521, 526, "Short Pump"), (541, 553, "Short Quick"),
+    (561, 565, "Short Rebuy"), (581, 582, "Short High Profit"), (601, 610, "Short Rapid"),
+    (620, 620, "Short Grind"), (621, 621, "Short BTC"), (641, 645, "Short Top Coins"),
     (661, 673, "Short Scalp"),
 ]
 
@@ -401,7 +639,7 @@ def fmt_pct(x, signed=True):
 def annualized(rate_per_day):
     if rate_per_day is None:
         return None
-    return rate_per_day * 365 * 100  # simple (non-compounded) extrapolation, illustrative only
+    return rate_per_day * 365 * 100
 
 
 PAGE_STYLES = """
@@ -451,19 +689,8 @@ PAGE_STYLES = """
 """
 
 
-def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot_history,
-                        mode_id, mode_title, market_note):
-    """Builds the full report for ONE market (spot or futures): every
-    card/table/chart this dashboard has always had. mode_id ('spot' /
-    'futures') suffixes every canvas element id so both sections' charts
-    can coexist on the same combined page without id collisions.
-
-    Returns a dict: {section_html, section_js, current_snapshot, compare}
-    — section_html/section_js get concatenated into the combined page by
-    build_combined_html(); current_snapshot is what main() persists via
-    record_snapshot(); compare is the small set of numbers used in the
-    top-of-page Spot vs Futures comparison bar.
-    """
+def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_readiness,
+                        portfolio_cfg, snapshot_history, mode_id, mode_title, market_note):
     open_trades = [t for t in trades if t["is_open"]]
     closed_trades = [t for t in trades if not t["is_open"]]
     closed_with_profit = [t for t in closed_trades if t["close_profit"] is not None]
@@ -472,7 +699,6 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
     wins = int((profits > 0).sum()) if n else 0
     win_rate = wins / n if n else 0
 
-    # Equity curve (cumulative profit % over closed trades, in order)
     equity_labels = []
     equity_values = []
     cum = 0.0
@@ -481,7 +707,6 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
         equity_labels.append(fmt_dt(t["close_date"]))
         equity_values.append(round(cum, 3))
 
-    # Per-pair breakdown
     pair_stats = {}
     for t in closed_with_profit:
         pair_stats.setdefault(t["pair"], []).append(float(t["close_profit"]))
@@ -491,7 +716,6 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
         w = int((arr > 0).sum())
         pair_rows.append((pair, len(arr), w / len(arr), arr.mean()))
 
-    # Tag-family breakdown (closed trades)
     open_tag_set = {str(t["enter_tag"]) for t in open_trades if t["enter_tag"] is not None}
     tag_stats = {}
     for t in closed_with_profit:
@@ -502,7 +726,6 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
         w = int((arr > 0).sum())
         tag_rows.append((tag, len(arr), w / len(arr), arr.mean(), arr.sum(), tag in open_tag_set))
 
-    # Exit reason breakdown
     reason_counts = {}
     for t in closed_trades:
         r = t["exit_reason"] or "unknown"
@@ -510,7 +733,6 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
     reason_labels = list(reason_counts.keys())
     reason_values = [reason_counts[k] for k in reason_labels]
 
-    # Significance
     if n >= 8:
         p_value = binomial_test_two_sided(wins, n, 0.5)
         lo, hi = bootstrap_ci(profits)
@@ -531,7 +753,6 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
           <p>⚠️ Only {n} closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
         </div>"""
 
-    # --- Capital efficiency: closed trades ---
     closed_capital_days = 0.0
     for t in closed_with_profit:
         fills = entry_fills.get(t["id"])
@@ -552,7 +773,6 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
     else:
         stuck_threshold_days = 2.0
 
-    # --- Capital efficiency: open trades (unrealized) ---
     now_utc = datetime.now(timezone.utc)
     open_unrealized_abs_total = 0.0
     open_capital_days = 0.0
@@ -675,11 +895,9 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
-        fill (so a trade that grew from 100 → 500 USDT over several rebuys is charged the
-        smaller amount for its early days, not its final size for the whole holding period).
-        This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be compared
-        fairly, and it's why "Total Profit" alone can look fine while several slots are
-        quietly stuck.
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck.
       </p>
     </div>"""
 
@@ -747,11 +965,14 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
 
     total_profit_abs = sum(float(t["close_profit_abs"] or 0) for t in closed_with_profit)
 
-    # Canvas ids are suffixed per-mode so both sections' Chart.js
-    # instances can coexist on the same combined page.
     eq_id = f"equityChart_{mode_id}"
     reason_id = f"reasonChart_{mode_id}"
     trend_id = f"trendChart_{mode_id}"
+
+    duration_outcome_html = build_duration_outcome_html(closed_with_profit)
+    time_clustering_html = build_time_clustering_html(open_trades)
+    dca_activity_html = build_dca_activity_html(open_trades, fills_by_trade)
+    ml_readiness_html = build_ml_readiness_html(ml_readiness)
 
     section_html = f"""
 <h2 class="market-heading">{mode_title}</h2>
@@ -787,6 +1008,14 @@ def build_mode_section(trades, live_prices, entry_fills, portfolio_cfg, snapshot
 </div>
 
 {sig_html}
+
+{duration_outcome_html}
+
+{time_clustering_html}
+
+{dca_activity_html}
+
+{ml_readiness_html}
 
 <div class="card">
   <h3>Open Trades ({len(open_trades)})</h3>
@@ -921,9 +1150,6 @@ new Chart(document.getElementById('{trend_id}'), {{
 
 
 def build_comparison_bar_html(spot_compare, futures_compare):
-    """Top-of-page 'Spot vs Futures' quick comparison — the whole reason
-    for combining these onto one page instead of two separate ones."""
-
     def row(label, spot_val, fut_val):
         return f"<tr><td>{label}</td><td>{spot_val}</td><td>{fut_val}</td></tr>"
 
@@ -1012,11 +1238,6 @@ def build_combined_html(spot_bundle, futures_bundle, generated_at):
 
 
 def load_portfolio_config(config_path: str):
-    """Reads max_open_trades / dry_run_wallet straight from the bot's own
-    config so the dashboard never has these hardcoded and drifting out of
-    sync. Falls back to sane defaults if the file has moved, been
-    renamed, or the keys aren't there — never crashes the whole dashboard
-    generation over a cosmetic stat."""
     defaults = {"max_open_trades": 8, "dry_run_wallet": 1000.0}
     try:
         with open(config_path) as f:
@@ -1033,6 +1254,7 @@ def load_portfolio_config(config_path: str):
 def build_one_mode(sqlite_path, history_db_path, mode_id, mode_title, market_note, config_path,
                     live_price_exchange_id, live_price_ccxt_options):
     trades = fetch_trades(sqlite_path)
+    trades_by_id = {t["id"]: t for t in trades}
     open_pairs = list({t["pair"] for t in trades if t["is_open"]})
     print(f"[{mode_id}] Fetched {len(trades)} trade records from {sqlite_path} ({len(open_pairs)} open pairs).")
 
@@ -1040,13 +1262,15 @@ def build_one_mode(sqlite_path, history_db_path, mode_id, mode_title, market_not
         fetch_live_prices(open_pairs, live_price_exchange_id, live_price_ccxt_options)
         if open_pairs else {}
     )
-    entry_fills = fetch_entry_fills(sqlite_path, [t["id"] for t in trades])
+    all_fill_rows = fetch_entry_fills(sqlite_path, [t["id"] for t in trades])
+    entry_fills, fills_by_trade = build_fill_maps(all_fill_rows, trades_by_id)
+    ml_readiness = fetch_ml_readiness(sqlite_path)
     portfolio_cfg = load_portfolio_config(config_path)
     snapshot_history = fetch_snapshot_history(history_db_path, mode_id)
 
     bundle = build_mode_section(
-        trades, live_prices, entry_fills, portfolio_cfg, snapshot_history,
-        mode_id, mode_title, market_note,
+        trades, live_prices, entry_fills, fills_by_trade, ml_readiness,
+        portfolio_cfg, snapshot_history, mode_id, mode_title, market_note,
     )
     return bundle
 
@@ -1072,9 +1296,6 @@ def main(spot_sqlite_path: str, futures_sqlite_path: str, history_db_path: str, 
         f.write(html)
     print(f"Combined dashboard written to {output_path}")
 
-    # Both modes' new snapshot rows land in the SAME history file (distinct
-    # via the mode column) — the calling workflow commits this one file
-    # back to the dashboard-history branch after this script returns.
     record_snapshot(history_db_path, "spot", spot_bundle["current_snapshot"])
     record_snapshot(history_db_path, "futures", futures_bundle["current_snapshot"])
 
