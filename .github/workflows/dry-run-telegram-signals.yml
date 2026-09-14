@@ -10,21 +10,22 @@ name: NFI Dry-Run Telegram Signals
 #   NEXT run of this same workflow via the GitHub API, using the
 #   built-in GITHUB_TOKEN. concurrency.cancel-in-progress is FALSE, so
 #   the new run queues instead of killing this one.
-# - PERSISTENCE — CHANGED FROM POSTGRES TO LOCAL SQLITE + GIT STATE BRANCH:
-#   This used to point db_url at Supabase Postgres so open trades would
-#   survive each restart. That was abandoned after pg_stat_statements
-#   showed freqtrade's own internal polling/Telegram-RPC loop generates
-#   MILLIONS of tiny queries over the life of a long-running session
-#   (9M+ calls to a single COUNT query alone, observed over ~2 weeks) —
-#   harmless against a local file, but enough to blow through Supabase's
-#   free-tier egress quota (5GB/month) repeatedly.
-#   Now: freqtrade uses a local SQLite file (zero network egress for its
-#   hot polling loop). To survive each ~5h45m restart, this file is
-#   restored from — and saved back to — a dedicated git branch
-#   (`state-spot`) that holds nothing but that one file, force-pushed
-#   each cycle (so the branch never grows, just replaces its single
-#   commit). This costs no billed egress at all — it's a normal git
-#   push/fetch against GitHub itself.
+# - PERSISTENCE — LOCAL SQLITE + GIT STATE BRANCH (state-spot):
+#   freqtrade uses a local SQLite file (zero network egress for its hot
+#   polling loop). To survive each ~5h45m restart, this file is restored
+#   from — and saved back to — a dedicated git branch (`state-spot`)
+#   that holds nothing but that one file, force-pushed each cycle.
+#
+# FIX (2026-09-14): SQLite runs in WAL mode by default. Freshly written
+# trade rows can sit in the "-wal" side file and never make it into the
+# main .sqlite file if freqtrade doesn't fully checkpoint on shutdown.
+# The "Save SQLite state" step only ever copied the main .sqlite file,
+# so closed trades were silently lost from the persisted state even
+# though they existed in-memory / in the WAL file during the live run
+# (this was confirmed on the futures bot's identical setup — /profit,
+# /count, /status all showed zero trades despite real closed trades).
+# Fix: force a full WAL checkpoint into the main file right before
+# copying it.
 
 on:
   workflow_dispatch: {}
@@ -189,6 +190,13 @@ jobs:
             echo "No SQLite file found — freqtrade may have failed before creating it. Skipping state save."
             exit 0
           fi
+
+          echo "Forcing a full WAL checkpoint so all committed trade data is flushed into the main file..."
+          sqlite3 "$SQLITE_FILE" "PRAGMA wal_checkpoint(TRUNCATE);"
+
+          echo "Post-checkpoint sanity check — closed trade count in file about to be saved:"
+          sqlite3 "$SQLITE_FILE" "SELECT count(*) FROM trades WHERE is_open=0;"
+
           cp "$SQLITE_FILE" /tmp/state_backup_spot.sqlite
 
           git config user.name "github-actions[bot]"
