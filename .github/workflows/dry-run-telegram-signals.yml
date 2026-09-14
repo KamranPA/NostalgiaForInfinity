@@ -222,5 +222,5 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
-            -d text="❌ NFI dry-run workflow (run #${{ github.run_number }}) FAILED. Check GitHub Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d text="🟢 NFI SPOT (KuCoin) started — run #${{ github.run_number }} | dry-run | NostalgiaForInfinityX7 | 5m"
             > /dev/null
