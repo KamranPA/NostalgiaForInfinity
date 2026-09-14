@@ -5,27 +5,28 @@ name: NFI Dry-Run Telegram Signals
 # Architecture summary:
 # - dry_run: true in config_dryrun_telegram.json — NO real orders are ever
 #   placed, regardless of anything in this workflow.
-# - SELF-QUEUEING restart chain (unchanged from before): a couple minutes
-#   before this run's internal self-timeout expires, it dispatches the
-#   NEXT run of this same workflow via the GitHub API, using the
-#   built-in GITHUB_TOKEN. concurrency.cancel-in-progress is FALSE, so
-#   the new run queues instead of killing this one.
+# - SELF-QUEUEING restart chain: a couple minutes before this run's
+#   internal self-timeout expires, it dispatches the NEXT run of this
+#   same workflow via the GitHub API. concurrency.cancel-in-progress is
+#   FALSE, so the new run queues instead of killing this one.
 # - PERSISTENCE — LOCAL SQLITE + GIT STATE BRANCH (state-spot):
-#   freqtrade uses a local SQLite file (zero network egress for its hot
-#   polling loop). To survive each ~5h45m restart, this file is restored
-#   from — and saved back to — a dedicated git branch (`state-spot`)
-#   that holds nothing but that one file, force-pushed each cycle.
+#   freqtrade uses a local SQLite file. To survive each ~5h45m restart,
+#   this file is restored from — and saved back to — a dedicated git
+#   branch (`state-spot`).
+# - PERIODIC CHECKPOINT (added 2026-09-14): the full "Save SQLite state"
+#   step only runs once, at the very end of each ~5h45m session — so a
+#   trade opened mid-session was invisible to anything reading state-spot
+#   (like the dashboard) for up to ~5h45m. Now a background loop pushes a
+#   WAL-checkpointed copy of the live file to state-spot every hour WHILE
+#   freqtrade keeps running, using its own throwaway git clone (never
+#   touches this job's main checkout, so it can't disturb the running
+#   freqtrade process or its already-loaded strategy file).
 #
 # FIX (2026-09-14): SQLite runs in WAL mode by default. Freshly written
 # trade rows can sit in the "-wal" side file and never make it into the
 # main .sqlite file if freqtrade doesn't fully checkpoint on shutdown.
-# The "Save SQLite state" step only ever copied the main .sqlite file,
-# so closed trades were silently lost from the persisted state even
-# though they existed in-memory / in the WAL file during the live run
-# (this was confirmed on the futures bot's identical setup — /profit,
-# /count, /status all showed zero trades despite real closed trades).
-# Fix: force a full WAL checkpoint into the main file right before
-# copying it.
+# Both the periodic push above and the final "Save SQLite state" step
+# force a WAL checkpoint before copying, so this can't happen anymore.
 
 on:
   workflow_dispatch: {}
@@ -51,7 +52,7 @@ jobs:
         run: |
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
-            -d text="🔄 NFI dry-run workflow started (run #${{ github.run_number }}). Freqtrade is now installing/starting up...")
+            -d text="🟢 NFI SPOT (KuCoin) started — run #${{ github.run_number }} | dry-run | NostalgiaForInfinityX7 | 5m")
           echo "Telegram API response: $RESPONSE"
           if ! echo "$RESPONSE" | grep -q '"ok":true'; then
             echo "::warning::Telegram did not accept the message — check TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets."
@@ -67,7 +68,6 @@ jobs:
             exit 1
           fi
           echo "All required secrets are present (values not shown here for security)."
-          echo "(SUPABASE_DB_URL is no longer needed by this workflow — persistence is now local SQLite + git, see file header.)"
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -103,7 +103,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install freqtrade
-          # psycopg2-binary is no longer needed — db_url is local SQLite now.
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Prepare Freqtrade user_data layout
@@ -131,10 +130,12 @@ jobs:
           TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_URL: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
         run: |
           cd user_data/..
 
           SELF_TIMEOUT_SECONDS=$((5*3600 + 45*60))
+          CHECKPOINT_INTERVAL_SECONDS=3600   # hourly
 
           timeout --signal=TERM "${SELF_TIMEOUT_SECONDS}s" freqtrade trade \
             --config user_data/config.json \
@@ -153,6 +154,37 @@ jobs:
               -d "{\"ref\": \"${{ github.ref_name }}\"}"
           ) &
           QUEUE_PID=$!
+
+          # Periodic mid-session state push: keeps state-spot (and thus
+          # the dashboard) reasonably fresh instead of only updating once
+          # every ~5h45m. Uses its OWN throwaway git clone in /tmp so it
+          # never touches this job's main checkout/working tree — the
+          # running freqtrade process and its already-loaded files are
+          # completely unaffected by this.
+          (
+            SQLITE_FILE="user_data/tradesv3.dryrun.sqlite"
+            while true; do
+              sleep "$CHECKPOINT_INTERVAL_SECONDS"
+              if [ ! -f "$SQLITE_FILE" ]; then continue; fi
+              sqlite3 "$SQLITE_FILE" "PRAGMA wal_checkpoint(TRUNCATE);" || true
+              TMP_DIR=$(mktemp -d)
+              cp "$SQLITE_FILE" "$TMP_DIR/tradesv3.dryrun.sqlite"
+              (
+                cd "$TMP_DIR"
+                git init -q
+                git config user.name "github-actions[bot]"
+                git config user.email "github-actions[bot]@users.noreply.github.com"
+                git checkout -q -b state-spot
+                git add tradesv3.dryrun.sqlite
+                git commit -q -m "periodic checkpoint sync $(date -u +%Y-%m-%dT%H:%M:%SZ) run #${{ github.run_number }}"
+                git remote add origin "$REPO_URL"
+                git push -q origin state-spot --force
+              ) && echo "Periodic checkpoint pushed to state-spot at $(date -u)." \
+                || echo "::warning::Periodic checkpoint push failed (will retry next interval)."
+              rm -rf "$TMP_DIR"
+            done
+          ) &
+          CHECKPOINT_PID=$!
 
           external_cancel_handler() {
             echo "Received external termination signal — forwarding to freqtrade (PID $FREQTRADE_PID) for graceful shutdown..."
@@ -173,6 +205,7 @@ jobs:
           wait $FREQTRADE_PID || true
           kill $TAIL_PID 2>/dev/null || true
           kill $QUEUE_PID 2>/dev/null || true
+          kill $CHECKPOINT_PID 2>/dev/null || true
 
           echo "Planned self-restart: freqtrade ran for its allotted ${SELF_TIMEOUT_SECONDS}s and stopped on its own — this is expected, not a failure."
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
@@ -202,10 +235,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # A dedicated branch holding ONLY this one file, force-pushed
-          # each cycle — so it never grows, just replaces its single
-          # commit each time. This is the persistence mechanism that
-          # replaces Supabase Postgres (see file header).
           git checkout --orphan state-spot-tmp
           git rm -rf . > /dev/null 2>&1 || true
           cp /tmp/state_backup_spot.sqlite tradesv3.dryrun.sqlite
@@ -222,5 +251,5 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
-            -d text="🟢 NFI SPOT (KuCoin) started — run #${{ github.run_number }} | dry-run | NostalgiaForInfinityX7 | 5m"
+            -d text="❌ NFI dry-run workflow (run #${{ github.run_number }}) FAILED. Check GitHub Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             > /dev/null
