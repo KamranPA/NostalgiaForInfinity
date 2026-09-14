@@ -4,7 +4,11 @@ name: NFI ML Feature Export (daily summary)
 
 # Runs once a day and also stays available for manual runs from the
 # Actions tab. Cron times are UTC. 06:00 UTC here — change the minute/hour
-# below if you want a different time of day.
+# below if you want a different time of day. Reads directly from a bot's
+# own local SQLite file, restored from its git state branch (state-spot /
+# state-futures) — read-only. Runs once for spot and once for futures
+# (matrix), posting separate Telegram summaries.
+
 on:
   schedule:
     - cron: "0 6 * * *"
@@ -17,10 +21,23 @@ jobs:
   ml-feature-summary:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - mode: spot
+            state_branch: state-spot
+            sqlite_file: tradesv3.dryrun.sqlite
+            label: "🟢 SPOT"
+          - mode: futures
+            state_branch: state-futures
+            sqlite_file: tradesv3.dryrun_futures.sqlite
+            label: "🟣 FUTURES"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed to fetch the state branch below
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,19 +47,24 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install psycopg2-binary pandas
+          pip install pandas
+
+      - name: Fetch ${{ matrix.mode }} SQLite state
+        run: |
+          git fetch origin ${{ matrix.state_branch }}
+          git show origin/${{ matrix.state_branch }}:${{ matrix.sqlite_file }} > ${{ matrix.sqlite_file }}
+          sqlite3 ${{ matrix.sqlite_file }} "PRAGMA integrity_check;" > /dev/null
 
       - name: Run ML feature export and post summary to Telegram
         env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -e
-          SUMMARY=$(python ml_feature_export.py "$DB_URL" --telegram 2>&1)
+          SUMMARY=$(python ml_feature_export.py "${{ matrix.sqlite_file }}" --telegram 2>&1)
           echo "$SUMMARY"
 
-          MSG=$(printf '%s' "$SUMMARY")
+          MSG=$(printf '${{ matrix.label }}\n%s' "$SUMMARY")
 
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${CHAT_ID}" \
