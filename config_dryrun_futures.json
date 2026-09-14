@@ -113,7 +113,7 @@
       ]
     ],
     "notification_settings": {
-      "status": "on",
+      "status": "off",
       "warning": "on",
       "startup": "on",
       "entry": "on",
