@@ -1,84 +1,95 @@
 """
 signal_deep_stats.py
 
-Extends signal_stats.py with deeper diagnostics aimed specifically at the
-questions raised while reviewing the open trades (KAITO/SUI/ADA/AKE/MOVR):
+Extends signal_stats.py with deeper diagnostics: enter-tag performance,
+open-vs-closed tag comparison, duration-vs-outcome correlation, time
+clustering of open trades, and DCA/rebuy fill activity.
 
-  1. Enter-tag performance breakdown (closed trades) — are certain entry
-     conditions (e.g. "rebuy_*", "normal_*", tag 144, 163...) systematically
-     stronger or weaker than others?
-  2. Enter-tag distribution of OPEN trades vs CLOSED trades — are the
-     currently-stuck trades disproportionately using tags that historically
-     underperform?
-  3. Duration vs outcome — do trades that stay open longer tend to be
-     losers? (fast closes vs slow closes)
-  4. Time-clustering of open trades — did several of the currently-open
-     losers get opened within the same narrow window, suggesting a single
-     correlated market move rather than independent, unrelated signals?
-  5. DCA/rebuy activity on currently open trades — has averaging-in
-     actually triggered on the stuck trades, based on the `orders` table
-     (if present) — helps tell "strategy hasn't needed to react yet" apart
-     from "strategy's rebuy logic isn't kicking in as expected".
+ARCHITECTURE NOTE (post-SQLite-migration): reads a single local SQLite
+file — one of the two bots' persisted state (tradesv3.dryrun.sqlite for
+spot, tradesv3.dryrun_futures.sqlite for futures). Call this once per
+bot if you want diagnostics for both.
 
 This script is READ-ONLY. It never writes to the database or the exchange.
 
 Usage:
-    pip install psycopg2-binary numpy --break-system-packages
-    python signal_deep_stats.py "<postgres-connection-string>"
+    python signal_deep_stats.py <sqlite_file_path>
 """
 
 import sys
+import sqlite3
 from datetime import datetime, timezone
 from collections import defaultdict
 
 import numpy as np
-
-try:
-    import psycopg2
-    import psycopg2.extras
-except ImportError:
-    print("Missing dependency. Install with: pip install psycopg2-binary --break-system-packages")
-    sys.exit(1)
 
 
 # ----------------------------------------------------------------------
 # Data fetching
 # ----------------------------------------------------------------------
 
-def fetch_trades(db_url: str):
-    conn = psycopg2.connect(db_url)
+def parse_sqlite_datetime(value):
+    """freqtrade/SQLAlchemy stores datetimes in SQLite as plain text —
+    sqlite3 hands these back as raw strings, not datetime objects, so
+    every date column needs to go through this before any arithmetic."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT id, pair, is_open, enter_tag, exit_reason,
-                       open_date, close_date, open_rate, close_rate,
-                       amount, stake_amount, close_profit, close_profit_abs
-                FROM trades
-                ORDER BY open_date ASC
-            """)
-            return cur.fetchall()
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def fetch_trades(db_path: str):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, pair, is_open, enter_tag, exit_reason,
+                   open_date, close_date, open_rate, close_rate,
+                   amount, stake_amount, close_profit, close_profit_abs
+            FROM trades
+            ORDER BY open_date ASC
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
 
+    for r in rows:
+        r["is_open"] = bool(r["is_open"])
+        r["open_date"] = parse_sqlite_datetime(r["open_date"])
+        r["close_date"] = parse_sqlite_datetime(r["close_date"])
+    return rows
 
-def fetch_orders(db_url: str, trade_ids):
+
+def fetch_orders(db_path: str, trade_ids):
     """Best-effort: freqtrade's `orders` table logs every fill, including
     DCA/rebuy fills. If the table/columns differ in this deployment, this
     degrades gracefully and DCA analysis is simply skipped."""
     if not trade_ids:
         return {}
-    conn = psycopg2.connect(db_url)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT ft_trade_id AS trade_id, ft_order_side, order_filled_date,
-                       average, filled
-                FROM orders
-                WHERE ft_trade_id = ANY(%s)
-                ORDER BY ft_trade_id, order_filled_date ASC
-            """, (list(trade_ids),))
-            rows = cur.fetchall()
-    except Exception as e:
+        placeholders = ",".join("?" * len(trade_ids))
+        cur = conn.cursor()
+        cur.execute(f"""
+            SELECT ft_trade_id AS trade_id, ft_order_side, order_filled_date,
+                   average, filled
+            FROM orders
+            WHERE ft_trade_id IN ({placeholders})
+            ORDER BY ft_trade_id, order_filled_date ASC
+        """, list(trade_ids))
+        rows = [dict(r) for r in cur.fetchall()]
+    except sqlite3.OperationalError as e:
         print(f"(Skipping DCA/rebuy analysis — could not read `orders` table: {e})\n")
         return {}
     finally:
@@ -86,6 +97,7 @@ def fetch_orders(db_url: str, trade_ids):
 
     by_trade = defaultdict(list)
     for r in rows:
+        r["order_filled_date"] = parse_sqlite_datetime(r["order_filled_date"])
         by_trade[r["trade_id"]].append(r)
     return by_trade
 
@@ -259,10 +271,12 @@ def section_dca_activity(open_trades, orders_by_trade):
 
     for t in open_trades:
         fills = orders_by_trade.get(t["id"], [])
-        # These are long-only spot trades, so entry fills are 'buy' orders
-        # (ft_is_entry isn't a real DB column — it's computed in freqtrade
-        # from ft_order_side == trade.entry_side, which is 'buy' for longs).
-        entries = [f for f in fills if f.get("ft_order_side") == "buy"]
+        # These bots can be long or short (spot=long-only, futures=both),
+        # so "entry" fills are whichever side matches the trade's own
+        # entry direction — ft_order_side == 'buy' for longs, 'sell' for
+        # shorts. We approximate using is_short if present, else 'buy'.
+        entry_side = "sell" if t.get("is_short") else "buy"
+        entries = [f for f in fills if f.get("ft_order_side") == entry_side]
         n_extra = max(0, len(entries) - 1)
         print(f"  {t['pair']:14s} total entry fills={len(entries)}  "
               f"extra DCA/rebuy fills={n_extra}")
@@ -280,9 +294,9 @@ def section_dca_activity(open_trades, orders_by_trade):
 OPEN_TAGS = set()
 
 
-def analyze(db_url: str):
+def analyze(db_path: str):
     global OPEN_TAGS
-    trades = fetch_trades(db_url)
+    trades = fetch_trades(db_path)
     if not trades:
         print("No trades found in the database yet — nothing to analyze.")
         return
@@ -291,7 +305,7 @@ def analyze(db_url: str):
     closed = [t for t in trades if not t["is_open"]]
     OPEN_TAGS = {base_tag_family(t["enter_tag"]) for t in open_trades}
 
-    print("NFI Dry-Run — Deep Signal Diagnostics")
+    print(f"NFI Dry-Run — Deep Signal Diagnostics ({db_path})")
     print(f"open={len(open_trades)}  closed={len(closed)}\n")
 
     section_tag_performance(closed)
@@ -299,7 +313,7 @@ def analyze(db_url: str):
     section_duration_vs_outcome(closed)
     section_time_clustering(open_trades)
 
-    orders_by_trade = fetch_orders(db_url, [t["id"] for t in open_trades])
+    orders_by_trade = fetch_orders(db_path, [t["id"] for t in open_trades])
     section_dca_activity(open_trades, orders_by_trade)
 
     print("=" * 70)
