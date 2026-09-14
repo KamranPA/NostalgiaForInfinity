@@ -19,7 +19,7 @@ name: NFI Dashboard
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "0 */1 * * *"   # every 3 hours
+    - cron: "0 */1 * * *"   # every hour
 
 permissions:
   contents: write   # needed to commit the updated dashboard-history file back
