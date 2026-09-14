@@ -56,7 +56,7 @@
 <body>
 
 <h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
-<div class="subtitle">Generated 2026-09-14 04:05:02 UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
+<div class="subtitle">Generated 2026-09-14 06:43:06 UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
 
 
 <div class="card">
@@ -122,11 +122,9 @@
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
-        fill (so a trade that grew from 100 → 500 USDT over several rebuys is charged the
-        smaller amount for its early days, not its final size for the whole holding period).
-        This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be compared
-        fairly, and it's why "Total Profit" alone can look fine while several slots are
-        quietly stuck.
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck.
       </p>
     </div>
 
@@ -168,6 +166,32 @@
           <h3>Statistical Significance</h3>
           <p>⚠️ Only 0 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
         </div>
+
+
+    <div class="card">
+      <h3>Duration vs Outcome</h3>
+      <p class="muted">Not enough closed trades with duration data yet.</p>
+    </div>
+
+
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <p class="muted">Not enough open trades to check clustering.</p>
+    </div>
+
+
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <p class="muted">Orders table not available/readable this run — skipped.</p>
+    </div>
+
+
+    <div class="card">
+      <h3>🧠 ML Data Readiness</h3>
+      <p class="muted">No entry_context rows yet — this means no trade has opened since the
+      strategy's ml_snapshot logging was deployed. Data starts accumulating from the next
+      new trade onward; existing trades from before the change won't have it retroactively.</p>
+    </div>
 
 <div class="card">
   <h3>Open Trades (0)</h3>
@@ -258,11 +282,9 @@
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
-        fill (so a trade that grew from 100 → 500 USDT over several rebuys is charged the
-        smaller amount for its early days, not its final size for the whole holding period).
-        This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be compared
-        fairly, and it's why "Total Profit" alone can look fine while several slots are
-        quietly stuck.
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck.
       </p>
     </div>
 
@@ -304,6 +326,32 @@
           <h3>Statistical Significance</h3>
           <p>⚠️ Only 0 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
         </div>
+
+
+    <div class="card">
+      <h3>Duration vs Outcome</h3>
+      <p class="muted">Not enough closed trades with duration data yet.</p>
+    </div>
+
+
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <p class="muted">Not enough open trades to check clustering.</p>
+    </div>
+
+
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <p class="muted">Orders table not available/readable this run — skipped.</p>
+    </div>
+
+
+    <div class="card">
+      <h3>🧠 ML Data Readiness</h3>
+      <p class="muted">No entry_context rows yet — this means no trade has opened since the
+      strategy's ml_snapshot logging was deployed. Data starts accumulating from the next
+      new trade onward; existing trades from before the change won't have it retroactively.</p>
+    </div>
 
 <div class="card">
   <h3>Open Trades (0)</h3>
@@ -392,17 +440,17 @@ new Chart(document.getElementById('reasonChart_spot'), {
 new Chart(document.getElementById('trendChart_spot'), {
   type: 'bar',
   data: {
-    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05"],
+    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05", "09-14 06:43"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
@@ -462,17 +510,17 @@ new Chart(document.getElementById('reasonChart_futures'), {
 new Chart(document.getElementById('trendChart_futures'), {
   type: 'bar',
   data: {
-    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05"],
+    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05", "09-14 06:43"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
