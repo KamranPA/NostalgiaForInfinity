@@ -1,0 +1,12 @@
+name: Debug SQLite
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: state-futures
+      - run: |
+          ls -la
+          sqlite3 *.sqlite "SELECT id,pair,close_profit,is_open FROM trades;"
