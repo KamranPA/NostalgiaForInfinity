@@ -113,9 +113,9 @@
       ]
     ],
     "notification_settings": {
-      "status": "off",
+      "status": "on",
       "warning": "on",
-      "startup": "on",
+      "startup": "off",
       "entry": "on",
       "entry_fill": "on",
       "entry_cancel": "on",
