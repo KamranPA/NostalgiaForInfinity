@@ -2,7 +2,11 @@
 generate_dashboard.py
 
 Builds ONE combined, self-contained HTML dashboard covering BOTH the spot
-(KuCoin) and futures (OKX) dry-run bots side by side.
+and futures dry-run bots side by side. Both now run on OKX (spot switched
+from KuCoin on 2026-09-14 specifically so entry-signal timing/pairlist
+differences between the two bots trace back to spot-vs-futures mechanics
+alone, not to running on two different exchanges — this is what makes the
+new Signal Overlap analysis below meaningful).
 
 ARCHITECTURE (as of the SQLite migration):
 Both bots now persist their live trading state as a LOCAL SQLite file,
@@ -30,6 +34,12 @@ workflows):
     that belongs on an HTML page) — but its daily Telegram summary is
     now redundant with the new "ML Data Readiness" card added here, so
     that summary step can be dropped from the export workflow if desired.
+
+SIGNAL OVERLAP (added 2026-09-14): a new top-of-page card compares LONG
+entries between the two bots — same pair, same enter_tag, opened within
+a shared time window (default 15 min, both run the same 5m timeframe) —
+to answer "when spot signals, does futures signal too?" Futures-only
+short entries (tags 501-673) are excluded since spot has no short side.
 
 Usage:
     python generate_dashboard.py <spot_sqlite_path> <futures_sqlite_path> <history_sqlite_path> <output_html_path>
@@ -350,6 +360,129 @@ def build_ml_readiness_html(readiness: dict):
         </div>
       </div>
     </div>"""
+
+
+# ----------------------------------------------------------------------
+# Signal Overlap — Spot vs Futures (added 2026-09-14)
+# ----------------------------------------------------------------------
+# Both bots share the exact same populate_entry_trend() long-entry logic
+# and (as of the OKX switch) the same exchange, so if their pairlists and
+# price data line up, a long signal SHOULD often fire on both at once.
+# This answers "does it actually?" by matching trades on pair + enter_tag
+# with an open_date within a shared time window of each other.
+
+SIGNAL_OVERLAP_WINDOW_MINUTES = 15  # generous vs. the 5m timeframe, to
+                                     # absorb per-exchange candle-close
+                                     # timing jitter without over-matching
+
+
+def is_long_tag(enter_tag):
+    """Futures-only short tags are 501-673 (mirroring long tags 1-173) —
+    exclude those, since spot has no short side to compare against."""
+    try:
+        n = int(str(enter_tag).strip())
+    except (TypeError, ValueError):
+        return True  # unknown/non-numeric tags: don't exclude, just can't match well
+    return n < 500
+
+
+def compute_signal_overlap(spot_trades, futures_trades, window_minutes=SIGNAL_OVERLAP_WINDOW_MINUTES):
+    spot_long = [t for t in spot_trades if is_long_tag(t["enter_tag"]) and t["open_date"]]
+    fut_long = [t for t in futures_trades if is_long_tag(t["enter_tag"]) and not t["is_short"] and t["open_date"]]
+
+    window = window_minutes * 60  # seconds
+    fut_by_key = defaultdict(list)
+    for t in fut_long:
+        fut_by_key[(t["pair"], str(t["enter_tag"]))].append(t)
+
+    matched_pairs = []
+    spot_matched = 0
+    for s in spot_long:
+        key = (s["pair"], str(s["enter_tag"]))
+        candidates = fut_by_key.get(key, [])
+        best = None
+        best_gap = None
+        for f in candidates:
+            gap = abs((to_aware_utc(s["open_date"]) - to_aware_utc(f["open_date"])).total_seconds())
+            if gap <= window and (best_gap is None or gap < best_gap):
+                best, best_gap = f, gap
+        if best is not None:
+            spot_matched += 1
+            matched_pairs.append((s["pair"], s["enter_tag"], s["open_date"], best["open_date"], best_gap))
+
+    # Futures-side match count computed independently (a futures entry counts
+    # as matched if ANY spot entry on the same pair+tag falls in its window).
+    spot_by_key = defaultdict(list)
+    for t in spot_long:
+        spot_by_key[(t["pair"], str(t["enter_tag"]))].append(t)
+    futures_matched = 0
+    for f in fut_long:
+        key = (f["pair"], str(f["enter_tag"]))
+        for s in spot_by_key.get(key, []):
+            gap = abs((to_aware_utc(f["open_date"]) - to_aware_utc(s["open_date"])).total_seconds())
+            if gap <= window:
+                futures_matched += 1
+                break
+
+    return {
+        "n_spot_long": len(spot_long),
+        "n_futures_long": len(fut_long),
+        "spot_matched": spot_matched,
+        "futures_matched": futures_matched,
+        "matched_pairs": sorted(matched_pairs, key=lambda x: x[2] or datetime.min.replace(tzinfo=timezone.utc), reverse=True),
+        "window_minutes": window_minutes,
+    }
+
+
+def build_signal_overlap_html(overlap: dict):
+    n_spot = overlap["n_spot_long"]
+    n_fut = overlap["n_futures_long"]
+    if n_spot == 0 and n_fut == 0:
+        return """
+<div class="card">
+  <h3>🔗 Signal Overlap — Spot vs Futures (long entries)</h3>
+  <p class="muted">No long entries on either bot yet — nothing to compare.</p>
+</div>"""
+
+    spot_pct = (overlap["spot_matched"] / n_spot * 100) if n_spot else 0
+    fut_pct = (overlap["futures_matched"] / n_fut * 100) if n_fut else 0
+
+    rows = ""
+    for pair, tag, s_date, f_date, gap in overlap["matched_pairs"][:15]:
+        rows += f"""<tr>
+          <td>{esc(pair)}</td><td>{fmt_tag(tag)}</td>
+          <td>{fmt_dt(s_date)}</td><td>{fmt_dt(f_date)}</td>
+          <td>{gap/60:.1f}m</td>
+        </tr>"""
+
+    return f"""
+<div class="card">
+  <h3>🔗 Signal Overlap — Spot vs Futures (long entries) <span class="muted" style="font-weight:400;font-size:0.75rem;">— same pair + enter_tag, opened within {overlap['window_minutes']} min of each other</span></h3>
+  <div class="grid" style="margin-bottom:0;">
+    <div class="stat-card">
+      <div class="label">Spot Long Entries Matched</div>
+      <div class="value">{overlap['spot_matched']} / {n_spot}</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">{spot_pct:.0f}% also fired on futures</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Futures Long Entries Matched</div>
+      <div class="value">{overlap['futures_matched']} / {n_fut}</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">{fut_pct:.0f}% also fired on spot</div>
+    </div>
+  </div>
+  <div class="table-scroll" style="margin-top:16px;">
+  <table>
+    <tr><th>Pair</th><th>Tag</th><th>Spot Opened</th><th>Futures Opened</th><th>Gap</th></tr>
+    {rows if rows else '<tr><td colspan="5" class="muted">No matches yet</td></tr>'}
+  </table>
+  </div>
+  <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+    Both bots share the same long-entry logic and (as of the OKX switch) the same
+    exchange — a low match rate here points to pairlist divergence (different
+    volume-ranked top-100/130 sets) or per-exchange price/candle timing, not a
+    difference in the strategy's entry rules themselves.
+  </p>
+</div>"""
 
 
 # ----------------------------------------------------------------------
@@ -1198,7 +1331,7 @@ def build_comparison_bar_html(spot_compare, futures_compare):
 </div>"""
 
 
-def build_combined_html(spot_bundle, futures_bundle, generated_at):
+def build_combined_html(spot_bundle, futures_bundle, generated_at, signal_overlap_html):
     comparison_html = build_comparison_bar_html(spot_bundle["compare"], futures_bundle["compare"])
 
     html = f"""<!DOCTYPE html>
@@ -1218,6 +1351,8 @@ def build_combined_html(spot_bundle, futures_bundle, generated_at):
 <div class="subtitle">Generated {generated_at} UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
 
 {comparison_html}
+
+{signal_overlap_html}
 
 {spot_bundle['section_html']}
 
@@ -1272,15 +1407,16 @@ def build_one_mode(sqlite_path, history_db_path, mode_id, mode_title, market_not
         trades, live_prices, entry_fills, fills_by_trade, ml_readiness,
         portfolio_cfg, snapshot_history, mode_id, mode_title, market_note,
     )
+    bundle["trades"] = trades  # kept for cross-bot analyses (e.g. signal overlap) in main()
     return bundle
 
 
 def main(spot_sqlite_path: str, futures_sqlite_path: str, history_db_path: str, output_path: str):
     spot_bundle = build_one_mode(
-        spot_sqlite_path, history_db_path, "spot", "🟢 SPOT — KuCoin",
-        "KuCoin spot market · no leverage",
+        spot_sqlite_path, history_db_path, "spot", "🟢 SPOT — OKX",
+        "OKX spot market · no leverage",
         "config_dryrun_telegram.json",
-        live_price_exchange_id="kucoin", live_price_ccxt_options=None,
+        live_price_exchange_id="okx", live_price_ccxt_options=None,
     )
     futures_bundle = build_one_mode(
         futures_sqlite_path, history_db_path, "futures", "🟣 FUTURES — OKX",
@@ -1289,8 +1425,11 @@ def main(spot_sqlite_path: str, futures_sqlite_path: str, history_db_path: str, 
         live_price_exchange_id="okx", live_price_ccxt_options={"defaultType": "swap"},
     )
 
+    overlap = compute_signal_overlap(spot_bundle["trades"], futures_bundle["trades"])
+    signal_overlap_html = build_signal_overlap_html(overlap)
+
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    html = build_combined_html(spot_bundle, futures_bundle, generated_at)
+    html = build_combined_html(spot_bundle, futures_bundle, generated_at, signal_overlap_html)
 
     with open(output_path, "w") as f:
         f.write(html)
