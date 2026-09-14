@@ -1,49 +1,78 @@
 """
 signal_stats.py
 
-Connects directly to the same Postgres database (Supabase) that the NFI
-dry-run bot uses, and summarizes the REAL simulated trade history — not a
-backtest, the actual signals this specific bot has generated over time.
+Reads the SAME local SQLite file that one of the NFI dry-run bots
+(spot or futures) persists its state into, and summarizes the REAL
+simulated trade history — not a backtest, the actual signals this
+specific bot has generated over time.
+
+ARCHITECTURE NOTE (post-SQLite-migration): each bot has its OWN sqlite
+file (tradesv3.dryrun.sqlite for spot, tradesv3.dryrun_futures.sqlite
+for futures), persisted via its own git branch (state-spot /
+state-futures). This script takes ONE sqlite file path per run — call
+it once per bot if you want stats for both (see generate_dashboard.py
+for the pattern of running the same logic against both files in one
+workflow).
 
 Usage:
-    python signal_stats.py "<postgres-connection-string>"
+    python signal_stats.py <sqlite_file_path>
 
 Note on scope: this reads the `trades` table, which only contains orders
 that actually got INSERTED — i.e. entries that filled (or are still open).
-Entries that were cancelled before filling (like the DASH/USDT timeout
-case) never became a trade row, so they aren't counted here. This script
-answers "how did the trades that actually happened perform", not "how
-many signals were fired in total including ones that never filled".
+Entries that were cancelled before filling (like a timed-out limit order)
+never became a trade row, so they aren't counted here. This script answers
+"how did the trades that actually happened perform", not "how many signals
+were fired in total including ones that never filled".
 """
 
 import sys
+import sqlite3
 from datetime import datetime, timezone
 
 import numpy as np
 
-try:
-    import psycopg2
-    import psycopg2.extras
-except ImportError:
-    print("Missing dependency. Install with: pip install psycopg2-binary --break-system-packages")
-    sys.exit(1)
 
-
-def fetch_trades(db_url: str):
-    conn = psycopg2.connect(db_url)
+def parse_sqlite_datetime(value):
+    """freqtrade/SQLAlchemy stores datetimes in SQLite as plain text
+    (e.g. '2026-09-06 15:01:05.140768' or without the microseconds) —
+    sqlite3 hands these back as raw strings, not datetime objects, so
+    every date column needs to go through this."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT id, pair, is_open, enter_tag, exit_reason,
-                       open_date, close_date, open_rate, close_rate,
-                       amount, stake_amount, close_profit, close_profit_abs
-                FROM trades
-                ORDER BY open_date ASC
-            """)
-            rows = cur.fetchall()
-        return rows
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def fetch_trades(db_path: str):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, pair, is_open, enter_tag, exit_reason,
+                   open_date, close_date, open_rate, close_rate,
+                   amount, stake_amount, close_profit, close_profit_abs
+            FROM trades
+            ORDER BY open_date ASC
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
+
+    for r in rows:
+        r["is_open"] = bool(r["is_open"])
+        r["open_date"] = parse_sqlite_datetime(r["open_date"])
+        r["close_date"] = parse_sqlite_datetime(r["close_date"])
+    return rows
 
 
 def binomial_test_two_sided(k: int, n: int, p: float = 0.5) -> float:
@@ -76,8 +105,8 @@ def fmt_duration(open_date, close_date):
     return f"{total_min/60:.1f}h"
 
 
-def analyze(db_url: str):
-    trades = fetch_trades(db_url)
+def analyze(db_path: str):
+    trades = fetch_trades(db_path)
     n_total = len(trades)
 
     if n_total == 0:
@@ -87,7 +116,7 @@ def analyze(db_url: str):
     open_trades = [t for t in trades if t["is_open"]]
     closed_trades = [t for t in trades if not t["is_open"]]
 
-    print("=== NFI Dry-Run Signal Statistics (live from Supabase) ===\n")
+    print(f"=== NFI Dry-Run Signal Statistics (live from {db_path}) ===\n")
     print(f"Total trade records: {n_total}")
     print(f"  Open (in progress): {len(open_trades)}")
     print(f"  Closed:              {len(closed_trades)}\n")
