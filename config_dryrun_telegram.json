@@ -2,7 +2,8 @@
   "_COMMENT_FILE_PATH": "SAVE THIS FILE AS: config_dryrun_telegram.json — in the ROOT of your NostalgiaForInfinity repo (same folder as NostalgiaForInfinityX7.py, README.md, docker-compose.yml). NOT inside user_data/, NOT inside configs/.",
   "$schema": "https://schema.freqtrade.io/schema.json",
   "_COMMENT_purpose": "Dry-run only — no real orders are ever placed (dry_run: true). This simulates trades using live market data and sends Telegram notifications on every simulated entry/exit, exactly like real trading, but with zero capital at risk. Do not flip dry_run to false without a separate, deliberate review.",
-  "_COMMENT_restart_architecture": "This runs under a self-queueing GitHub Actions chain (~5h45m per session). db_url below IS the real, active connection (local SQLite) — freqtrade's internal polling/Telegram-RPC loop generates millions of tiny queries over time, which is fine against a local file but generates unsustainable network egress against a remote Postgres (confirmed via pg_stat_statements: 9M+ calls to a single COUNT query alone). The workflow now persists this SQLite file across restarts via a dedicated git branch (state-spot) instead of a remote database — see dry-run-telegram-signals.yml's restore/save steps.",
+  "_COMMENT_restart_architecture": "This runs under a self-queueing GitHub Actions chain (~5h45m per session), with a periodic hourly WAL-checkpoint+push in between so state doesn't wait a full session to sync (see dry-run-telegram-signals.yml). db_url below IS the real, active connection (local SQLite) — persisted across restarts via a dedicated git branch (state-spot).",
+  "_COMMENT_exchange_switch": "Switched from KuCoin to OKX on 2026-09-14 — SAME exchange as the futures bot now, specifically so the new dashboard 'Signal Overlap' analysis (does a spot long entry fire on futures too, and vice versa) isn't confounded by comparing two different exchanges' price/volume data. This was a deliberate reset of spot's dry-run history (minimal cost — under 2 days of data collected on KuCoin at the time of the switch).",
   "_COMMENT_position_adjustment": "NostalgiaForInfinityX7 requires position_adjustment_enable=true for its Grinding V2 and Buyback systems to function (per the strategy's own documentation) — without this, the strategy behaves in ways its author never intended/tested.",
   "trading_mode": "spot",
   "margin_mode": "",
@@ -22,9 +23,11 @@
     "exit": 30
   },
   "exchange": {
-    "name": "kucoin",
+    "name": "okx",
     "key": "",
     "secret": "",
+    "password": "",
+    "_COMMENT_password": "OKX's API requires a passphrase (the 'password' field) in addition to key/secret. Left empty here since dry-run never calls authenticated endpoints for real trading — only public market-data endpoints are used to simulate trades.",
     "ccxt_config": {},
     "ccxt_async_config": {},
     "pair_whitelist": [],
@@ -32,7 +35,7 @@
       ".*(_PREMIUM|BEAR|BULL|DOWN|HALF|HEDGE|UP|[1235][SL])/.*"
     ]
   },
-  "_COMMENT_pairlist": "Switched from a static 4-pair list to a dynamic pairlist matching NostalgiaForInfinity's own official configs/pairlist-volume-binance-usdt.json exactly (see the 'pairlists' array and its comment below for the full filter chain). exchange.pair_whitelist is now empty on purpose: the pairlist chain generates the whitelist itself at runtime. The blacklist regex still excludes leveraged tokens, which NFI's docs strongly recommend blacklisting.",
+  "_COMMENT_pairlist": "Same filter chain as before (matches NostalgiaForInfinity's own official pairlist-volume config). lookback_days=1 added to both VolumePairList entries — required for OKX (its live-ticker data doesn't expose quoteVolume in the format VolumePairList defaults to, so it must use candle-based/advanced-mode volume calculation instead; this was already confirmed necessary for the futures OKX config).",
   "entry_pricing": {
     "price_side": "same",
     "use_order_book": true,
@@ -53,7 +56,8 @@
       "method": "VolumePairList",
       "number_assets": 130,
       "sort_key": "quoteVolume",
-      "refresh_period": 1800
+      "refresh_period": 1800,
+      "lookback_days": 1
     },
     {
       "method": "FullTradesFilter"
@@ -80,11 +84,11 @@
     {
       "method": "VolumePairList",
       "number_assets": 100,
-      "sort_key": "quoteVolume"
+      "sort_key": "quoteVolume",
+      "lookback_days": 1
     }
   ],
-  "_COMMENT_filters": "This chain is now an exact match of NostalgiaForInfinity's own official configs/pairlist-volume-binance-usdt.json (only the exchange underneath is KuCoin instead of Binance — the pairlist logic itself is identical, not something we invented). Earlier drafts of this config used looser/different thresholds (AgeFilter min_days_listed:10 instead of 60, no RangeStabilityFilter, no second VolumePairList pass, no FullTradesFilter) — those were our own approximation, not the documented recommendation. Sequence: take the top 130 pairs by volume -> drop pairs a trade is already open on (FullTradesFilter) -> drop coins listed under 60 days ago (AgeFilter) -> drop very-low-priced coins prone to precision issues (PriceFilter) -> drop illiquid wide-spread pairs (SpreadFilter) -> drop pairs that are either dead-flat or wildly erratic over the last 3 days (RangeStabilityFilter) -> re-rank what's left by volume and cap at 100 (second VolumePairList pass).",
-  "_COMMENT_telegram": "token/chat_id below are dummy placeholders satisfying the config schema's required fields. The REAL values are injected at runtime via FREQTRADE__TELEGRAM__TOKEN / FREQTRADE__TELEGRAM__CHAT_ID environment variables (sourced from GitHub Secrets in the workflow) — never commit real credentials into this file. Freqtrade listens for incoming Telegram commands (/status, /balance, /profit, etc) automatically whenever the bot process is running — no extra setup needed beyond enabled: true. The 'keyboard' below just adds quick-tap buttons in the Telegram app.",
+  "_COMMENT_telegram": "token/chat_id below are dummy placeholders satisfying the config schema's required fields. The REAL values are injected at runtime via FREQTRADE__TELEGRAM__TOKEN / FREQTRADE__TELEGRAM__CHAT_ID environment variables (sourced from GitHub Secrets in the workflow) — never commit real credentials into this file.",
   "telegram": {
     "enabled": true,
     "token": "placeholder_overridden_by_env_var",
@@ -113,14 +117,14 @@
       "entry": "off",
       "entry_fill": "on",
       "entry_cancel": "on",
-      "exit": "off",
+      "exit": "on",
       "exit_fill": "on",
       "exit_cancel": "on",
       "protection_trigger": "on",
       "protection_trigger_global": "on"
     }
   },
-  "_COMMENT_db_url": "This IS the real, active db_url now (local SQLite) — no env var override. The workflow restores this file from the state-spot branch before starting freqtrade, and saves it back after each session.",
+  "_COMMENT_db_url": "This IS the real, active db_url now (local SQLite) — no env var override. The workflow restores this file from the state-spot branch before starting freqtrade, and saves it back after each session (plus an hourly mid-session checkpoint push).",
   "db_url": "sqlite:///user_data/tradesv3.dryrun.sqlite",
   "api_server": {
     "enabled": false,
@@ -133,7 +137,7 @@
     "username": "freqtrader",
     "password": "not_used_because_api_server_disabled"
   },
-  "bot_name": "nfi-dryrun-signals",
+  "bot_name": "nfi-dryrun-signals-okx",
   "force_entry_enable": false,
   "initial_state": "running",
   "internals": {
