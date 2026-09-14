@@ -8,6 +8,13 @@ step, and exits) — ready to load into pandas/sklearn/whatever later.
 
 This is purely a READ tool. It never touches the bot's decision-making.
 
+ARCHITECTURE NOTE (post-SQLite-migration): reads a single local SQLite
+file — one of the two bots' persisted state (tradesv3.dryrun.sqlite for
+spot, tradesv3.dryrun_futures.sqlite for futures). Call this once per
+bot if you want a combined export (concat the two resulting DataFrames/
+CSVs afterward — a `mode` column isn't added here since each file is
+processed independently, same as signal_stats.py/signal_deep_stats.py).
+
 Requires the strategy change that logs `entry_context` and
 `ml_snapshot_fill_*` keys into custom_data (via trade.set_custom_data)
 to already be deployed and running — rows only exist for trades opened
@@ -15,8 +22,7 @@ AFTER that change went live. Trades opened before it won't have this
 data (there was nowhere to get it from retroactively).
 
 Usage:
-    pip install psycopg2-binary pandas --break-system-packages
-    python ml_feature_export.py "<postgres-connection-string>" [output.csv]
+    python ml_feature_export.py <sqlite_file_path> [output.csv] [--telegram]
 
 If output.csv is omitted, prints a summary to the terminal instead of
 writing a file.
@@ -24,45 +30,40 @@ writing a file.
 
 import sys
 import json
+import sqlite3
 from datetime import datetime
 
 import pandas as pd
 
-try:
-    import psycopg2
-    import psycopg2.extras
-except ImportError:
-    print("Missing dependency. Install with: pip install psycopg2-binary pandas --break-system-packages")
-    sys.exit(1)
 
-
-def fetch_snapshots(db_url: str) -> pd.DataFrame:
-    conn = psycopg2.connect(db_url)
+def fetch_snapshots(db_path: str) -> pd.DataFrame:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Join custom_data back to trades so every row also carries
-            # the pair, enter_tag, and (if closed) final outcome — this
-            # is what turns "conditions at signal time" into a labeled
-            # training row: features (indicators/context) + label (did
-            # this trade end up profitable).
-            cur.execute("""
-                SELECT
-                    cd.ft_trade_id,
-                    cd.cd_key,
-                    cd.cd_value,
-                    cd.created_at AS logged_at,
-                    t.pair,
-                    t.enter_tag,
-                    t.is_open,
-                    t.open_date,
-                    t.close_date,
-                    t.close_profit
-                FROM trade_custom_data cd
-                JOIN trades t ON t.id = cd.ft_trade_id
-                WHERE cd.cd_key LIKE 'ml_snapshot_%%' OR cd.cd_key = 'entry_context'
-                ORDER BY cd.ft_trade_id, cd.created_at ASC
-            """)
-            rows = cur.fetchall()
+        # Join custom_data back to trades so every row also carries
+        # the pair, enter_tag, and (if closed) final outcome — this
+        # is what turns "conditions at signal time" into a labeled
+        # training row: features (indicators/context) + label (did
+        # this trade end up profitable).
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                cd.ft_trade_id,
+                cd.cd_key,
+                cd.cd_value,
+                cd.created_at AS logged_at,
+                t.pair,
+                t.enter_tag,
+                t.is_open,
+                t.open_date,
+                t.close_date,
+                t.close_profit
+            FROM trade_custom_data cd
+            JOIN trades t ON t.id = cd.ft_trade_id
+            WHERE cd.cd_key LIKE 'ml_snapshot_%' OR cd.cd_key = 'entry_context'
+            ORDER BY cd.ft_trade_id, cd.created_at ASC
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
 
@@ -82,7 +83,7 @@ def fetch_snapshots(db_url: str) -> pd.DataFrame:
             "trade_id": r["ft_trade_id"],
             "pair": r["pair"],
             "enter_tag": r["enter_tag"],
-            "is_open": r["is_open"],
+            "is_open": bool(r["is_open"]),
             "trade_open_date": r["open_date"],
             "trade_close_date": r["close_date"],
             "final_close_profit_pct": (
@@ -193,12 +194,12 @@ if __name__ == "__main__":
         print(__doc__)
         sys.exit(1)
 
-    db_url = sys.argv[1]
+    db_path = sys.argv[1]
     remaining = sys.argv[2:]
     telegram_mode = "--telegram" in remaining
     out_path = next((a for a in remaining if not a.startswith("--")), None)
 
-    df = fetch_snapshots(db_url)
+    df = fetch_snapshots(db_path)
     if df.empty:
         msg = (
             "No ml_snapshot/entry_context custom_data found yet.\n"
