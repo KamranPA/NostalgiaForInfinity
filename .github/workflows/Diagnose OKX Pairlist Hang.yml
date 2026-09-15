@@ -91,7 +91,17 @@ jobs:
             ],
             "telegram": { "enabled": false, "token": "", "chat_id": "" },
             "db_url": "sqlite:///user_data/debug_fresh.sqlite",
-            "api_server": { "enabled": false },
+            "api_server": {
+              "enabled": false,
+              "listen_ip_address": "127.0.0.1",
+              "listen_port": 8080,
+              "verbosity": "error",
+              "enable_openapi": false,
+              "jwt_secret_key": "debug_only_not_used_because_api_server_disabled_pad",
+              "CORS_origins": [],
+              "username": "freqtrader",
+              "password": "debug_only_not_used"
+            },
             "bot_name": "nfi-okx-pairlist-debug",
             "force_entry_enable": false,
             "initial_state": "running",
