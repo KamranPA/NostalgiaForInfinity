@@ -134,7 +134,7 @@ jobs:
         run: |
           cd user_data/..
 
-          SELF_TIMEOUT_SECONDS=$((5*3600 + 45*60))
+          SELF_TIMEOUT_SECONDS=$((5*3600 + 15*60))
           CHECKPOINT_INTERVAL_SECONDS=3600   # hourly
 
           timeout --signal=TERM "${SELF_TIMEOUT_SECONDS}s" freqtrade trade \
