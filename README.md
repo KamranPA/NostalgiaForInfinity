@@ -27,6 +27,29 @@ Ensure that you don't override any variables in you config.json. Especially the 
 - `exit_profit_only` must set to false (or not set at all).
 - `ignore_roi_if_entry_signal` must set to true (or not set at all).
 
+## Automatic Updates (Standalone Script)
+
+For users who are not using the Docker Compose updater, the repository also includes the [`tools/checkupdates.sh`](tools/checkupdates.sh) script.
+
+**What this script does:**
+- Checks the NFI repository for updates and downloads the latest release or main branch commit
+- Extracts the archive and updates the strategy files and all blacklist JSON files
+- Cleans up downloaded and extracted files
+- Optionally restarts a Docker container and sends Telegram notifications
+
+The script supports two update modes:
+- `releases` - Use official GitHub releases and update to the latest stable release
+- `commits` - Use the latest commit from the main branch
+
+**How to automate the update process:**
+1. Run the script manually first to create the configuration file and select your preferred update mode.
+2. After the configuration file is created, set up a cron job to run the script periodically.
+3. Run `crontab -e` and add a line such as the following to run the script every hour:
+
+```cron
+0 * * * * /path/to/your/script/checkupdates.sh
+```
+
 ## Automatic Updates (Docker)
 
 The repository includes an `nfi-updater` sidecar service for Docker Compose users that keeps the strategy, blacklist, and pairlist automatically up to date without manual intervention.
@@ -81,7 +104,7 @@ If you like to help, you can also use the following links to sign up to various 
 - [ByBit: (signup bonuses)](https://partner.bybit.com/b/nfi)
 - [ByBit.EU: (signup bonuses)](https://partner.bybit.eu/b/NFINFINITY)
 - [Bitget: (lifetime 20% rebate all plus 10% discount on spot fees)](https://bonus.bitget.com/nfinfinity)
-- [Kraken: ](https://proinvite.kraken.com/9f1e/cctimhte)
+- [Kraken: ](https://proinvite.kraken.com/rrru/m021lz9e)
 - [BitMart: (20% lifetime discount on trading fees)](https://www.bitmart.com/invite/nfinfinity)
 - [HTX: (Welcome Bonus worth 241 USDT upon completion of a deposit and trade)](https://www.htx.com/invite/en-us/1f?invite_code=ubpt2223)
 - [ByBit: (no fees for the first € 10000)](https://bitvavo.com/invite?a=D22103A4BC)

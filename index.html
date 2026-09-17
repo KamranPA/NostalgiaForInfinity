@@ -1,0 +1,3911 @@
+<!doctype html>
+<!--
+  Freqtrade Bot Report — in-browser port of tools/bot_report.py
+
+  Single-file tool: the styling and all logic are embedded below, there is no
+  build step and no external dependency. The page only ever talks to the
+  freqtrade REST API URL entered into the form (read-only GET requests to
+  /api/v1/*). Everything else — fetching, derivation of relative fields,
+  redaction, JSON serialization and saving — happens locally in the browser.
+  After an export it also renders a privacy-safe freqUI-style dashboard
+  snapshot (relative values only: no balances, stakes, costs, absolute profit
+  or wallet values) that can be downloaded as a PNG/SVG image for sharing.
+  Credentials are never stored by the page itself; the form is password-manager
+  friendly (proper autocomplete plus the Credential Management API), so Chrome
+  can save and refill them with your permission.
+
+  Styling: shadcn-classless by fordus (https://github.com/fordus/shadcn-classless),
+  MIT licensed, embedded verbatim except for the Google Fonts @import, which was
+  removed so that the page loads no third-party resources at all.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src http: https:; img-src data:; base-uri 'none'; form-action 'none'">
+<title>Freqtrade Bot Report — in-browser export</title>
+<meta name="description" content="Generate a redacted freqtrade bot report entirely in your browser. No server sees your data — the only endpoint contacted is your own bot's REST API.">
+<style>
+:root {
+  --radius: 0.5rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.21 0.006 285.885);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border-color: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.705 0.015 286.067);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: oklch(0.21 0.006 285.885);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar-ring: oklch(0.705 0.015 286.067);
+
+  --shadow: 0px 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0px 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+  --loading-icon-url: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='40' stroke='rgb(184, 184, 184)' stroke-width='20' fill='none' stroke-linecap='round' stroke-dasharray='200' stroke-dashoffset='100'%3E%3CanimateTransform attributeName='transform' type='rotate' from='0 50 50' to='360 50 50' dur='1s' repeatCount='indefinite'/%3E%3C/circle%3E%3C/svg%3E");
+
+  --border: 1px solid var(--border-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.141 0.005 285.823);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.21 0.006 285.885);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.21 0.006 285.885);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.92 0.004 286.32);
+    --primary-foreground: oklch(0.21 0.006 285.885);
+    --secondary: oklch(0.274 0.006 286.033);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.274 0.006 286.033);
+    --muted-foreground: oklch(0.705 0.015 286.067);
+    --accent: oklch(0.274 0.006 286.033);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border-color: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.552 0.016 285.938);
+    --chart-1: oklch(0.488 0.243 264.376);
+    --chart-2: oklch(0.696 0.17 162.48);
+    --chart-3: oklch(0.769 0.188 70.08);
+    --chart-4: oklch(0.627 0.265 303.9);
+    --chart-5: oklch(0.645 0.246 16.439);
+    --sidebar: oklch(0.21 0.006 285.885);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.274 0.006 286.033);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.552 0.016 285.938);
+    --border: 1px solid var(--border-color);
+  }
+}
+
+html {
+  color-scheme: light dark;
+}
+
+html[data-theme='light'] {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.21 0.006 285.885);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border-color: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.705 0.015 286.067);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: oklch(0.21 0.006 285.885);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar-ring: oklch(0.705 0.015 286.067);
+  --shadow: 0px 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0px 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --border: 1px solid var(--border-color);
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+html[data-theme='dark'] {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.92 0.004 286.32);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border-color: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.552 0.016 285.938);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.21 0.006 285.885);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.274 0.006 286.033);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.552 0.016 285.938);
+  --border: 1px solid var(--border-color);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+
+  scrollbar-width: auto;
+  scrollbar-color: var(--muted-foreground) var(--muted);
+}
+
+*::-webkit-scrollbar {
+  width: 12px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 6px;
+  border: 2px solid var(--background);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
+}
+*::-webkit-scrollbar-track {
+  background: var(--muted);
+  border-radius: 6px;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
+    'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  line-height: 1.5;
+  padding: 2rem 1rem 1rem 1rem;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  max-width: 900px;
+  margin: 0 auto;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin-bottom: 0.5em;
+  font-weight: 700;
+}
+
+h1 {
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+}
+
+h2 {
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+h3 {
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+
+h4 {
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.75rem;
+}
+
+h5 {
+  font-size: 15px;
+}
+
+h6 {
+  font-size: 14px;
+}
+
+p {
+  margin: 1em 0;
+}
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+a:hover {
+  text-decoration: underline;
+  color: color-mix(in srgb, var(--primary) 80%, transparent);
+}
+a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+ul,
+ol {
+  margin-bottom: 1em;
+  padding-left: 1.5em;
+}
+header {
+  margin-bottom: 2rem;
+}
+header h1 {
+  font-size: 2rem;
+}
+nav ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  gap: 1rem;
+}
+section {
+  margin-bottom: 2rem;
+}
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+input[type='password'],
+input[type='text'],
+input[type='date'],
+input[type='color'],
+input[type='time'],
+input[type='file'],
+input[type='search'],
+input[type='email'],
+select,
+textarea {
+  font-weight: 500;
+  font: inherit;
+  padding: 0.5rem;
+  border: var(--border);
+  border-radius: var(--radius);
+  background-color: var(--background);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input[type='password']:focus,
+input[type='text']:focus,
+input[type='date']:focus,
+input[type='time']:focus,
+input[type='search']:focus,
+input[type='email']:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 15%, transparent);
+}
+input[type='color'] {
+  appearance: none;
+  cursor: pointer;
+  outline-style: none;
+  padding: initial;
+  max-width: initial;
+  border: none;
+  outline: none;
+  -webkit-appearance: none;
+  border-radius: var(--radius);
+}
+input[type='color']::-webkit-color-swatch {
+  border: none;
+  border-radius: var(--radius);
+}
+input[type='color']::-moz-color-swatch {
+  border-radius: var(--radius);
+  border-style: none;
+  border: none;
+}
+
+/** --- BUTTONS --- */
+input[type='reset'],
+input[type='submit'],
+input[type='button'],
+button {
+  font: inherit;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  transition: background-color 0.2s ease-in-out;
+}
+
+/** Primary */
+button {
+  border: none;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  &:hover {
+    background-color: color-mix(in srgb, var(--primary) 90%, transparent);
+  }
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent);
+  }
+  &:active {
+    transform: scale(0.98);
+  }
+}
+/** Secondary */
+button[secondary] {
+  background-color: var(--secondary);
+  color: var(--secondary-foreground);
+  &:hover {
+    background-color: color-mix(in srgb, var(--secondary) 90%, transparent);
+  }
+}
+
+/** Outline */
+input[type='submit'] {
+  border: var(--border);
+  background-color: transparent;
+  color: var(--foreground);
+  &:hover {
+    background-color: color-mix(in srgb, var(--muted) 90%, transparent);
+  }
+}
+
+/** Ghost */
+input[type='button'] {
+  border: none;
+  background-color: transparent;
+  color: var(--foreground);
+  &:hover {
+    background-color: var(--muted);
+  }
+}
+
+/** Desctructive */
+input[type='reset'] {
+  border: none;
+  background-color: var(--destructive);
+  color: var(--primary-foreground);
+  &:hover {
+    background-color: color-mix(in srgb, var(--destructive) 90%, transparent);
+  }
+}
+
+fieldset {
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+fieldset[role='group'] {
+  border: none;
+  padding: 1rem;
+  display: flex;
+  gap: 0;
+  > * {
+    border-radius: 0;
+    &:first-child {
+      border-top-left-radius: var(--radius);
+      border-bottom-left-radius: var(--radius);
+      border-right: 0;
+    }
+    &:last-child {
+      border-top-right-radius: var(--radius);
+      border-bottom-right-radius: var(--radius);
+      border-right: var(--border);
+    }
+  }
+}
+
+fieldset[role='otp'] {
+  border: none;
+  padding: 1rem;
+  display: flex;
+  gap: 0;
+
+  > input {
+    border-radius: 0;
+    width: 1rem;
+    text-align: center;
+    border-right: 0;
+
+    &:first-child {
+      border-top-left-radius: var(--radius);
+      border-bottom-left-radius: var(--radius);
+      border-right: 0;
+    }
+    &:last-child {
+      border-top-right-radius: var(--radius);
+      border-bottom-right-radius: var(--radius);
+      border-right: var(--border);
+    }
+  }
+}
+legend {
+  padding: 0 0.5rem;
+}
+label {
+  display: block;
+  * {
+    vertical-align: middle;
+  }
+}
+small {
+  color: var(--muted-foreground);
+}
+figure {
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+}
+
+img[avatar] {
+  border-radius: 50%;
+}
+
+figcaption {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  color: var(--muted-foreground);
+}
+blockquote {
+  border-left: 4px solid var(--border-color);
+  padding-left: 1rem;
+  font-style: italic;
+  > footer {
+    text-align: center;
+  }
+}
+[type='checkbox'],
+[type='radio'] {
+  margin-right: 0.5rem;
+}
+progress {
+  width: 100%;
+}
+dialog {
+  background-color: var(--background);
+  color: var(--foreground);
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin: auto;
+}
+dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+details {
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+}
+summary {
+  cursor: pointer;
+  font-weight: bold;
+}
+article {
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+footer {
+  margin-top: 2rem;
+  color: var(--muted-foreground);
+}
+[aria-busy='true'] {
+  opacity: 0.7;
+  cursor: progress;
+}
+[aria-busy='spinner'] {
+  opacity: 0.7;
+  cursor: progress;
+  &::before {
+    content: var(--loading-icon-url);
+    padding-right: 1rem;
+  }
+}
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  body {
+    padding: 0.5rem;
+  }
+  nav ul {
+    flex-direction: column;
+  }
+}
+
+input[type='file']::file-selector-button {
+  border: none;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+:disabled,
+[disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  pointer-events: none;
+}
+
+input[type='radio'],
+input[type='checkbox'],
+input[type='range'] {
+  accent-color: var(--primary);
+  background-color: var(--background);
+}
+
+/** Toggles */
+input[type='checkbox'][icon] {
+  display: none;
+  + * {
+    cursor: pointer;
+    border-radius: var(--radius);
+    padding: 0.5rem;
+    box-sizing: border-box;
+
+    &:hover {
+      background-color: var(--border-color);
+    }
+  }
+}
+input[type='checkbox'][icon] {
+  display: none;
+  + * {
+    cursor: pointer;
+    border-radius: var(--radius);
+    width: 2rem;
+    height: 2rem;
+    padding: 0.5rem;
+
+    &:hover {
+      background-color: var(--border-color);
+      stroke: var(--muted-foreground);
+    }
+  }
+}
+input[type='checkbox'][icon]:checked {
+  + * {
+    background-color: var(--border-color);
+
+    &:hover {
+      stroke: var(--accent-foreground);
+    }
+  }
+}
+
+/** Badge */
+kbd {
+  padding: 0.125rem 0.625rem;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: 6px;
+  font-weight: bold;
+}
+kbd[secondary] {
+  background-color: var(--secondary);
+  color: var(--secondary-foreground);
+}
+kbd[outline] {
+  background-color: var(--background);
+  color: var(--primary);
+  border: var(--border);
+}
+kbd[destructive] {
+  background-color: var(--destructive);
+  color: var(--primary-foreground);
+}
+
+table {
+  caption-side: bottom;
+  border-collapse: collapse;
+
+  caption {
+    color: var(--muted-foreground);
+    margin-top: 1rem;
+  }
+
+  th {
+    color: var(--muted-foreground);
+  }
+
+  tr {
+    border-bottom: var(--border);
+  }
+  tr:hover {
+    background-color: hsl(var(--muted) / 0.5);
+  }
+
+  td,
+  th {
+    vertical-align: middle;
+    padding: 0.5rem;
+    text-align: start;
+  }
+
+  tfoot {
+    background-color: var(--muted);
+  }
+}
+
+dialog[drawer] {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+  top: auto;
+  bottom: 0;
+  max-height: 50vh;
+
+  resize: vertical; /** Check if we can set the resize handle position to the top left/right */
+
+  &[open] {
+    animation: slideup 0.2s ease-in forwards;
+  }
+}
+
+dialog > header {
+  margin: 0;
+}
+/** Sheet */
+dialog[sheet-top],
+dialog[sheet-bottom],
+dialog[sheet-left],
+dialog[sheet-right] {
+  border-radius: 0;
+  margin: 0;
+}
+
+dialog[sheet-top],
+dialog[sheet-bottom] {
+  width: 100vw;
+  max-height: 50vh;
+}
+
+dialog[sheet-left],
+dialog[sheet-right] {
+  height: 100vh;
+  max-width: 50vw;
+}
+
+dialog[sheet-top][open] {
+  animation: slidedown 0.2s ease-in forwards;
+}
+
+dialog[sheet-bottom][open] {
+  animation: slideup 0.2s ease-in forwards;
+  top: auto;
+  bottom: 0;
+}
+dialog[sheet-left][open] {
+  animation: slideright 0.2s ease-in forwards;
+}
+
+dialog[sheet-right][open] {
+  animation: slideleft 0.2s ease-in forwards;
+  left: auto;
+  right: 0;
+}
+
+@keyframes slideup {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+@keyframes slidedown {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+@keyframes slideleft {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+@keyframes slideright {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/** Progress */
+progress {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--muted);
+  border: 0;
+}
+progress[value]::-webkit-progress-value {
+  border-radius: 9999px;
+  background-color: var(--primary);
+}
+
+::-webkit-progress-bar {
+  border-radius: 9999px;
+  background-color: var(--muted);
+}
+::-moz-progress-bar {
+  border-radius: 9999px;
+  background-color: var(--primary);
+}
+
+progress:indeterminate {
+  background: var(--muted)
+    linear-gradient(to right, var(--primary) 35%, var(--muted) 35%) top
+    left/150% 150% no-repeat;
+  animation: progress-indeterminate 1.5s linear infinite;
+}
+progress:indeterminate::-webkit-progress-bar {
+  background-color: transparent;
+}
+progress:indeterminate::-moz-progress-bar {
+  background-color: transparent;
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+hr {
+  border: 0;
+  height: 1px;
+  margin: 1rem 0;
+  background-color: var(--border-color);
+  flex-shrink: 0;
+}
+
+hr[vertical] {
+  width: 1px;
+  height: auto;
+  margin: 0 1rem;
+}
+
+/** Breadcrumbs */
+nav {
+  display: flex;
+  align-items: center;
+  --separator: attr(breadcrumb, '>');
+  > a {
+    padding: 0 0.625rem 0 0;
+    color: var(--muted-foreground);
+    &::after {
+      padding: 0 0 0 0.625rem;
+      display: inline-block;
+      content: var(--separator);
+    }
+    &:last-child {
+      color: var(--foreground);
+      &::after {
+        content: '';
+      }
+    }
+  }
+  &:hover::after {
+    text-decoration: none;
+  }
+}
+
+/** Skeleton */
+div[skeleton] {
+  background-color: var(--input);
+  animation: shimmer 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  border-radius: var(--radius);
+  opacity: 1;
+  * {
+    display: none;
+  }
+}
+@keyframes shimmer {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/** Popover */
+[popover] {
+  inset: unset;
+  position: absolute;
+
+  bottom: calc(anchor(top) + 5px);
+  justify-self: anchor-center;
+  margin: 0;
+
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+}
+
+/** Tooltip */
+[tooltip-top],
+[tooltip-bottom],
+[tooltip-left],
+[tooltip-right] {
+  position: relative;
+
+  &::after {
+    position: absolute;
+    white-space: nowrap;
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+
+    padding: 6px 8px;
+    font-size: 0.875em;
+    border-radius: var(--radius);
+
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  &:hover::after {
+    opacity: 1;
+  }
+}
+
+[tooltip-top]::after {
+  content: attr(tooltip-top);
+  left: 50%;
+  top: -0.8rem;
+  transform: translateX(-50%) translateY(-100%);
+}
+[tooltip-bottom]::after {
+  content: attr(tooltip-bottom);
+  left: 50%;
+  top: calc(100% + 0.8rem);
+  transform: translateX(-50%) translateY(0%);
+}
+[tooltip-left]::after {
+  content: attr(tooltip-left);
+  left: -0.3rem;
+  top: 50%;
+  transform: translateX(-100%) translateY(-50%);
+}
+[tooltip-right]::after {
+  content: attr(tooltip-right);
+  left: calc(100% + 0.3rem);
+  top: 50%;
+  margin-left: 0.3rem;
+  transform: translateX(0%) translateY(-50%);
+}
+
+/** Code */
+pre {
+  border-radius: var(--radius);
+  > code {
+    display: block;
+    overflow-x: auto;
+  }
+}
+code {
+  border: var(--border);
+  border-radius: var(--radius);
+
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  padding: 0.2rem;
+}
+
+/** Toast */
+dialog[sonner],
+dialog[toast] {
+  padding: 1rem;
+  padding-right: 1.5rem;
+
+  top: auto;
+  bottom: 1rem;
+  left: auto;
+  right: 1rem;
+
+  &::backdrop {
+    opacity: 0;
+  }
+}
+
+dialog[toast] {
+  box-shadow: var(--shadow);
+
+  &[open] {
+    animation: slideup 0.2s ease-in forwards, fad-in 0.2s ease-in forwards;
+  }
+}
+
+dialog[sonner] {
+  background-color: transparent;
+  border: none;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+  transition: gap 0.15s ease-in;
+
+  > li {
+    animation: slideup 0.2s ease-in forwards, fad-in 0.2s ease-in forwards;
+
+    background-color: var(--background);
+    counter-increment: sonner-counter;
+    padding: 1rem;
+    padding-right: 1.5rem;
+    border: var(--border);
+    border-radius: var(--radius);
+    list-style: none;
+
+    &:hover {
+      scale: 1.1;
+    }
+  }
+}
+
+@keyframes fad-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/** Sidebar */
+aside {
+  background-color: var(--sidebar);
+  border: 1px solid var(--sidebar-border);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+  position: relative;
+  padding: 0.5rem;
+
+  > main {
+    flex-grow: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  > header,
+  > footer {
+    position: sticky;
+  }
+}
+
+/** Menubar */
+menu {
+  display: flex;
+  flex-direction: row;
+  border: var(--border);
+  border-radius: var(--radius);
+  width: fit-content;
+  > li {
+    padding: 0.25rem 0.75rem;
+    list-style: none;
+  }
+}
+
+/** Scrollarea */
+*[scroll-x] {
+  overflow-x: scroll;
+}
+
+*[scroll-y] {
+  overflow-y: scroll;
+}
+
+</style>
+<style>
+/* Page-specific additions on top of shadcn-classless (kept minimal). */
+
+/* Relax the type scale, all in rem (root stays at the browser default):
+   body 1rem -> 0.875rem (16 -> 14px), h1 2rem -> 1.75rem (32 -> 28px),
+   h2 1.25rem -> 1.125rem (20 -> 18px), hints -> 0.8125rem (13px). */
+body {
+  font-size: 0.875rem;
+}
+h1, header h1 {
+  font-size: 1.75rem;
+}
+h2 {
+  font-size: 1.125rem;
+}
+small {
+  font-size: 0.8125rem;
+}
+button {
+  font-size: 0.875rem;
+}
+
+/* Form: labels and inputs on separate rows, inputs full width; fieldsets
+   group connection, credentials and options as vertical stacks. */
+#connect {
+  max-width: 40rem;
+}
+#connect fieldset {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.9rem;
+}
+#connect label {
+  display: block;
+}
+#connect input[type='text'],
+#connect input[type='password'],
+#connect select {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+}
+#connect small {
+  display: block;
+  margin-top: 0.4rem;
+}
+#connect button {
+  width: 100%;
+}
+#result-body button {
+  width: 100%;
+}
+
+/* Export summary table: shrink-to-fit label column, wrapping values. */
+table.summary {
+  width: 100%;
+  margin: 0.5rem 0 1rem;
+}
+table.summary th {
+  font-weight: 500;
+  white-space: nowrap;
+  width: 1%;
+  padding-right: 1.5rem;
+}
+table.summary td {
+  overflow-wrap: anywhere;
+}
+
+#privacy-note {
+  border-left: 4px solid var(--primary);
+}
+#privacy-note h2 {
+  margin-bottom: 0.25rem;
+}
+/* Semantic status colors. The framework only ships --destructive; success and
+   warning get matching oklch tokens (light + dark). Danger reuses --destructive,
+   neutral reuses --muted-foreground, so both adapt to dark mode for free. */
+:root {
+  --success: oklch(0.627 0.17 149.2);
+  --warning: oklch(0.666 0.179 58.3);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --success: oklch(0.772 0.164 151.8);
+    --warning: oklch(0.828 0.156 77.6);
+  }
+}
+.text-success { color: var(--success); }
+.text-warning { color: var(--warning); }
+.text-danger { color: var(--destructive); }
+.text-neutral { color: var(--muted-foreground); }
+#progress-step {
+  min-height: 1.5rem;
+  color: var(--muted-foreground);
+}
+
+/* ⓘ field info markers: the tooltip anchors on the icon only (hover or
+   keyboard focus), never on the field itself. */
+.field-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin-left: 0.3rem;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+  user-select: none;
+}
+.field-info:focus {
+  outline: none;
+  border-color: var(--ring);
+}
+[tooltip-top]:focus::after {
+  opacity: 1;
+}
+/* Code never wraps: inline code becomes a horizontally scrollable chip so the
+   text is always on one line and fully readable; pre>code stays a block. */
+code {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow-x: auto;
+  vertical-align: middle;
+}
+
+/* Danger action inside the redaction confirm dialog. */
+button.danger {
+  background-color: var(--destructive);
+  color: var(--primary-foreground);
+}
+button.danger:hover {
+  background-color: color-mix(in srgb, var(--destructive) 90%, transparent);
+}
+#redact-confirm footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* Collapsed redaction review inside the result card. */
+details.redaction-review ul {
+  max-height: 16rem;
+  margin-bottom: 0;
+}
+details.redaction-review li {
+  overflow-wrap: anywhere;
+}
+
+/* Tooltips: the framework renders them on one line (nowrap); let the longer
+   field hints wrap into a readable box instead. */
+[tooltip-top]::after {
+  white-space: normal;
+  width: max-content;
+  max-width: min(24rem, 90vw);
+  text-align: left;
+  line-height: 1.4;
+}
+
+/* Small screens: keep controls at 1rem (16px) — iOS Safari zooms into fields
+   on focus below that threshold, which is jarring even though the surrounding
+   text is now 14px. */
+@media (max-width: 600px) {
+  #connect input[type='text'],
+  #connect input[type='password'],
+  #connect select,
+  #connect button,
+  #result-body button {
+    font-size: 1rem;
+  }
+}
+</style>
+<style id="share-css">
+/* Privacy-safe dashboard snapshot (freqUI-style, relative values only).
+   Single source of truth for both the live preview and the exported
+   PNG/SVG: the exporter inlines this exact block into the SVG, so the image
+   matches the preview without external resources. No id/class names here may
+   carry currency codes or absolute-money wording.
+   The page framework resets * to border-box, which is NOT inlined here — so
+   scope the same reset to the card or the export re-lays-out in content-box
+   and overflows the measured box (right edge cropped). */
+#share-card, #share-card * {
+  box-sizing: border-box;
+}
+#share-scroll {
+  overflow-x: auto;
+}
+#share-card {
+  width: max-content;
+  min-width: 1280px;
+  background: #14161f;
+  color: #e7eaf3;
+  border: 1px solid #2b3145;
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, Cantarell, sans-serif;
+}
+#share-card .sc-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+#share-card .sc-brand {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+#share-card .sc-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #0ecb81;
+  border: 1px solid #0e8f5f;
+  border-radius: 999px;
+  padding: 2px 10px;
+  vertical-align: middle;
+}
+#share-card .sc-meta {
+  color: #9aa1b8;
+  font-size: 11px;
+}
+#share-card .sc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 424px;
+  gap: 12px;
+}
+#share-card .sc-col {
+  min-width: 0;
+}
+/* Full-width rows (Bot comparison, Open, Closed) stack directly on the card;
+ * the rest tiles by info type: tag tables side by side (1/2 each), charts
+ * side by side (1/3 each). */
+#share-card .sc-grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+#share-card .sc-grid-3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+#share-card .sc-grid-2 .sc-panel,
+#share-card .sc-grid-3 .sc-panel {
+  margin-bottom: 0;
+  min-width: 0;
+}
+/* Bot comparison stat blocks: 4 non-table sections in 1 full row. */
+#share-card .sc-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+#share-card .sc-stat {
+  background: #1a1e2b;
+  border: 1px solid #2b3145;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: center;
+  min-width: 0;
+}
+#share-card .sc-stat-label {
+  color: #8b93ad;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+#share-card .sc-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 5px 0 3px;
+  font-variant-numeric: tabular-nums;
+}
+#share-card .sc-stat-sub {
+  color: #8b93ad;
+  font-size: 10.5px;
+  font-weight: 400;
+}
+#share-card .sc-panel {
+  background: #1a1e2b;
+  border: 1px solid #2b3145;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  min-width: 0;
+}
+#share-card .sc-panel h4 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #c9cfe3;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+#share-card .sc-desc {
+  margin: 2px 0 8px;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: #8b93ad;
+  text-align: center;
+}
+#share-card table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+#share-card th {
+  color: #8b93ad;
+  font-weight: 600;
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid #232a3d;
+  white-space: nowrap;
+}
+#share-card td {
+  padding: 5px 6px;
+  border-bottom: 1px solid #1d2231;
+  color: #dfe3f0;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+#share-card tr {
+  border-bottom: none;
+}
+#share-card tr:last-child td {
+  border-bottom: none;
+}
+#share-card tr:hover {
+  background: transparent;
+}
+#share-card .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#share-card .pill {
+  display: inline-block;
+  border: 1px solid;
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+#share-card .pill-pos {
+  color: #0ecb81;
+  border-color: #0e8f5f;
+  background: rgba(14, 203, 129, 0.08);
+}
+#share-card .pill-neg {
+  color: #f6465d;
+  border-color: #a02c3d;
+  background: rgba(246, 70, 93, 0.08);
+}
+#share-card .pill-flat {
+  color: #9aa1b8;
+  border-color: #3a4157;
+}
+#share-card .sub {
+  display: block;
+  font-size: 10px;
+  color: #8b93ad;
+  font-weight: 400;
+}
+/* Strategy tags / labels render as inline code. */
+#share-card code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid #2b3145;
+  border-radius: 4px;
+  padding: 0 5px;
+  white-space: nowrap;
+}
+#share-card tr.order-sub td {
+  background: rgba(148, 163, 184, 0.05);
+  font-size: 10.5px;
+  color: #9aa1b8;
+  border-bottom: 1px dashed #232a3d;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+#share-card tr.order-sub td:first-child {
+  color: #5b6274;
+  text-align: right;
+  padding-right: 2px;
+}
+#share-card tr.order-sub td:last-child {
+  white-space: nowrap;
+}
+#share-card .sc-note {
+  color: #8b93ad;
+  font-size: 10.5px;
+  margin-top: 6px;
+}
+#share-card .sc-empty {
+  color: #8b93ad;
+  font-size: 11.5px;
+  padding: 18px 0;
+  text-align: center;
+}
+#share-card .sc-legend {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  color: #9aa1b8;
+  font-size: 10.5px;
+  margin-bottom: 4px;
+}
+#share-card .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: baseline;
+}
+#share-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+#share-controls .tab[aria-pressed='true'] {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+#share-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+#share-controls select {
+  width: auto;
+}
+#share-card .sc-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 8px;
+  color: #5b6274;
+  font-size: 10.5px;
+}
+#share-card .sc-wm {
+  color: #6b7390;
+  white-space: nowrap;
+}
+#share-foot {
+  color: var(--muted-foreground);
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Freqtrade Bot Report</h1>
+  <p><small>In-browser port of <code>tools/bot_report.py</code> — exports a redacted JSON
+  telemetry report from a running freqtrade REST API, so strategy developers can review how a
+  strategy behaves in production. Everything runs locally in this browser tab.</small></p>
+</header>
+
+<main>
+  <article id="privacy-note">
+    <h2>No server sees your data</h2>
+    <p>This page is a single static file with all logic embedded. <strong>It makes no network
+    call to any server except the freqtrade API URL you enter below.</strong> There is no CDN,
+    no fonts, no analytics and no uploads, nothing stored: the report is generated in your browser
+    and saved straight to your disk. Closing the tab discards everything, including your
+    credentials. Your browser's own password manager may offer to save the login for convenience —
+    that storage belongs to the browser, not this page.</p>
+    <p><strong>You can verify this:</strong> press <kbd>F12</kbd> to open your browser DevTools,
+    switch to the <em>Network</em> tab, and reload this page. You will see zero requests until
+    you click <em>Export report</em>, and afterwards only requests to your bot's address from
+    the form. The page also ships a strict Content-Security-Policy, so the browser itself
+    blocks anything else.</p>
+  </article>
+
+  <section>
+    <h2>Generate report</h2>
+    <form id="connect">
+      <fieldset>
+        <legend>Bot connection</legend>
+        <label>API base URL<span class="field-info" tabindex="0" role="note" aria-label="From your config.json: api_server.listen_ip_address + listen_port — default http://127.0.0.1:8080" tooltip-top="From your config.json: api_server.listen_ip_address + listen_port — default http://127.0.0.1:8080">i</span>
+          <input type="text" id="f-url" placeholder="http://127.0.0.1:8080" spellcheck="false">
+        </label>
+        <small>Root of the freqtrade REST API — scheme, host and port only. The default install listens on <code>http://127.0.0.1:8080</code>.</small>
+      </fieldset>
+      <fieldset>
+        <legend>Credentials</legend>
+        <label>Username<span class="field-info" tabindex="0" role="note" aria-label="From your config.json: api_server.username" tooltip-top="From your config.json: api_server.username">i</span>
+          <input type="text" id="f-user" autocomplete="username" spellcheck="false">
+        </label>
+        <label>Password<span class="field-info" tabindex="0" role="note" aria-label="From your config.json: api_server.password" tooltip-top="From your config.json: api_server.password">i</span>
+          <input type="password" id="f-pass" autocomplete="current-password">
+        </label>
+        <small>The same values as in your <code>api_server</code> config, sent as HTTP Basic auth on each request — never stored, never sent anywhere else.</small>
+      </fieldset>
+      <fieldset>
+        <legend>Export options</legend>
+        <label><input type="checkbox" id="f-redact" checked>
+          Redact confidential fields (recommended — required before sharing the report)<span class="field-info" tabindex="0" role="note" aria-label="Tool option, not a config value: same as --redact / --no-redact in tools/bot_report.py" tooltip-top="Tool option, not a config value: same as --redact / --no-redact in tools/bot_report.py">i</span></label>
+        <label>Closed trades window<span class="field-info" tabindex="0" role="note" aria-label="Web-only filter: the full history is always fetched, then only trades closed within the window are kept. All time matches the CLI output." tooltip-top="Web-only filter: the full history is always fetched, then only trades closed within the window are kept. All time matches the CLI output.">i</span>
+          <select id="f-window">
+            <option value="all" selected>All time</option>
+            <option value="day">Last day</option>
+            <option value="week">Last week</option>
+            <option value="month">Last month</option>
+            <option value="year">Last year</option>
+          </select>
+        </label>
+      </fieldset>
+      <button type="submit" id="btn-export">Export report</button>
+      <button type="button" id="btn-test" secondary tooltip-top="Uses the URL and credentials above: one request checks reachability, CORS headers and authentication.">Test connection</button>
+      <small><strong>Export report</strong> walks every endpoint — including the full closed-trade history — then lets you review what was redacted before saving. <strong>Test connection</strong> checks the URL, CORS and credentials with a single request.</small>
+    </form>
+  </section>
+
+  <section id="progress" hidden>
+    <article aria-busy="true">
+      <h2>Exporting…</h2>
+      <p id="progress-step" aria-busy="spinner">Connecting…</p>
+      <progress id="progress-bar" max="1" value="0"></progress>
+    </article>
+  </section>
+
+  <section id="result" hidden>
+    <h2 id="result-title"></h2>
+    <article id="result-body"></article>
+  </section>
+
+  <section id="share" hidden>
+    <h2>Dashboard image <small>privacy-safe, freqUI-style</small></h2>
+    <article>
+      <div id="share-controls">
+        <fieldset role="group" aria-label="Profit-over-time timescale">
+          <button type="button" class="tab" id="share-tab-days" aria-pressed="false">Days</button>
+          <button type="button" class="tab" id="share-tab-weeks" aria-pressed="false">Weeks</button>
+          <button type="button" class="tab" id="share-tab-months" aria-pressed="true">Months</button>
+        </fieldset>
+        <label>Recent closed trades
+          <select id="share-recent">
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="share-watermark" checked>
+          Watermark (page URL)</label>
+        <button type="button" id="share-png">Download PNG</button>
+        <button type="button" id="share-copy" secondary>Copy PNG</button>
+        <button type="button" id="share-svg" secondary>Download SVG</button>
+      </div>
+      <p id="share-audit"><small></small></p>
+      <div id="share-scroll" scroll-x><div id="share-card"></div></div>
+      <p id="share-foot"><small>The image shows <strong>relative values only</strong> — trade returns in %,
+      position sizes as % of the account, growth vs the start in %, indexed equity (start = 100) and trade
+      counts. Balances, stakes, costs, absolute profit, fees and wallet values are never rendered, so the
+      account size cannot be derived from it.</small></p>
+    </article>
+  </section>
+
+  <dialog id="redact-confirm">
+    <h3>Disable redaction?</h3>
+    <p>The report will contain balances, absolute PnL and credentials — anyone you share it
+    with learns the size of your account. Only continue for private diagnostics you keep to
+    yourself.</p>
+    <footer>
+      <button type="button" id="redact-keep" secondary>Keep redaction (recommended)</button>
+      <button type="button" id="redact-disable" class="danger">Disable redaction</button>
+    </footer>
+  </dialog>
+
+  <details>
+    <summary>Setup — how to run this page and let it talk to your bot</summary>
+    <ol>
+      <li>Enable the freqtrade REST API (<code>"api_server": {"enabled": true, …}</code> with
+        <code>username</code>/<code>password</code>) in your bot's config.</li>
+      <li><strong>Recommended — run this page locally.</strong> Download the file and open it
+        straight from disk, or serve it from the same machine with
+        <code>python -m http.server</code>, then point the form at
+        <code>http://127.0.0.1:8080</code>. This works with plain-HTTP bots, needs no CORS
+        setup, and the credentials you type never leave your machine.</li>
+      <li><strong>Or host the page publicly</strong> (e.g. GitHub Pages) and allow that origin.
+        Browsers enforce CORS: add the page's exact origin (no trailing slash) —
+        <code id="page-origin">https://YOURNAME.github.io</code> — to
+        <code>CORS_origins</code> in the <code>api_server</code> block and restart the bot:
+        <pre><code>"api_server": {
+    "enabled": true,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8080,
+    "username": "freqtrader",
+    "password": "…",
+    "CORS_origins": ["<span id="page-origin-snippet">https://YOURNAME.github.io</span>"]
+}</code></pre>
+        Keep in mind: an HTTPS page cannot reach a plain-HTTP bot at all (no CORS entry fixes
+        that — the local option above is the answer), the entry grants <em>every</em> page on
+        that origin access to the bot API — not just this tool — and it should be removed again
+        once the report is exported.</li>
+      <li><strong>Trust and TLS.</strong> These credentials give full control of the bot — the
+        same API also exposes <code>forceexit</code> and <code>stop</code> — so treat the origin
+        you put in <code>CORS_origins</code> as a standing trust decision and prefer running the
+        page locally if you do not fully control that origin. Certificates must be valid:
+        browsers reject self-signed ones and this page cannot skip verification (there is no
+        <code>--no-verify-tls</code> in a browser), so self-signed setups should run the page
+        locally or use a properly trusted reverse proxy.</li>
+    </ol>
+  </details>
+
+  <details>
+    <summary>What gets redacted?</summary>
+    <p>Credentials and keys (any field whose name contains <code>key</code>, <code>secret</code>,
+    <code>token</code>, <code>password</code>, <code>chat</code>, <code>webhook</code> or
+    <code>credential</code>; the whole <code>ccxt_config</code> objects), exchange order/account
+    identifiers, absolute money values (balances, stakes, costs, absolute PnL, funding fees,
+    drawdown water marks) and personal/machine-specific values (bot name, local paths).
+    Numeric redaction is fail-closed: a number is kept only when its key is recognized as safe,
+    so fields freqtrade adds in the future are hidden until reviewed. Scale-invariant relative
+    ratios are computed <em>before</em> redaction so the report stays useful without revealing
+    the account size. Full field reference: <a href="tools/bot_report.md">tools/bot_report.md</a>.</p>
+  </details>
+
+  <details>
+    <summary>Dashboard image — what does it show instead of the absolute values?</summary>
+    <p>After a successful export the page renders a freqUI-style dashboard snapshot that is safe to
+    share as a PNG/SVG image. Every absolute-money field is replaced by a scale-invariant relative
+    value, so the account size cannot be derived from the image:</p>
+    <ul>
+      <li><strong>Balance</strong> column → <strong>total return vs the start</strong> in %
+        (<code>profit_all_ratio</code>: closed + open trades, exactly as <code>/profit</code> reports).</li>
+      <li><strong>Absolute profit</strong> (e.g. <code>-19.37% (-51.882)</code>) → <strong>% only</strong>:
+        closed profit vs the start, open-trade impact (realized grind exits + unrealized) vs the current balance.</li>
+      <li><strong>Amount / stake amount</strong> columns → <strong>stake as % of the account</strong>
+        at entry time; <strong>Currently deployed</strong> is open collateral (sum of open
+        <code>stake_amount</code>) vs the current balance — not <code>/count total_stake</code>,
+        which is open notional and exceeds collateral by the leverage factor on futures.</li>
+      <li><strong>Profit over time</strong> → <strong>relative profit %</strong> per day/week/month plus
+        trade count (no absolute axis).</li>
+      <li><strong>Cumulative profit</strong> → <strong>cumulative closed profit vs the start</strong>:
+        each trade's account impact rescaled by the balance history, so the curve lands on the
+        closed-profit headline within rounding; dotted tip lands on the total return including open trades
+        (red = loss, green = profit). With a closed-trades window the curve and headline are windowed;
+        without daily coverage it falls back to summed impacts (labeled).</li>
+      <li><strong>Wallet history</strong> → <strong>indexed equity (start = 100)</strong> from realized
+        history, with a dotted tip to the total return so open trades are included without drawing
+        the cliff as a solid move.</li>
+      <li><strong>Watermark</strong> → the image footer reads <em>Generated by</em> plus the page URL
+        as provenance (switch it off with the <em>Watermark</em> checkbox). Pages opened from disk
+        show a neutral label instead, so no local filesystem path leaks into the shared image.</li>
+    </ul>
+    <p>The image is built exclusively from ratios, percentages, counts, market prices and dates. A
+    relative-only audit runs before every render and its result is shown above the preview.</p>
+  </details>
+</main>
+
+<footer>
+  <small>Single-file tool, no build step, no dependencies. Read-only: it only ever issues
+  <code>GET</code> requests to <code>/api/v1/*</code>. Styling:
+  <a href="https://github.com/fordus/shadcn-classless">shadcn-classless</a> (MIT, embedded — no
+  external stylesheet is loaded).</small>
+</footer>
+
+<script>
+"use strict";
+
+/* =========================================================================
+ * Logic ported 1:1 from tools/bot_report.py (TOOL_VERSION 1.3.0).
+ * Pure functions live at the top; DOM wiring only runs in a browser.
+ * ========================================================================= */
+
+const API_PREFIX = "/api/v1";
+const TRADES_PAGE_SIZE = 500;
+const REQUEST_TIMEOUT = 120; // seconds, per HTTP request
+const TOOL_VERSION = "1.3.0";
+const REDACTED = "<redacted>";
+const MAX_DAILY_DAYS = 3650;
+const MAX_WEEKLY_WEEKS = 520;
+const MAX_MONTHLY_MONTHS = 240;
+
+/* Keys that are always redacted regardless of their value. */
+const WHOLE_KEY_REDACT = new Set([
+  "bot_name", "ccxt_async_config", "ccxt_config", "db_url", "exportfilename",
+  "log_configfile", "logfile", "open_order", "open_orders", "strategy_path",
+  "uid", "user_data_dir",
+]);
+
+/* Key tokens (key split on non-alphanumerics) that mark credentials / personal data. */
+const SECRET_TOKENS = new Set([
+  "chat", "credential", "key", "passwd", "password", "secret", "token", "webhook",
+]);
+
+/* A key is treated as an identifier when it has an "id" token plus one of these.
+ * Local counters (trade_id, id) stay, exchange/account identifiers do not. */
+const ID_CONTEXT_TOKENS = new Set([
+  "account", "client", "order", "telegram", "user",
+]);
+
+/* Keys whose values can reveal the account balance / absolute PnL. */
+const MONEY_EXACT_KEYS = new Set([
+  "abs_profit", "amount", "amount_requested", "available_capital", "cost",
+  "current_drawdown_high", "current_drawdown_low", "drawdown_high", "drawdown_low",
+  "dry_run_wallet", "expectancy", "fiat_value", "filled", "funding_fee",
+  "funding_fees", "ft_fee_base", "max_stake_amount", "open_trade_value",
+  "profit_all_coin", "profit_all_fiat", "profit_closed_coin", "profit_closed_fiat",
+  "realized_profit", "remaining", "safe_cost", "stake_amount", "starting_balance",
+  "total_capital", "total_stake", "trading_volume",
+]);
+
+const MONEY_KEY_SUFFIXES = [
+  "_abs", "_balance", "_coin", "_cost", "_dist", "_fee", "_fiat", "_stake_amount", "_wallet",
+];
+/* Absolute price levels, not money: stop_loss_abs describes the market, not the account. */
+const MONEY_SUFFIX_EXCEPTIONS = new Set(["initial_stop_loss_abs", "stop_loss_abs"]);
+/* Money-like keys where a string value is behavior (e.g. "unlimited"), not an amount. */
+const MONEY_ONLY_NUMERIC_KEYS = new Set(["dry_run_wallet", "max_stake_amount", "stake_amount"]);
+
+/* Fail-closed numeric redaction: report sections whose numbers are safe as a whole. */
+const NUMBER_SAFE_SECTIONS = new Set(["config", "system_info", "plot_config"]);
+
+/* Key tokens that mark numbers safe to keep. Deny rules always take precedence. */
+const ALLOWED_NUMBER_TOKENS = new Set([
+  "average", "count", "current", "decimals", "duration", "interval", "length",
+  "max", "offset", "pct", "percent", "precision", "price", "rate", "ratio",
+  "share", "timestamp", "total", "ts", "version",
+]);
+
+/* Individual numeric keys that are safe but carry none of the tokens above. */
+const ALLOWED_NUMBER_KEYS = new Set([
+  "close_profit", "contract_size", "cagr", "calmar", "fee_close", "fee_open",
+  "initial_stop_loss_abs", "leverage", "losing_trades", "max_drawdown",
+  "current_drawdown", "nr_of_successful_entries", "nr_of_successful_exits",
+  "profit", "profit_factor", "rel_profit", "sharpe", "sortino", "sqn",
+  "stop_loss_abs", "timeframe", "winrate", "winning_trades",
+]);
+
+function keyTokens(key) {
+  return key.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+function isSensitive(key, value) {
+  const lowered = key.toLowerCase();
+  const parts = keyTokens(key);
+  if (parts.length === 0 || MONEY_SUFFIX_EXCEPTIONS.has(lowered)) return false;
+  if (WHOLE_KEY_REDACT.has(lowered)) return true;
+  if (parts.some((part) => SECRET_TOKENS.has(part))) return true;
+  if (parts.includes("id") && parts.some((part) => ID_CONTEXT_TOKENS.has(part))) return true;
+  /* Ratios/percentages are never account balance, even when they mention money words. */
+  if (parts.includes("ratio") || parts[parts.length - 1] === "pct" || parts[parts.length - 1] === "percent") return false;
+  if (MONEY_EXACT_KEYS.has(lowered) || MONEY_KEY_SUFFIXES.some((suffix) => lowered.endsWith(suffix))) {
+    if (MONEY_ONLY_NUMERIC_KEYS.has(lowered)) return typeof value === "number";
+    return true;
+  }
+  return false;
+}
+
+function isAllowedNumber(path, key) {
+  /* Fail-closed: unknown keys are redacted. */
+  if (NUMBER_SAFE_SECTIONS.has(path.split(".")[0])) return true;
+  if (keyTokens(key).some((token) => ALLOWED_NUMBER_TOKENS.has(token))) return true;
+  if (ALLOWED_NUMBER_KEYS.has(key) || key.endsWith("_id") || key === "id") return true;
+  return false;
+}
+
+/* Mirrors Redactor.walk: recursively redacts sensitive fields, keeps structure.
+ * state.paths records every redacted key path so the UI can show exactly what
+ * was removed before the report leaves the browser. */
+function redactWalk(obj, key, path, state) {
+  if (!state.enabled) return obj;
+  const fullPath = path && key ? `${path}.${key}` : (key || path);
+  if (key && isSensitive(key, obj)) {
+    state.count += 1;
+    state.paths.push(fullPath);
+    return REDACTED;
+  }
+  if (typeof obj === "boolean") return obj;
+  if (typeof obj === "number" && key && !isAllowedNumber(fullPath, key)) {
+    state.count += 1;
+    state.paths.push(fullPath);
+    return REDACTED;
+  }
+  if (obj !== null && typeof obj === "object") {
+    if (Array.isArray(obj)) {
+      return obj.map((item) => redactWalk(item, key, fullPath, state));
+    }
+    const out = {};
+    for (const name of Object.keys(obj)) {
+      out[name] = redactWalk(obj[name], String(name), fullPath, state);
+    }
+    return out;
+  }
+  return obj;
+}
+
+/* ---------------------------------------------------------------- errors */
+
+class ApiError extends Error {
+  constructor(endpoint, status) {
+    super(`${endpoint} failed with HTTP ${status}`);
+    this.endpoint = endpoint;
+    this.status = status;
+    this.friendly = `${API_PREFIX}/${endpoint} answered with HTTP ${status}.`;
+  }
+}
+
+class AuthError extends Error {
+  constructor(base) {
+    super(`authentication failed for ${base}`);
+    this.friendly = "Authentication failed: check the username and password against your bot's api_server config.";
+  }
+}
+
+class NetworkError extends Error {
+  constructor(base, cause) {
+    super(`cannot reach freqtrade API at ${base}`, { cause });
+    this.friendly = `Cannot reach the freqtrade API at ${base}. The browser blocked the request or the bot is offline. Most common causes: missing "CORS_origins" entry for this page in the bot's api_server config, or a plain-HTTP bot URL blocked as mixed content (see Setup below). Details in the DevTools console.`;
+  }
+}
+
+class TimeoutError extends Error {
+  constructor(endpoint, seconds) {
+    super(`${endpoint} timed out after ${seconds}s`);
+    this.friendly = `Request to ${API_PREFIX}/${endpoint} timed out after ${seconds}s. The bot may be busy, offline, or the timeout is too small.`;
+  }
+}
+
+/* ------------------------------------------------------------ api client */
+
+/* Mirrors FreqtradeApi: minimal read-only client for the freqtrade REST API. */
+class FreqtradeApi {
+  constructor(opts) {
+    this.base = opts.url.replace(/\/+$/, "");
+    this.timeoutMs = (opts.timeout ?? REQUEST_TIMEOUT) * 1000;
+    this.auth = null;
+    if (opts.username || opts.password) {
+      this.auth = "Basic " + b64Utf8(`${opts.username || ""}:${opts.password || ""}`);
+    }
+  }
+
+  async get(endpoint, params) {
+    let url = `${this.base}${API_PREFIX}/${endpoint}`;
+    if (params) url += "?" + new URLSearchParams(params).toString();
+    const headers = { "Accept": "application/json" };
+    if (this.auth) headers["Authorization"] = this.auth;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let response;
+    try {
+      response = await fetch(url, { method: "GET", headers, signal: controller.signal, credentials: "omit" });
+    } catch (err) {
+      if (err && err.name === "AbortError") throw new TimeoutError(endpoint, this.timeoutMs / 1000);
+      throw new NetworkError(this.base, err);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (response.status === 401) throw new AuthError(this.base);
+    if (!response.ok) throw new ApiError(endpoint, response.status);
+    return response.json();
+  }
+}
+
+function b64Utf8(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/* -------------------------------------------------------- derived fields */
+
+function safeDiv(numerator, denominator) {
+  if (numerator === null || numerator === undefined || denominator === null || denominator === undefined) return null;
+  if (typeof numerator !== "number" || typeof denominator !== "number") return null;
+  if (denominator === 0) return null;
+  if (!Number.isFinite(numerator / denominator)) return null;
+  return Math.round((numerator / denominator) * 1e6) / 1e6;
+}
+
+/* Build a day -> starting-balance lookup from /daily rows (null if unavailable). */
+function balanceLookup(dailyRows) {
+  const mapping = new Map();
+  for (const row of dailyRows || []) {
+    if (!row || typeof row !== "object") continue;
+    const day = row.date;
+    const balance = row.starting_balance;
+    if (day && typeof balance === "number") mapping.set(String(day).slice(0, 10), balance);
+  }
+  if (mapping.size === 0) return null;
+  const days = Array.from(mapping.keys()).sort();
+  return function lookup(dateStr) {
+    const day = String(dateStr).slice(0, 10);
+    if (mapping.has(day)) return mapping.get(day);
+    if (day < days[0]) return mapping.get(days[0]);
+    for (let i = days.length - 1; i >= 0; i--) {
+      if (days[i] < day) return mapping.get(days[i]);
+    }
+    return mapping.get(days[0]);
+  };
+}
+
+function isEntryOrder(order, isShort) {
+  if ("ft_is_entry" in order) return Boolean(order.ft_is_entry);
+  return (order.ft_order_side === "buy") !== Boolean(isShort);
+}
+
+/* Mirrors add_derived_fields: scale-invariant ratios, computed before redaction.
+ * All derived keys carry a "ratio" or "share" token so redaction keeps them. */
+function addDerivedFields(raw, nowIso) {
+  const lookup = balanceLookup((raw.daily_performance || {}).data);
+  const balanceNow = lookup ? lookup(nowIso || new Date().toISOString()) : null;
+
+  const openTrades = Array.isArray(raw.open_trades) ? raw.open_trades : [];
+  const tradeCounts = raw.trade_counts;
+  if (tradeCounts !== null && typeof tradeCounts === "object" && !Array.isArray(tradeCounts)) {
+    /* Collateral share currently deployed: sum of open-trade stake (collateral),
+     * not /count total_stake which is open notional (open_rate*amount) and exceeds
+     * collateral by the leverage factor on futures. */
+    let collateral = 0;
+    for (const t of openTrades) {
+      if (t !== null && typeof t === "object" && !Array.isArray(t)
+        && typeof t.stake_amount === "number" && Number.isFinite(t.stake_amount)) {
+        collateral += t.stake_amount;
+      }
+    }
+    const deployedBase = collateral > 0 ? collateral : tradeCounts.total_stake;
+    tradeCounts.total_stake_to_account_balance_ratio = safeDiv(deployedBase, balanceNow);
+  }
+
+  const profitSummary = raw.profit_summary;
+  if (profitSummary !== null && typeof profitSummary === "object" && !Array.isArray(profitSummary)) {
+    profitSummary.trading_volume_to_account_balance_ratio = safeDiv(profitSummary.trading_volume, balanceNow);
+  }
+
+  const closedTrades = Array.isArray((raw.closed_trades || {}).trades) ? raw.closed_trades.trades : [];
+  const trades = openTrades.concat(closedTrades);
+  for (const trade of trades) {
+    if (trade === null || typeof trade !== "object" || Array.isArray(trade)) continue;
+    const stake = trade.stake_amount;
+    const balanceAtOpen = lookup ? lookup(trade.open_date) : null;
+    trade.stake_amount_to_account_balance_ratio = safeDiv(stake, balanceAtOpen);
+    let absProfit;
+    let balanceAtClose;
+    if (trade.close_date) {
+      absProfit = trade.close_profit_abs;
+      balanceAtClose = lookup ? lookup(trade.close_date) : null;
+    } else {
+      /* Open trades: freqtrade's /profit headline (profit_all) uses total_profit
+       * (realized grind exits + unrealized), while profit_abs is unrealized only.
+       * Prefer the total so the per-trade account impact matches the headline. */
+      const total = trade.total_profit_abs;
+      absProfit = (typeof total === "number" && Number.isFinite(total)) ? total : trade.profit_abs;
+      balanceAtClose = balanceNow;
+    }
+    trade.profit_to_account_balance_ratio = safeDiv(absProfit, balanceAtClose);
+    trade.funding_fees_to_stake_amount_ratio = safeDiv(trade.funding_fees, stake);
+
+    const isShort = Boolean(trade.is_short);
+    const orders = (Array.isArray(trade.orders) ? trade.orders : []).filter((o) => o !== null && typeof o === "object" && !Array.isArray(o));
+    const filledBySide = { true: 0, false: 0 };
+    for (const order of orders) {
+      const filled = order.filled;
+      if (typeof filled === "number" && filled > 0) {
+        filledBySide[isEntryOrder(order, isShort)] += filled;
+      }
+    }
+    for (const order of orders) {
+      order.funding_fee_to_order_cost_ratio = safeDiv(order.funding_fee, order.cost);
+      const sideFilled = filledBySide[isEntryOrder(order, isShort)];
+      order.order_filled_share_of_trade_side = safeDiv(order.filled, sideFilled || null);
+    }
+  }
+}
+
+/* Days since the first trade, for full-history daily/weekly/monthly windows. */
+function historyDays(firstTradeDate, nowMs) {
+  const match = /^\d{4}-\d{2}-\d{2}/.exec(String(firstTradeDate === null || firstTradeDate === undefined ? "" : firstTradeDate));
+  if (!match) return 8;
+  const start = new Date(`${match[0]}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) return 8;
+  const days = Math.floor(((nowMs === undefined ? Date.now() : nowMs) - start.getTime()) / 86400000) + 2;
+  return Math.min(Math.max(days, 8), MAX_DAILY_DAYS);
+}
+
+/* -------------------------------------------------------------- fetching */
+
+/* Mirrors fetch_trade_history: full closed-trade history via /trades + offset. */
+async function fetchTradeHistory(api, cap, failed, progress) {
+  const trades = [];
+  const seen = new Set();
+  let offset = 0;
+  let total = null;
+  let pageNo = 0;
+  while (cap === null || trades.length < cap) {
+    pageNo += 1;
+    progress.step(`Fetching closed trades — page ${pageNo}${total !== null ? `, ${Math.min(offset, total)} of ${total}` : ""} …`);
+    let page;
+    try {
+      page = await api.get("trades", { limit: TRADES_PAGE_SIZE, offset });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        failed.push({ endpoint: "trades", http_status: err.status });
+        console.warn(`warning: trades failed with HTTP ${err.status}`);
+        progress.done();
+        break;
+      }
+      throw err;
+    }
+    page = page || {};
+    const batch = page.trades || [];
+    const fresh = batch.filter((t) => t !== null && typeof t === "object" && !Array.isArray(t) && !seen.has(t.trade_id));
+    for (const t of fresh) seen.add(t.trade_id);
+    trades.push(...fresh);
+    if (page.total_trades !== undefined) total = page.total_trades;
+    if (total !== null && pageNo === 1) progress.addTotal(Math.max(Math.ceil(total / TRADES_PAGE_SIZE) - 1, 0));
+    offset += batch.length;
+    progress.done();
+    if (batch.length === 0 || (total !== null && offset >= total)) break;
+  }
+  const capped = cap !== null ? trades.slice(0, cap) : trades;
+  capped.sort((a, b) => (a.trade_id || 0) - (b.trade_id || 0));
+  return { trades: capped, trades_count: capped.length, total_trades: total || capped.length };
+}
+
+/* Mirrors collect_report: same endpoint sequence, same parameters. */
+async function collectReport(api, redacted, tradesLimit, window, progress) {
+  const raw = {};
+  const failed = [];
+  const windowed = window !== "all";
+
+  const fetchSection = async (section, endpoint, params) => {
+    progress.step(`GET ${API_PREFIX}/${endpoint} — ${section} …`);
+    try {
+      const data = await api.get(endpoint, params);
+      raw[section] = data;
+      progress.done();
+      return data;
+    } catch (err) {
+      if (err instanceof ApiError) {
+        failed.push({ endpoint, http_status: err.status });
+        console.warn(`warning: ${endpoint} failed with HTTP ${err.status}`);
+        progress.done();
+        return null;
+      }
+      throw err;
+    }
+  };
+
+  progress.setTotal(20 + (redacted ? 0 : 1) + (windowed ? 1 : 0));
+  progress.step("Connecting to the bot — GET /api/v1/ping …");
+  await api.get("ping");
+  progress.done();
+
+  const version = await fetchSection("freqtrade_version", "version");
+  await fetchSection("config", "show_config");
+  await fetchSection("health", "health");
+  await fetchSection("system_info", "sysinfo");
+  await fetchSection("open_trades", "status");
+  await fetchSection("trade_counts", "count");
+  await fetchSection("profit_summary", "profit");
+  await fetchSection("performance_per_pair", "performance");
+
+  const days = historyDays((raw.profit_summary || {}).first_trade_date);
+  await fetchSection("daily_performance", "daily", { timescale: days });
+  await fetchSection("weekly_performance", "weekly", { timescale: Math.min(Math.floor(days / 7) + 2, MAX_WEEKLY_WEEKS) });
+  await fetchSection("monthly_performance", "monthly", { timescale: Math.min(Math.floor(days / 30) + 2, MAX_MONTHLY_MONTHS) });
+
+  raw.closed_trades = await fetchTradeHistory(api, tradesLimit, failed, progress);
+  if (windowed) {
+    progress.step(`Filtering closed trades to the ${WINDOW_LABELS[window]} …`);
+    const cutoff = Date.now() - WINDOW_MS[window];
+    raw.closed_trades.trades = raw.closed_trades.trades.filter((trade) => {
+      const closedAt = parseUtcTimestamp(trade.close_date);
+      return !Number.isNaN(closedAt) && closedAt >= cutoff;
+    });
+    raw.closed_trades.trades_count = raw.closed_trades.trades.length;
+    progress.done();
+  }
+
+  await fetchSection("whitelist", "whitelist");
+  await fetchSection("blacklist", "blacklist");
+  await fetchSection("pair_locks", "locks");
+  await fetchSection("plot_config", "plot_config");
+  if (!redacted) await fetchSection("balance", "balance");
+
+  progress.step("Computing derived relative fields (stake/profit/funding ratios) …");
+  addDerivedFields(raw);
+  progress.done();
+
+  progress.step(redacted
+    ? "Redacting confidential fields (credentials, money values, identifiers) …"
+    : "Redaction disabled — keeping absolute values …");
+  const state = { enabled: redacted, count: 0, paths: [] };
+  const report = {};
+  for (const section of Object.keys(raw)) {
+    report[section] = redactWalk(raw[section], "", "", state);
+  }
+  progress.done();
+
+  const metadata = {
+    tool: "web/index.html (tools/bot_report.py port)",
+    tool_version: TOOL_VERSION,
+    generated_at_utc: new Date().toISOString().replace(/\.\d{3}Z$/, "+00:00"),
+    freqtrade_version: (version || {}).version,
+    redacted,
+    redacted_field_count: state.count,
+    skipped_endpoints: redacted ? ["balance", "logs"] : [],
+    failed_endpoints: failed,
+  };
+  if (windowed) metadata.closed_trades_window = WINDOW_LABELS[window];
+  /* report_metadata stays the first key, matching the CLI's output order. */
+  const ordered = { report_metadata: metadata, ...report };
+  return { report: ordered, redactedPaths: state.paths };
+}
+
+const nullProgress = { setTotal() {}, addTotal() {}, step() {}, done() {} };
+
+/* Full pipeline: collect -> derive -> redact -> serialize.
+ * Used by both the page and the equivalence tests. */
+async function runExport(opts, progress) {
+  progress = progress || nullProgress;
+  const api = new FreqtradeApi(opts);
+  const { report, redactedPaths } = await collectReport(api, opts.redact, opts.tradesLimit === undefined ? null : opts.tradesLimit, opts.window || "all", progress);
+  progress.step("Serializing JSON and preparing the download …");
+  const json = JSON.stringify(report, null, 2) + "\n";
+  const filename = `bot-report-${stamp()}.json`;
+  return { report, json, filename, redactedPaths };
+}
+
+function stamp() {
+  return new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+/* ------------------------------------------------------------- DOM layer */
+
+function makeProgress() {
+  const section = document.getElementById("progress");
+  const stepEl = document.getElementById("progress-step");
+  const bar = document.getElementById("progress-bar");
+  section.hidden = false;
+  bar.max = 1;
+  bar.value = 0;
+  stepEl.setAttribute("aria-busy", "spinner");
+  stepEl.textContent = "";
+  return {
+    setTotal(n) { bar.max = n; },
+    addTotal(n) { bar.max = Number(bar.max) + n; },
+    step(label) { stepEl.textContent = label; },
+    done() { bar.value = Number(bar.value) + 1; },
+    finish() { section.hidden = true; stepEl.removeAttribute("aria-busy"); stepEl.textContent = ""; },
+  };
+}
+
+function setFormDisabled(form, disabled) {
+  for (const el of form.querySelectorAll("input, button")) el.disabled = disabled;
+}
+
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  for (const [name, value] of Object.entries(attrs || {})) {
+    if (name === "class") node.className = value;
+    else if (name === "html") node.innerHTML = value;
+    else node.setAttribute(name, value);
+  }
+  for (const child of children || []) {
+    node.append(child);
+  }
+  return node;
+}
+
+function renderSuccess(container, report, filename, json, redactedPaths) {
+  const meta = report.report_metadata;
+  const failed = meta.failed_endpoints;
+  const children = [];
+
+  if (!meta.redacted) {
+    children.push(el("p", { class: "text-warning" },
+      "Redaction was disabled — this report contains balances, absolute PnL and credentials. Use it for private diagnostics only, never share it."));
+  }
+  if (failed.length > 0) {
+    children.push(el("p", { class: "text-warning" },
+      `${failed.length} endpoint(s) failed and were skipped: ` +
+      failed.map((f) => `${f.endpoint} (HTTP ${f.http_status})`).join(", ") + "."));
+  }
+
+  const rows = [
+    ["Freqtrade version", meta.freqtrade_version ?? "unknown", ""],
+    ["Generated at (UTC)", meta.generated_at_utc, ""],
+    ["Closed trades", `${report.closed_trades.trades_count} exported / ${report.closed_trades.total_trades} total` +
+      (meta.closed_trades_window ? ` — ${meta.closed_trades_window}` : ""), ""],
+    ["Fields redacted", meta.redacted ? meta.redacted_field_count : "redaction disabled", ""],
+    ["Skipped endpoints", meta.skipped_endpoints.length ? meta.skipped_endpoints.join(", ") : "none", ""],
+    ["Failed endpoints", failed.length ? failed.map((f) => f.endpoint).join(", ") : "none",
+      failed.length ? "text-warning" : "text-neutral"],
+  ];
+  const table = el("table", { class: "summary" });
+  const tbody = el("tbody", {});
+  for (const [label, value, cls] of rows) {
+    const tr = el("tr", {});
+    tr.append(el("th", { scope: "row" }, [label]), el("td", { class: cls }, [String(value)]));
+    tbody.append(tr);
+  }
+  table.append(tbody, el("caption", {}, [`File name: ${filename}`]));
+  children.push(table);
+
+  /* Review-before-download: show exactly which key paths were redacted so the
+     user can confirm what left their machine before saving the file. */
+  if (meta.redacted && redactedPaths && redactedPaths.length > 0) {
+    const counts = new Map();
+    for (const p of redactedPaths) counts.set(p, (counts.get(p) || 0) + 1);
+    const review = el("details", { class: "redaction-review" });
+    review.append(el("summary", {}, [`Review what was redacted (${meta.redacted_field_count} fields)`]));
+    const list = el("ul", { "scroll-y": "" });
+    for (const path of [...counts.keys()].sort()) {
+      const n = counts.get(path);
+      list.append(el("li", {}, [n > 1 ? `${path} — ×${n}` : path]));
+    }
+    review.append(list);
+    children.push(review);
+  }
+
+  const button = el("button", { type: "button" }, ["Download report"]);
+  button.addEventListener("click", () => saveJson(json, filename));
+  children.push(button);
+  container.replaceChildren(...children);
+}
+
+function renderFailure(container, err) {
+  console.error("Export failed:", err);
+  container.replaceChildren(
+    el("p", { class: "text-danger" }, [err.friendly || String(err)]),
+    el("p", { class: "text-neutral" }, ["Fix the cause and try again. Nothing was written to disk."]),
+  );
+}
+
+function saveJson(json, filename) {
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = el("a", { href: url, download: filename });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+/* --------------------------------------- shareable dashboard image (web-only)
+ *
+ * freqUI-style snapshot built EXCLUSIVELY from scale-invariant fields, so the
+ * image can be shared without revealing the account size.
+ *   Read: dates, counts, pairs, market prices (open/current/close rates,
+ *         order prices via safe_price, order fill dates), ratios and percentages
+ *         (rel_profit, close_profit, profit_ratio, profit_pct, ...), the derived
+ *         *_ratio fields (position size vs the account, per-trade account impact,
+ *         per-order share of side), exit reasons, local trade ids, order sides
+ *         (ft_order_side), order type/status and full order tags (ft_order_tag,
+ *         last 3 per open trade as sub-rows; top 3 gainers/losers ranked by
+ *         per-trade average).
+ *   Never read: balances, stakes, costs, absolute PnL, fees, wallet/capital
+ *         values, fiat/coin amounts. No currency code is rendered anywhere.
+ * The JSON export is untouched; the image is an additional artifact rendered
+ * from the same in-memory report. Pure helpers (no DOM) live first so they
+ * stay testable outside the browser; DOM wiring is at the bottom.
+ */
+
+const SHARE_TS_LABEL = { daily: "Days", weekly: "Weeks", monthly: "Months" };
+const shareState = { report: null, timescale: "monthly", recent: 5, watermark: true };
+
+/* Exact key names that must never appear in image data. The audit scans the
+ * built image model for these before every render. */
+const SHARE_FORBIDDEN_KEYS = new Set([
+  "abs_profit", "amount", "amount_requested", "available_capital", "balance",
+  "capital", "close_profit_abs", "coin", "cost", "current_drawdown_high",
+  "current_drawdown_low", "drawdown_high", "drawdown_low", "dry_run_wallet",
+  "expectancy", "fee", "fiat", "fiat_value", "filled", "funding_fee",
+  "funding_fees", "max_stake_amount", "open_trade_value", "profit_abs",
+  "profit_all_coin", "profit_all_fiat", "profit_closed_coin", "profit_closed_fiat",
+  "realized_profit", "remaining", "safe_cost", "stake_amount", "starting_balance",
+  "total_capital", "total_profit_abs", "total_profit_fiat", "total_stake", "trading_volume", "wallet",
+]);
+
+function numOrNull(value) {
+  return (typeof value === "number" && Number.isFinite(value)) ? value : null;
+}
+
+function firstNum(...values) {
+  for (const value of values) {
+    const n = numOrNull(value);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
+/* Percent-scale API field (e.g. profit_pct == 2.5 means 2.5%) to ratio. */
+function pctFieldToRatio(value) {
+  const n = numOrNull(value);
+  return n === null ? null : n / 100;
+}
+
+function fmtPct(ratio, digits) {
+  if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return "—";
+  const d = digits === undefined ? 2 : digits;
+  const sign = ratio > 0 ? "+" : "";
+  return `${sign}${(ratio * 100).toFixed(d)}%`;
+}
+
+/* Market price formatting (public market data, not account size). */
+function fmtRate(value) {
+  const n = numOrNull(value);
+  if (n === null) return "—";
+  const mag = Math.abs(n);
+  let text;
+  if (mag >= 1000) text = n.toFixed(2);
+  else if (mag >= 1) text = n.toFixed(4);
+  else text = n.toFixed(6);
+  return text.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+function shortDate(value) {
+  return String(value === null || value === undefined ? "" : value).slice(0, 10);
+}
+
+function shortDateTime(value) {
+  return String(value === null || value === undefined ? "" : value).slice(0, 16).replace("T", " ");
+}
+
+function escXml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/* Per-period series from a redacted daily/weekly/monthly section. Uses only
+ * rel_profit (period profit relative to the period starting balance) and
+ * trade_count — both scale-invariant. */
+function periodPoints(report, section) {
+  const rows = (report && report[section] && report[section].data) || [];
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => row !== null && typeof row === "object" && !Array.isArray(row))
+    .map((row) => ({
+      date: shortDate(row.date),
+      rel: numOrNull(row.rel_profit),
+      count: (typeof row.trade_count === "number" && Number.isFinite(row.trade_count)) ? row.trade_count : 0,
+    }))
+    .filter((point) => point.date && point.rel !== null)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+function openPoint(trade) {
+  return {
+    id: (trade.trade_id === undefined || trade.trade_id === null) ? "—" : trade.trade_id,
+    pair: typeof trade.pair === "string" ? trade.pair : "—",
+    side: trade.is_short ? "Short" : "Long",
+    openRate: numOrNull(trade.open_rate),
+    endRate: numOrNull(trade.current_rate),
+    /* Total (realized grind exits + unrealized) matches /profit profit_all and
+     * freqUI's total; profit_ratio alone is unrealized only and understates
+     * grind positions by up to ~18pp on this bot. */
+    tradeRatio: firstNum(trade.total_profit_ratio, trade.profit_ratio, pctFieldToRatio(trade.profit_pct)),
+    acct: numOrNull(trade.profit_to_account_balance_ratio),
+    stake: numOrNull(trade.stake_amount_to_account_balance_ratio),
+    openDate: shortDateTime(trade.open_date),
+    endDate: "",
+    exit: "",
+    tag: normalizeTag(trade.enter_tag),
+    lastOrders: lastOrdersOf(trade),
+    hiddenOrders: hiddenOrderCount(trade),
+  };
+}
+
+/* Entry/exit tags are strategy labels, not money — safe to show. */
+function normalizeTag(value) {
+  const s = typeof value === "string" ? value.trim() : "";
+  if (!s || s === REDACTED) return "—";
+  return s;
+}
+
+/* Last 3 orders of a trade, oldest first. Only scale-invariant fields are kept
+ * (side, entry/exit tag, market price, fill date, share of side, type/status)
+ * so the dashboard image stays shareable: amounts, costs, filled quantities,
+ * absolute PnL and order ids are never picked up (per-order stake/PnL cannot
+ * be shown — share-of-side is the relative size proxy). */
+function lastOrdersOf(trade) {
+  const raw = Array.isArray(trade.orders) ? trade.orders : [];
+  const rows = [];
+  for (const o of raw) {
+    if (o === null || typeof o !== "object" || Array.isArray(o)) continue;
+    const side = typeof o.ft_order_side === "string" && o.ft_order_side ? o.ft_order_side : "—";
+    let tag = typeof o.ft_order_tag === "string" ? o.ft_order_tag.trim() : "";
+    if (!tag || tag === REDACTED) tag = "—";
+    const price = firstNum(numOrNull(o.safe_price), numOrNull(o.average), numOrNull(o.price));
+    let ts = numOrNull(o.order_filled_timestamp);
+    if (ts === null) ts = numOrNull(o.order_timestamp);
+    let date = "—";
+    if (ts !== null) {
+      const d = new Date(ts);
+      if (!Number.isNaN(d.getTime())) date = d.toISOString().slice(0, 16).replace("T", " ");
+    }
+    const share = numOrNull(o.order_filled_share_of_trade_side);
+    const otype = typeof o.order_type === "string" ? o.order_type.trim() : "";
+    const ostat = typeof o.status === "string" ? o.status.trim() : "";
+    const status = [otype, ostat].filter(Boolean).join(" · ") || "—";
+    rows.push({ side, tag, price, date, share, status, ts: ts === null ? -Infinity : ts });
+  }
+  rows.sort((a, b) => a.ts - b.ts);
+  const total = rows.length;
+  return rows.slice(-3).map(({ side, tag, price, date, share, status }, i, arr) => ({
+    side, tag, price, date, share, status,
+    /* 1-based position among all orders, oldest = 1 (e.g. 10 of 12). */
+    n: total - arr.length + 1 + i,
+    total,
+  }));
+}
+
+/* Orders beyond the last 3 shown as sub-rows (same valid-order filter). */
+function hiddenOrderCount(trade) {
+  const raw = Array.isArray(trade.orders) ? trade.orders : [];
+  let n = 0;
+  for (const o of raw) {
+    if (o !== null && typeof o === "object" && !Array.isArray(o)) n += 1;
+  }
+  return Math.max(0, n - 3);
+}
+
+function closedPoint(trade) {
+  const closeDate = trade.close_date === undefined || trade.close_date === null ? "" : String(trade.close_date);
+  return {
+    id: (trade.trade_id === undefined || trade.trade_id === null) ? "—" : trade.trade_id,
+    pair: typeof trade.pair === "string" ? trade.pair : "—",
+    side: trade.is_short ? "Short" : "Long",
+    openRate: numOrNull(trade.open_rate),
+    endRate: firstNum(trade.close_rate, trade.close_rate_requested),
+    tradeRatio: firstNum(trade.close_profit, pctFieldToRatio(trade.close_profit_pct)),
+    acct: numOrNull(trade.profit_to_account_balance_ratio),
+    stake: numOrNull(trade.stake_amount_to_account_balance_ratio),
+    openDate: shortDateTime(trade.open_date),
+    endDate: shortDateTime(closeDate),
+    closeTs: parseUtcTimestamp(closeDate),
+    exit: typeof trade.exit_reason === "string" && trade.exit_reason ? trade.exit_reason : "—",
+    tag: normalizeTag(trade.enter_tag),
+    orderTags: orderTagsOf(trade),
+  };
+}
+
+/* Distinct full order tags (ft_order_tag, e.g. grind_2_entry) used by a trade.
+ * Falls back to the entry tag so every trade is counted even when orders are
+ * missing. Only labels are kept — never amounts or ids. */
+function orderTagsOf(trade) {
+  const out = [];
+  const seen = new Set();
+  const raw = Array.isArray(trade.orders) ? trade.orders : [];
+  for (const o of raw) {
+    if (o === null || typeof o !== "object" || Array.isArray(o)) continue;
+    const tag = normalizeTag(o.ft_order_tag);
+    if (tag === "—" || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+  }
+  if (out.length === 0) {
+    const fallback = normalizeTag(trade.enter_tag);
+    if (fallback !== "—") out.push(fallback);
+    else out.push("—");
+  }
+  return out;
+}
+
+/* Top 3 gainers / losers by full order tag (ft_order_tag, e.g. grind_2_entry)
+ * over closed trades. Each trade is counted once per distinct tag it used, so
+ * the sums are NOT portfolio totals (one trade's result appears under every
+ * tag it touched) — ranking therefore uses the per-trade average, which,
+ * unlike the sum, is not inflated by how often a tag appears. Basis is chosen
+ * once for the whole window (account impact when available, else summed stake
+ * returns) so rows never mix units in one ranking. Flat (0) counts as a win,
+ * matching freqtrade's own won/lost convention. */
+function tagLeaderboard(closedAsc) {
+  const list = Array.isArray(closedAsc) ? closedAsc : [];
+  const useAcct = list.some((t) => Number.isFinite(t.acct));
+  const basis = list.length > 0 ? (useAcct ? "account" : "trade") : null;
+  const byTag = new Map();
+  const bump = (tag, t) => {
+    const key = typeof tag === "string" && tag ? tag : "—";
+    let g = byTag.get(key);
+    if (!g) {
+      g = { tag: key, count: 0, wins: 0, losses: 0, sum: 0, n: 0 };
+      byTag.set(key, g);
+    }
+    g.count += 1;
+    /* Finite-only: stray strings/NaN must never poison the sums (a poisoned
+     * sum would render the pill blank). */
+    const v = useAcct ? t.acct : t.tradeRatio;
+    if (Number.isFinite(v)) {
+      g.sum += v;
+      g.n += 1;
+    }
+    if (Number.isFinite(t.tradeRatio)) {
+      if (t.tradeRatio >= 0) g.wins += 1;
+      else g.losses += 1;
+    }
+  };
+  for (const t of list) {
+    const tags = Array.isArray(t.orderTags) && t.orderTags.length > 0
+      ? [...new Set(t.orderTags.filter((x) => typeof x === "string" && x))]
+      : [(typeof t.tag === "string" && t.tag ? t.tag : "—")];
+    for (const tag of tags) bump(tag, t);
+  }
+  const rows = [...byTag.values()].map((g) => ({
+    tag: g.tag,
+    count: g.count,
+    wins: g.wins,
+    losses: g.losses,
+    unrated: g.count - g.wins - g.losses,
+    total: g.sum,
+    avg: g.n > 0 ? g.sum / g.n : null,
+  }));
+  /* Null averages sort last on both ends so unrated tags never top a board. */
+  const byAvgDesc = (a, b) => (b.avg === null ? -Infinity : b.avg) - (a.avg === null ? -Infinity : a.avg);
+  const byAvgAsc = (a, b) => (a.avg === null ? Infinity : a.avg) - (b.avg === null ? Infinity : b.avg);
+  const desc = rows.slice().sort(byAvgDesc);
+  const gainers = desc.filter((r) => r.avg !== null && r.avg > 0).slice(0, 3);
+  const losers = rows.slice().sort(byAvgAsc).filter((r) => r.avg !== null && r.avg < 0).slice(0, 3);
+  // Fall back to top/bottom 3 overall when fewer than 3 strictly positive/negative.
+  const top = desc.slice(0, 3);
+  const bottom = rows.slice().sort(byAvgAsc).slice(0, 3);
+  return {
+    gainers: gainers.length > 0 ? gainers : [],
+    losers: losers.length > 0 ? losers : [],
+    top, bottom,
+    totalTags: rows.length,
+    basis,
+  };
+}
+
+/* Compounded growth from per-period relative profits:
+ * balance_T = balance_0 * prod(1 + rel_t), so no absolute anchor is needed. */
+function equityFromRel(points) {
+  let growth = 1;
+  return points.map((point) => {
+    growth *= (1 + point.rel);
+    return { date: point.date, growth: growth - 1, indexed: growth * 100 };
+  });
+}
+
+/* Trade-by-trade cumulative account impact (summed). Fallback when the daily
+ * history does not cover every closed trade: sums per-trade account impacts
+ * (account basis) or per-trade stake returns (trade basis, matching freqtrade's
+ * profit_closed_ratio_sum). Summing — not compounding — is the accounting
+ * identity here: compounding per-trade stake returns gave 1082% on this bot vs
+ * the true 328% sum, and compounding account impacts gave 33% vs the true 27%.
+ * Still relative, flagged via basis. */
+function cumFromRatios(closedAsc) {
+  const withAcct = closedAsc.filter((t) => t.acct !== null);
+  const basis = withAcct.length > 0 ? "account" : "trade";
+  const source = basis === "account" ? withAcct : closedAsc.filter((t) => t.tradeRatio !== null);
+  let sum = 0;
+  const points = source.map((t) => {
+    sum += (basis === "account" ? t.acct : t.tradeRatio);
+    return { x: shortDate(t.endDate) || `#${t.id}`, y: sum };
+  });
+  return { points, basis: points.length > 0 ? basis : null };
+}
+
+/* Start-of-day balance relative to the first day, derived purely from the
+ * relative per-period series: S(day)/S(first) = prod(1 + rel) over earlier
+ * days. Exact whenever the period history covers the full bot lifetime (the
+ * fetcher sizes it from the first trade date). Duplicate dates contribute
+ * once, mirroring lookup-first-wins. */
+function startScaleMap(points) {
+  const map = new Map();
+  const seen = new Set();
+  let scale = 1;
+  for (const p of points || []) {
+    if (!p || seen.has(p.date)) continue;
+    seen.add(p.date);
+    map.set(p.date, scale);
+    scale *= (1 + p.rel);
+  }
+  return { map, endScale: scale };
+}
+
+function scaleAt(info, dateStr) {
+  const day = shortDate(dateStr);
+  if (!day || !info || info.map.size === 0) return null;
+  if (info.map.has(day)) return info.map.get(day);
+  const days = [...info.map.keys()].sort();
+  /* Mirror balanceLookup: before the first known day use the earliest scale
+   * (S_first/S_0 = 1); after the last day use endScale. Previously pre-history
+   * returned null and forced the legacy fallback even though the lookup had a
+   * well-defined value. */
+  if (day < days[0]) return info.map.get(days[0]);
+  if (day > days[days.length - 1]) return info.endScale;
+  return null;
+}
+
+/* Mirror of the balance-lookup day resolution: exact day, else the latest
+ * known day before it, else the earliest known day. */
+function lookupDayFor(dailyPts, todayStr) {
+  if (!Array.isArray(dailyPts) || dailyPts.length === 0) return null;
+  const t = shortDate(todayStr);
+  let best = dailyPts[0].date;
+  for (const p of dailyPts) {
+    if (p.date === t) return t;
+    if (p.date < t) best = p.date;
+    else break;
+  }
+  return best;
+}
+
+/* Cumulative CLOSED profit vs the starting capital, per trade:
+ *   abs_i / S_0 = (abs_i / S_day) * (S_day / S_0) = acct_i * scale(day_i).
+ * This is freqtrade's absolute cumulative curve divided by the starting
+ * capital, so shape matches freqUI; the endpoint agrees with the
+ * profit_closed_ratio headline within rounding (rel rounded to 8dp, ratios to
+ * 6dp — ~0.08pp on this bot), not bit-exact. All-or-nothing: any trade with a
+ * missing ratio falls back to the legacy summed curve (labeled accordingly). */
+function cumVsStartPoints(closedAsc, info) {
+  if (!info || info.map.size === 0) return null;
+  let sum = 0;
+  const points = [];
+  for (const t of closedAsc) {
+    if (t.acct === null) return null;
+    const s = scaleAt(info, t.endDate);
+    if (s === null) return null;
+    sum += t.acct * s;
+    points.push({ x: shortDate(t.endDate) || `#${t.id}`, y: sum });
+  }
+  return points.length > 0 ? points : null;
+}
+
+/* Floating tip for the cumulative chart, in the curve's own percent units:
+ * last point plus the open-trade impact expressed in the same basis
+ * (freqUI's dotted red/green continuation). Null when there is nothing open. */
+function cumFloatTip(lastY, delta) {
+  if (!Number.isFinite(lastY) || !Number.isFinite(delta) || delta === 0) return null;
+  return { x: "now", y: lastY + delta, fl: true };
+}
+
+/* Build the image model from the (possibly redacted) report. Only safe keys
+ * are picked — even an unredacted report cannot leak through this path. */
+function buildShareData(report) {
+  const safe = report && typeof report === "object" ? report : {};
+  const meta = (safe.report_metadata && typeof safe.report_metadata === "object") ? safe.report_metadata : {};
+  const profit = (safe.profit_summary && typeof safe.profit_summary === "object") ? safe.profit_summary : {};
+  const counts = (safe.trade_counts && typeof safe.trade_counts === "object") ? safe.trade_counts : {};
+  /* Strategy identity comes from /show_config (kept by redaction: neither the
+   * name nor the version is sensitive). Displayed next to the freqtrade
+   * version so the image says what actually produced it. */
+  const config = (safe.config && typeof safe.config === "object") ? safe.config : {};
+  const strategy = typeof config.strategy === "string" && config.strategy ? config.strategy : null;
+  const strategyVersion = (typeof config.strategy_version === "string" || typeof config.strategy_version === "number")
+    && String(config.strategy_version) ? String(config.strategy_version) : null;
+
+  const open = (Array.isArray(safe.open_trades) ? safe.open_trades : [])
+    .filter((t) => t !== null && typeof t === "object" && !Array.isArray(t))
+    .map(openPoint);
+  const closedRaw = ((safe.closed_trades && typeof safe.closed_trades === "object") ? safe.closed_trades.trades : []);
+  const closed = (Array.isArray(closedRaw) ? closedRaw : [])
+    .filter((t) => t !== null && typeof t === "object" && !Array.isArray(t))
+    .map(closedPoint);
+  const closedAsc = closed.slice().sort((a, b) => {
+    const at = Number.isFinite(a.closeTs) ? a.closeTs : -Infinity;
+    const bt = Number.isFinite(b.closeTs) ? b.closeTs : -Infinity;
+    if (at !== bt) return at - bt;
+    return (typeof a.id === "number" ? a.id : 0) - (typeof b.id === "number" ? b.id : 0);
+  });
+
+  const sumAcct = (list) => {
+    let sum = 0, n = 0;
+    for (const t of list) {
+      if (t.acct !== null) { sum += t.acct; n += 1; }
+    }
+    return n > 0 ? sum : null;
+  };
+  const openAcct = sumAcct(open);
+  const windowed = typeof meta.closed_trades_window === "string";
+  /* freqtrade headline first: profit_closed_ratio is the total closed profit
+   * vs the starting capital — exactly what /profit and freqUI report. Only
+   * when the summary is missing do we fall back to summing per-trade ratios
+   * against the balance at each close (a different, explicitly labeled basis).
+   * When a closed-trades window is active the headline is whole-bot while the
+   * curve/tables are windowed, so the windowed endpoint takes precedence and
+   * is labeled accordingly. */
+  const dailyEarly = periodPoints(safe, "daily_performance");
+  const scaleInfoEarly = startScaleMap(dailyEarly);
+  const vsStartWindowed = cumVsStartPoints(closedAsc, scaleInfoEarly);
+  let closedAcct = numOrNull(profit.profit_closed_ratio);
+  let closedBasis = closedAcct !== null ? "start" : null;
+  if (windowed && vsStartWindowed && vsStartWindowed.length > 0) {
+    closedAcct = vsStartWindowed[vsStartWindowed.length - 1].y;
+    closedBasis = "start-window";
+  } else if (closedAcct === null) {
+    closedAcct = sumAcct(closed);
+    closedBasis = closedAcct !== null ? "account" : null;
+  }
+
+  const countWins = (list) => {
+    let w = 0, l = 0;
+    for (const t of list) {
+      if (t.tradeRatio === null) continue;
+      /* freqtrade counts breakeven (>= 0) as a win. */
+      if (t.tradeRatio >= 0) w += 1;
+      else l += 1;
+    }
+    return { w, l };
+  };
+  let wins = (typeof profit.winning_trades === "number" && Number.isFinite(profit.winning_trades))
+    ? profit.winning_trades : null;
+  let losses = (typeof profit.losing_trades === "number" && Number.isFinite(profit.losing_trades))
+    ? profit.losing_trades : null;
+  if (windowed) {
+    const c = countWins(closed);
+    wins = c.w;
+    losses = c.l;
+  } else if (wins === null || losses === null) {
+    const c = countWins(closed);
+    wins = c.w;
+    losses = c.l;
+  }
+
+  const daily = dailyEarly;
+  const weekly = periodPoints(safe, "weekly_performance");
+  const monthly = periodPoints(safe, "monthly_performance");
+  const equitySource = daily.length > 0 ? daily : weekly.length > 0 ? weekly : monthly;
+  const equity = equityFromRel(equitySource);
+  /* freqtrade headline first: profit_all_ratio is (closed + currently open)
+   * profit vs the starting capital — the actual total return, including the
+   * open PnL that the per-period realized series cannot see. The realized-only
+   * series stays as the curve history; the open impact is drawn as a dotted
+   * tip (like the cumulative chart) so the cliff from realized (+27% here) to
+   * total (-35% here) is not rendered as a solid move. */
+  let growth = numOrNull(profit.profit_all_ratio);
+  let growthBasis = growth !== null ? "all" : null;
+  if (growth === null && equity.length > 0) {
+    growth = equity[equity.length - 1].growth;
+    growthBasis = "realized";
+  }
+  let equityFloat = null;
+  if (growthBasis === "all" && equity.length > 0) {
+    const lastGrowth = equity[equity.length - 1].growth;
+    const delta = growth - lastGrowth;
+    if (Number.isFinite(delta) && delta !== 0) equityFloat = delta * 100;
+  }
+
+  const closedTotal = (safe.closed_trades && typeof safe.closed_trades.trades_count === "number")
+    ? safe.closed_trades.trades_count : closed.length;
+
+  /* Cumulative curve in vs-start units when the daily history covers every
+   * closed trade; otherwise the legacy summed curve (labeled). */
+  const scaleInfo = scaleInfoEarly;
+  const vsStart = vsStartWindowed;
+  const cum = vsStart ? { points: vsStart, basis: windowed ? "start-window" : "start" } : cumFromRatios(closedAsc);
+
+  /* Floating tip delta, in the curve's own percent units: vs-start needs the
+   * open impact rescaled by S(now)/S(start); legacy curves keep it as-is. */
+  let cumFloat = null;
+  if (openAcct !== null && openAcct !== 0 && cum.points.length > 0) {
+    if (cum.basis === "start" || cum.basis === "start-window") {
+      const sNow = scaleAt(scaleInfo, lookupDayFor(daily, new Date().toISOString()));
+      if (sNow !== null) cumFloat = openAcct * sNow * 100;
+    } else {
+      cumFloat = openAcct * 100;
+    }
+  }
+
+  return {
+    version: typeof meta.freqtrade_version === "string" ? meta.freqtrade_version : "unknown",
+    strategy, strategyVersion,
+    generatedAt: typeof meta.generated_at_utc === "string" ? meta.generated_at_utc : "",
+    window: typeof meta.closed_trades_window === "string" ? meta.closed_trades_window : "all time",
+    redacted: meta.redacted !== false,
+    openCount: open.length,
+    closedCount: closedTotal,
+    wins, losses,
+    openAcct, closedAcct, closedBasis,
+    growth, growthBasis,
+    deployed: numOrNull(counts.total_stake_to_account_balance_ratio),
+    daily, weekly, monthly,
+    equity, equityFloat,
+    open, closedAsc,
+    cum, cumFloat,
+    tags: tagLeaderboard(closedAsc),
+  };
+}
+
+function collectShareKeys(value, out) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectShareKeys(item, out);
+  } else if (value !== null && typeof value === "object") {
+    for (const key of Object.keys(value)) {
+      out.add(key);
+      collectShareKeys(value[key], out);
+    }
+  }
+}
+
+/* Fail-closed audit of the image model: every key must be known-safe. */
+function auditShareData(data) {
+  const keys = new Set();
+  collectShareKeys(data, keys);
+  const forbidden = [...keys].filter((key) => SHARE_FORBIDDEN_KEYS.has(key));
+  return { checked: keys.size, forbidden };
+}
+
+/* Rendered-text scan: flag absolute-money adjacency (digits next to a
+ * currency code or $). Pair names alone (HYPE/USDT) never match — only a
+ * number glued to a currency does. */
+function auditRenderedText(text) {
+  const hits = [];
+  const re = /\d[\d.,]*\s*(USDT|USDC|USD|EUR|BTC|ETH|BNB|SOL|fiat)\b|\$\s*\d|\b\d+\s*\$/gi;
+  let match;
+  while ((match = re.exec(text)) !== null) hits.push(match[0]);
+  return hits;
+}
+
+function chartTicks(lo, hi, n) {
+  if (!(hi > lo)) return [lo];
+  const step0 = (hi - lo) / n;
+  const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const norm = step0 / mag;
+  const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
+  const ticks = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-12; v += step) {
+    ticks.push(Math.round(v / step) * step);
+  }
+  return ticks.length > 0 ? ticks : [lo, hi];
+}
+
+function xLabelIdx(n, maxLabels) {
+  if (n <= maxLabels) return Array.from({ length: n }, (_, i) => i);
+  const out = [];
+  for (let k = 0; k < maxLabels; k++) out.push(Math.round((k * (n - 1)) / (maxLabels - 1)));
+  return [...new Set(out)];
+}
+
+function shortTick(date) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(date));
+  return m ? `${m[2]}-${m[3]}` : String(date).slice(0, 10);
+}
+
+/* Bars (trade count, right axis) + relative-profit line (left axis). */
+function comboChartSvg(points) {
+  const W = 400, H = 238, PL = 48, PR = 38, PT = 12, PB = 26;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const n = points.length;
+  const pcts = points.map((p) => p.rel * 100);
+  const counts = points.map((p) => p.count);
+  let lo = Math.min(0, ...pcts), hi = Math.max(0, ...pcts);
+  if (!(hi > lo)) hi = lo + 1;
+  const pad = (hi - lo) * 0.12 || 1;
+  lo -= pad; hi += pad;
+  const maxC = Math.max(1, ...counts);
+  const X = (i) => PL + (n === 1 ? iw / 2 : (iw * i) / (n - 1));
+  const Y = (v) => PT + ih * (1 - (v - lo) / (hi - lo));
+  const Yc = (c) => PT + ih * (1 - c / maxC);
+  const dec = (hi - lo) > 20 ? 0 : 1;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Relative profit over time">`;
+  for (const t of chartTicks(lo, hi, 4)) {
+    const y = Y(t).toFixed(1);
+    s += `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="#2b3145" stroke-width="1"/>`;
+    s += `<text x="${PL - 5}" y="${(Number(y) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#8b93ad">${(t === 0 ? 0 : t).toFixed(dec)}%</text>`;
+  }
+  s += `<text x="${W - PR + 5}" y="${(Yc(maxC) + 3).toFixed(1)}" text-anchor="start" font-size="9" fill="#5b6274">${maxC}</text>`;
+  s += `<text x="${W - PR + 5}" y="${(PT + ih + 3).toFixed(1)}" text-anchor="start" font-size="9" fill="#5b6274">0</text>`;
+  const bw = n > 1 ? Math.max(3, Math.min(16, (iw / n) * 0.5)) : 16;
+  points.forEach((p, i) => {
+    const y = Yc(p.count);
+    s += `<rect x="${(X(i) - bw / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(PT + ih - y, 0).toFixed(1)}" fill="rgba(148,163,184,0.4)" rx="1"/>`;
+  });
+  const zy = Y(0).toFixed(1);
+  s += `<line x1="${PL}" y1="${zy}" x2="${W - PR}" y2="${zy}" stroke="#5b6274" stroke-width="1" stroke-dasharray="4 3"/>`;
+  if (n > 1) {
+    for (let i = 1; i < n; i++) {
+      const stroke = pcts[i] >= 0 ? "#0ecb81" : "#f6465d";
+      s += `<line x1="${X(i - 1).toFixed(1)}" y1="${Y(pcts[i - 1]).toFixed(1)}" x2="${X(i).toFixed(1)}" y2="${Y(pcts[i]).toFixed(1)}" stroke="${stroke}" stroke-width="1.6"/>`;
+    }
+  }
+  points.forEach((p, i) => {
+    const fill = pcts[i] >= 0 ? "#0ecb81" : "#f6465d";
+    s += `<circle cx="${X(i).toFixed(1)}" cy="${Y(pcts[i]).toFixed(1)}" r="2.4" fill="${fill}"/>`;
+  });
+  for (const i of xLabelIdx(n, 5)) {
+    s += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#8b93ad">${escXml(shortTick(points[i].date))}</text>`;
+  }
+  s += "</svg>";
+  return s;
+}
+
+/* Single-series curve (cumulative impact % or indexed equity). */
+function curveChartSvg(series, color, base, suffix, withFill) {
+  const W = 400, H = 238, PL = 48, PR = 14, PT = 12, PB = 26;
+  const iw = W - PL - PR, ih = H - PT - PB;
+  const n = series.length;
+  const ys = series.map((p) => p.y);
+  let lo = Math.min(base, ...ys), hi = Math.max(base, ...ys);
+  if (!(hi > lo)) hi = lo + 1;
+  const pad = (hi - lo) * 0.12 || 1;
+  lo -= pad; hi += pad;
+  const X = (i) => PL + (n === 1 ? iw / 2 : (iw * i) / (n - 1));
+  const Y = (v) => PT + ih * (1 - (v - lo) / (hi - lo));
+  const range = hi - lo;
+  const dec = suffix === "%" ? (range > 20 ? 0 : 1) : (range > 60 ? 0 : 1);
+  const fmt = (v) => {
+    const z = v === 0 ? 0 : v;
+    return suffix === "%" ? `${z.toFixed(dec)}%` : `${Math.round(z)}`;
+  };
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">`;
+  for (const t of chartTicks(lo, hi, 4)) {
+    const y = Y(t).toFixed(1);
+    s += `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="#2b3145" stroke-width="1"/>`;
+    s += `<text x="${PL - 5}" y="${(Number(y) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#8b93ad">${fmt(t)}</text>`;
+  }
+  const by = Y(base).toFixed(1);
+  s += `<line x1="${PL}" y1="${by}" x2="${W - PR}" y2="${by}" stroke="#5b6274" stroke-width="1" stroke-dasharray="4 3"/>`;
+  if (n === 1) {
+    s += `<circle cx="${X(0).toFixed(1)}" cy="${Y(ys[0]).toFixed(1)}" r="2.6" fill="${color}"/>`;
+  } else {
+    /* A trailing point flagged `fl` is the floating open-trade impact: drawn
+     * as a dotted tip (red = loss, green = profit), like freqUI does. */
+    const lastFloat = series[n - 1].fl === true;
+    const solidEnd = lastFloat ? n - 2 : n - 1;
+    let d = "";
+    for (let i = 0; i <= solidEnd; i++) {
+      d += `${i === 0 ? "M" : "L"}${X(i).toFixed(1)},${Y(series[i].y).toFixed(1)}`;
+    }
+    if (withFill && solidEnd >= 1) {
+      s += `<path d="${d}L${X(solidEnd).toFixed(1)},${(PT + ih).toFixed(1)}L${X(0).toFixed(1)},${(PT + ih).toFixed(1)}Z" fill="${color}" opacity="0.12" stroke="none"/>`;
+    }
+    if (solidEnd >= 1) s += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.6"/>`;
+    for (let i = 0; i <= solidEnd; i++) {
+      s += `<circle cx="${X(i).toFixed(1)}" cy="${Y(series[i].y).toFixed(1)}" r="2" fill="${color}"/>`;
+    }
+    if (lastFloat) {
+      const tipUp = series[n - 1].y >= series[solidEnd].y;
+      const tipColor = tipUp ? "#0ecb81" : "#f6465d";
+      s += `<line x1="${X(solidEnd).toFixed(1)}" y1="${Y(series[solidEnd].y).toFixed(1)}" `
+        + `x2="${X(n - 1).toFixed(1)}" y2="${Y(series[n - 1].y).toFixed(1)}" `
+        + `stroke="${tipColor}" stroke-width="1.6" stroke-dasharray="4 3"/>`;
+      s += `<circle cx="${X(n - 1).toFixed(1)}" cy="${Y(series[n - 1].y).toFixed(1)}" r="2.4" fill="${tipColor}"/>`;
+    }
+  }
+  for (const i of xLabelIdx(n, 5)) {
+    s += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#8b93ad">${escXml(shortTick(series[i].x))}</text>`;
+  }
+  s += "</svg>";
+  return s;
+}
+
+function shareFilename(ext) {
+  return `bot-dashboard-${stamp()}.${ext}`;
+}
+
+/* Watermark provenance: the page URL (origin + path, never query or hash).
+ * file:// and other opaque origins would expose local filesystem paths, so
+ * they fall back to a neutral label instead of leaking into a shared image.
+ * Takes an optional location-like for testability; defaults to the live one. */
+function shareWatermarkText(loc) {
+  const l = loc || (typeof window !== "undefined" ? window.location : null);
+  if (l && /^https?:$/.test(String(l.protocol || "")) && l.host) {
+    return `${l.protocol}//${l.host}${String(l.pathname || "/")}`;
+  }
+  if (l && /^file:/i.test(String(l.href || l.protocol || ""))) {
+    return "Freqtrade Bot Report · generated locally";
+  }
+  return "Freqtrade Bot Report";
+}
+
+/* ------------------------------------------------------- share DOM layer */
+
+function pillEl(ratio) {
+  if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) {
+    return el("span", { class: "pill pill-flat" }, ["—"]);
+  }
+  const cls = ratio > 0 ? "pill pill-pos" : ratio < 0 ? "pill pill-neg" : "pill pill-flat";
+  const arrow = ratio > 0 ? "▲ " : ratio < 0 ? "▼ " : "";
+  return el("span", { class: cls }, [`${arrow}${fmtPct(ratio)}`]);
+}
+
+function thEl(label, cls, title) {
+  const attrs = {};
+  if (cls) attrs.class = cls;
+  if (title) attrs.title = title;
+  return el("th", attrs, [label]);
+}
+
+function tdEl(content, cls, title) {
+  const attrs = {};
+  if (cls) attrs.class = cls;
+  if (title) attrs.title = title;
+  return el("td", attrs, Array.isArray(content) ? content : [content]);
+}
+
+function scPanel(title, desc, children) {
+  const panel = el("div", { class: "sc-panel" });
+  panel.append(el("h4", {}, [title]));
+  if (desc) panel.append(el("div", { class: "sc-desc" }, [desc]));
+  for (const child of children) panel.append(child);
+  return panel;
+}
+
+function scEmpty(text) {
+  return el("div", { class: "sc-empty" }, [text]);
+}
+
+/* Non-table stat block for the Bot comparison row. value/subs accept strings
+ * or nodes (e.g. pills). */
+function statBlock(label, value, subs) {
+  const block = el("div", { class: "sc-stat" });
+  block.append(el("div", { class: "sc-stat-label" }, [label]));
+  block.append(el("div", { class: "sc-stat-value" }, Array.isArray(value) ? value : [value]));
+  for (const sub of subs || []) {
+    block.append(el("div", { class: "sc-stat-sub" }, [sub]));
+  }
+  return block;
+}
+
+function tagTableEl(rows, basis) {
+  const sumTip = basis === "account"
+    ? "sum of per-trade account impacts over trades touching the tag (each trade counted once per tag it used — not a portfolio total)"
+    : "sum of per-trade stake returns over trades touching the tag (each trade counted once per tag it used — not a portfolio total)";
+  const avgTip = basis === "account"
+    ? "average account impact per trade touching the tag"
+    : "average stake return per trade touching the tag (no account data)";
+  const table = el("table", {});
+  table.append(el("thead", {}, [el("tr", {}, [
+    thEl("Tag"), thEl("Trades", "num"), thEl("Sum PnL", "num", sumTip),
+    thEl("Avg PnL", "num", avgTip), thEl("W / L", "num", "won / lost (flat counts as win)"),
+  ])]));
+  const body = el("tbody", {});
+  for (const r of rows) {
+    const wlTitle = r.unrated > 0
+      ? `won / lost (flat counts as win) · ${r.unrated} trade(s) without profit data`
+      : "won / lost (flat counts as win)";
+    body.append(el("tr", {}, [
+      tdEl([el("code", {}, [r.tag])]),
+      tdEl(String(r.count), "num"),
+      tdEl([pillEl(r.total)], "num", sumTip),
+      tdEl(r.avg !== null ? pillEl(r.avg) : "—", "num"),
+      tdEl(`${r.wins} / ${r.losses}`, "num", wlTitle),
+    ]));
+  }
+  table.append(body);
+  return table;
+}
+
+function renderShareCard(data) {
+  const card = document.getElementById("share-card");
+  const strat = data.strategy
+    ? ` · ${data.strategy}${data.strategyVersion ? ` ${data.strategyVersion}` : ""}` : "";
+  const metaLine = `freqtrade ${data.version}${strat} · ${data.generatedAt.slice(0, 16).replace("T", " ")} · ${data.window}`;
+
+  const top = el("div", { class: "sc-top" });
+  const brand = el("div", { class: "sc-brand" }, ["Bot performance"]);
+  brand.append(el("span", { class: "sc-badge" }, ["RELATIVE ONLY"]));
+  top.append(brand, el("div", { class: "sc-meta" }, [metaLine]));
+
+  /* Bot comparison: 4 non-table stat sections in 1 full row. Balance becomes
+   * equity change vs start; absolute profit cells become account-impact %
+   * pills. W/L folds into the Trades section (both are counts). */
+  const compStats = el("div", { class: "sc-stats" });
+  compStats.append(
+    statBlock("Trades", `${data.openCount} / ${data.closedCount}`, [
+      `open / closed (${data.window})`,
+      `W ${data.wins} · L ${data.losses}`,
+    ]),
+    statBlock("Open PnL", [pillEl(data.openAcct)], [
+      data.openAcct !== null ? "acct impact, incl. realized" : "—",
+    ]),
+    statBlock("Closed PnL", [pillEl(data.closedAcct)], [
+      data.closedBasis === "start" ? "vs start"
+        : data.closedBasis === "start-window" ? `vs start (${data.window})`
+        : data.closedBasis === "account" ? "acct impact" : "—",
+    ]),
+    statBlock("Equity Δ", [pillEl(data.growth)], [
+      data.growthBasis === "all" ? "vs start, incl. open"
+        : data.growthBasis === "realized" ? "realized" : "—",
+    ]),
+  );
+  const compNote = el("div", { class: "sc-note" }, [
+    data.deployed !== null ? `Currently deployed (collateral): ${fmtPct(data.deployed)} of the account. ` : "",
+    "No balances, stakes or absolute profit are shown.",
+  ]);
+
+  /* Open trades: amounts/stakes replaced by stake-as-%-of-account.
+   * Each position is followed by its own muted sub-rows, aligned to the parent
+   * columns: first the hidden-orders count (earlier fills not shown), then the
+   * last 3 orders oldest-first with their position number (#n of N).
+   * Per-order stake/PnL are absolute and stay redacted: share-of-side is the
+   * relative size proxy, and orders carry no individual profit. */
+  const openTable = el("table", {});
+  openTable.append(el("thead", {}, [el("tr", {}, [
+    thEl("ID", "num"), thEl("Pair"), thEl("Side"), thEl("Stake %", "num", "stake as % of the account at entry"),
+    thEl("Open rate", "num"), thEl("Current rate", "num"), thEl("PnL", "num", "total return on the position"), thEl("Open date"),
+  ])]));
+  const openBody = el("tbody", {});
+  for (const t of data.open) {
+    const profitCell = [pillEl(t.tradeRatio)];
+    if (t.acct !== null) profitCell.push(el("span", { class: "sub" }, [`acct ${fmtPct(t.acct)}`]));
+    openBody.append(el("tr", {}, [
+      tdEl(String(t.id), "num"), tdEl(t.pair), tdEl(t.side),
+      tdEl(t.stake !== null ? fmtPct(t.stake) : "—", "num"),
+      tdEl(fmtRate(t.openRate), "num"), tdEl(fmtRate(t.endRate), "num"),
+      tdEl(profitCell, "num"), tdEl(t.openDate),
+    ]));
+    const orders = Array.isArray(t.lastOrders) ? t.lastOrders : [];
+    if (typeof t.hiddenOrders === "number" && t.hiddenOrders > 0) {
+      const more = t.hiddenOrders === 1 ? "+1 more order" : `+${t.hiddenOrders} more orders`;
+      openBody.append(el("tr", { class: "order-sub" }, [
+        tdEl("↳", "num"),
+        el("td", { colspan: "7" }, [more]),
+      ]));
+    }
+    for (const o of orders) {
+      const shareCell = (o.share !== null && Number.isFinite(o.share))
+        ? [`${(o.share * 100).toFixed(2)}%`, el("span", { class: "sub" }, ["of side"])]
+        : ["—"];
+      const dateCell = o.status !== "—"
+        ? [o.date, el("span", { class: "sub" }, [o.status])]
+        : [o.date];
+      openBody.append(el("tr", { class: "order-sub" }, [
+        tdEl(`↳#${o.n}`, "num", `order ${o.n} of ${o.total}`),
+        tdEl([el("code", {}, [o.tag])], "", "order tag"),
+        tdEl(o.side === "—" ? "—" : (o.side.charAt(0).toUpperCase() + o.side.slice(1)), "", "order side"),
+        tdEl(shareCell, "num", "share of the trade side"),
+        tdEl(o.price !== null ? fmtRate(o.price) : "—", "num", "order price"),
+        tdEl("—", "num"),
+        tdEl("—", "num"),
+        tdEl(dateCell),
+      ]));
+    }
+  }
+  openTable.append(openBody);
+
+  /* Closed trades: most recent first, absolute columns replaced as above. */
+  const closedDesc = data.closedAsc.slice().sort((a, b) => {
+    const at = Number.isFinite(a.closeTs) ? a.closeTs : -Infinity;
+    const bt = Number.isFinite(b.closeTs) ? b.closeTs : -Infinity;
+    return bt - at;
+  });
+  const shown = closedDesc.slice(0, shareState.recent);
+  const closedTable = el("table", {});
+  closedTable.append(el("thead", {}, [el("tr", {}, [
+    thEl("ID", "num"), thEl("Pair"), thEl("Side"), thEl("Stake %", "num", "stake as % of the account at entry"),
+    thEl("Open rate", "num"), thEl("Close rate", "num"), thEl("PnL", "num", "return on the trade"),
+    thEl("Open date"), thEl("Close date"), thEl("Exit"),
+  ])]));
+  const closedBody = el("tbody", {});
+  for (const t of shown) {
+    const profitCell = [pillEl(t.tradeRatio)];
+    if (t.acct !== null) profitCell.push(el("span", { class: "sub" }, [`acct ${fmtPct(t.acct)}`]));
+    closedBody.append(el("tr", {}, [
+      tdEl(String(t.id), "num"), tdEl(t.pair), tdEl(t.side),
+      tdEl(t.stake !== null ? fmtPct(t.stake) : "—", "num"),
+      tdEl(fmtRate(t.openRate), "num"), tdEl(fmtRate(t.endRate), "num"),
+      tdEl(profitCell, "num"), tdEl(t.openDate), tdEl(t.endDate), tdEl([el("code", {}, [t.exit])]),
+    ]));
+  }
+  closedTable.append(closedBody);
+  const closedNoteText = data.closedAsc.length === 0
+    ? "No closed trades in this window."
+    : (data.closedAsc.length > shown.length
+      ? `Showing the ${shown.length} most recent of ${data.closedAsc.length} exported closed trades — the rest are in the JSON report.`
+      : `${data.closedAsc.length} closed trade(s) in this window.`);
+
+  /* Right column: relative charts. */
+  const tsPoints = shareState.timescale === "daily" ? data.daily
+    : shareState.timescale === "weekly" ? data.weekly : data.monthly;
+  const comboLegend = el("div", { class: "sc-legend" });
+  comboLegend.append(
+    el("span", { html: '<span class="dot" style="background:#9499ad"></span>Trade count' }),
+  );
+  const comboBody = tsPoints.length > 0
+    ? el("div", { html: comboChartSvg(tsPoints) })
+    : scEmpty(`No ${SHARE_TS_LABEL[shareState.timescale].toLowerCase()} data.`);
+
+  const cumSeries = data.cum.points.map((p) => ({ x: p.x, y: p.y * 100 }));
+  const floatTip = data.cumFloat !== null && cumSeries.length > 0
+    ? cumFloatTip(cumSeries[cumSeries.length - 1].y, data.cumFloat)
+    : null;
+  if (floatTip) cumSeries.push(floatTip);
+  const cumBody = cumSeries.length > 0
+    ? el("div", { html: curveChartSvg(cumSeries, "#e7eaf3", 0, "%", false) })
+    : scEmpty("No per-trade account impact available.");
+  const cumNote = el("div", { class: "sc-note" }, [(data.cum.basis === "start"
+    ? "Cumulative closed profit vs the start."
+    : data.cum.basis === "start-window"
+    ? `Cumulative closed profit vs the start (${data.window}).`
+    : data.cum.basis === "trade"
+    ? "Summed per-trade stake returns (account size unavailable for this window)."
+    : "Summed per-trade account impacts.")
+    + (floatTip ? " Dotted tip: floating open impact." : "")]);
+  const cumTitle = data.window === "all time" ? "Cumulative Profit" : `Cumulative Profit (${data.window})`;
+
+  const eqSeriesBase = data.equity.map((p) => ({ x: p.date, y: p.indexed }));
+  const eqFloatTip = (data.equityFloat !== null && data.equityFloat !== undefined && eqSeriesBase.length > 0)
+    ? cumFloatTip(eqSeriesBase[eqSeriesBase.length - 1].y, data.equityFloat)
+    : null;
+  const eqSeries = eqFloatTip ? eqSeriesBase.concat([eqFloatTip]) : eqSeriesBase;
+  const eqBody = eqSeries.length > 0
+    ? el("div", { html: curveChartSvg(eqSeries, "#3b82f6", 100, "", true) })
+    : scEmpty("No period history to index.");
+  const eqNote = el("div", { class: "sc-note" }, [data.growthBasis === "all"
+    ? "Realized history; dotted tip includes open trades."
+    : "Realized history (open trades excluded)."]);
+
+  const closedTitle = data.closedAsc.length > shown.length
+    ? `Closed Trades (recent ${shown.length} of ${data.closedAsc.length} · ${data.window})`
+    : `Closed Trades (${data.closedAsc.length} · ${data.window})`;
+
+  const perUnit = { daily: "day", weekly: "week", monthly: "month" }[shareState.timescale];
+  const tagInfo = (data.tags && typeof data.tags === "object") ? data.tags : null;
+  const gainersRows = (tagInfo && tagInfo.gainers && tagInfo.gainers.length > 0) ? tagInfo.gainers
+    : ((tagInfo && Array.isArray(tagInfo.top)) ? tagInfo.top : []);
+  const losersRows = (tagInfo && tagInfo.losers && tagInfo.losers.length > 0) ? tagInfo.losers
+    : ((tagInfo && Array.isArray(tagInfo.bottom)) ? tagInfo.bottom : []);
+  const tagBasis = (tagInfo && tagInfo.basis === "trade") ? "trade" : "account";
+  const tagMetric = tagBasis === "account" ? "avg account impact" : "avg stake return";
+  const tagNote = data.closedAsc.length === 0
+    ? "No closed trades in this window."
+    : `${(tagInfo && tagInfo.totalTags) || 0} tags in this window · ranked by ${tagMetric} per trade · sums count each trade once per tag used.`;
+  /* Full rows first: Bot comparison, Open Trades, Closed Trades. The rest
+   * tiles by info type: tag tables 1/2 + 1/2, charts 1/3 + 1/3 + 1/3. */
+  const compPanel = scPanel("Bot comparison", "Totals across the account — everything in %", [compStats, compNote]);
+  const openPanel = scPanel("Open Trades", "Live positions · size and total profit (incl. realized) as % of the account",
+    [data.open.length > 0 ? openTable : scEmpty("No open trades.")]);
+  const closedPanel = scPanel(closedTitle, "Recently closed trades · returns in %",
+    [shown.length > 0 ? closedTable : scEmpty(closedNoteText),
+    shown.length > 0 && data.closedAsc.length > shown.length ? el("div", { class: "sc-note" }, [closedNoteText]) : ""]);
+  const gainerPanel = scPanel("Top 3 Gainer Tags", `Best order tags by ${tagMetric} · each trade counted once per tag it used`,
+    [gainersRows.length > 0 ? tagTableEl(gainersRows, tagBasis) : scEmpty("No closed trades."),
+    el("div", { class: "sc-note" }, [tagNote])]);
+  const loserPanel = scPanel("Top 3 Loser Tags", `Worst order tags by ${tagMetric} · each trade counted once per tag it used`,
+    [losersRows.length > 0 ? tagTableEl(losersRows, tagBasis) : scEmpty("No closed trades."),
+    el("div", { class: "sc-note" }, [tagNote])]);
+  const profitPanel = scPanel(`Profit over time (${SHARE_TS_LABEL[shareState.timescale]})`,
+    `Relative profit % and trade count per ${perUnit}`, [comboLegend, comboBody]);
+  const cumPanel = scPanel(cumTitle, "Account impact summed trade by trade", [cumBody, cumNote]);
+  const eqPanel = scPanel("Indexed Equity (start = 100)", "Growth indexed to 100 at the start", [eqBody, eqNote]);
+  const grid2 = el("div", { class: "sc-grid-2" });
+  grid2.append(gainerPanel, loserPanel);
+  const grid3 = el("div", { class: "sc-grid-3" });
+  grid3.append(profitPanel, cumPanel, eqPanel);
+  card.replaceChildren(top, compPanel, openPanel, closedPanel, grid2, grid3);
+  if (!data.redacted) {
+    card.append(el("div", { class: "sc-note" }, ["Source JSON is unredacted — the image still shows relative values only."]));
+  }
+  if (shareState.watermark) {
+    const foot = el("div", { class: "sc-foot" });
+    const wm = shareWatermarkText();
+    foot.append(
+      el("span", {}, ["Relative values only — no account size"]),
+      el("span", { class: "sc-wm" }, [/^https?:\/\//i.test(wm) ? `Generated by ${wm}` : wm]),
+    );
+    card.append(foot);
+  }
+}
+
+function setShareAudit(data) {
+  const audit = auditShareData(data);
+  const text = document.getElementById("share-card").textContent || "";
+  const hits = auditRenderedText(text);
+  const points = data.daily.length + data.weekly.length + data.monthly.length
+    + data.cum.points.length + data.equity.length;
+  const small = document.querySelector("#share-audit small");
+  if (audit.forbidden.length > 0 || hits.length > 0) {
+    small.textContent = `Relative-only audit FAILED — refusing to look shareable: `
+      + `${audit.forbidden.length > 0 ? `forbidden fields (${audit.forbidden.join(", ")})` : ""}`
+      + `${hits.length > 0 ? ` absolute-money text (${hits.slice(0, 3).join("; ")})` : ""}.`;
+    small.className = "text-danger";
+    return false;
+  }
+  small.textContent = `Relative-only audit passed — ${audit.checked} model keys checked, `
+    + `${points} plotted points across ${data.open.length + data.closedAsc.length} trades, `
+    + `0 absolute-money fields and 0 absolute-money texts. Safe to share.`;
+  small.className = "text-success";
+  return true;
+}
+
+function renderShareImage(report) {
+  shareState.report = report;
+  const data = buildShareData(report);
+  renderShareCard(data);
+  document.getElementById("share").hidden = false;
+  setShareAudit(data);
+}
+
+function hideShare() {
+  shareState.report = null;
+  document.getElementById("share").hidden = true;
+}
+
+function refreshShareTimescale(ts) {
+  if (!shareState.report) return;
+  shareState.timescale = ts;
+  const btnFor = { daily: "days", weekly: "weeks", monthly: "months" };
+  for (const [key, btn] of Object.entries(btnFor)) {
+    document.getElementById(`share-tab-${btn}`).setAttribute("aria-pressed", key === ts ? "true" : "false");
+  }
+  const data = buildShareData(shareState.report);
+  renderShareCard(data);
+  setShareAudit(data);
+}
+
+function wireShareControls() {
+  if (document.getElementById("share-png").dataset.wired) return;
+  document.getElementById("share-png").dataset.wired = "1";
+  const tabs = { days: "daily", weeks: "weekly", months: "monthly" };
+  for (const [btn, ts] of Object.entries(tabs)) {
+    document.getElementById(`share-tab-${btn}`).addEventListener("click", () => refreshShareTimescale(ts));
+  }
+  document.getElementById("share-recent").addEventListener("change", (event) => {
+    if (!shareState.report) return;
+    shareState.recent = Number(event.target.value) || 5;
+    const data = buildShareData(shareState.report);
+    renderShareCard(data);
+    setShareAudit(data);
+  });
+  shareState.watermark = document.getElementById("share-watermark").checked;
+  document.getElementById("share-watermark").addEventListener("change", (event) => {
+    shareState.watermark = event.target.checked;
+    if (!shareState.report) return;
+    const data = buildShareData(shareState.report);
+    renderShareCard(data);
+    setShareAudit(data);
+  });
+  document.getElementById("share-png").addEventListener("click", (event) => downloadSharePng(event.target));
+  document.getElementById("share-copy").addEventListener("click", (event) => copySharePng(event.target));
+  document.getElementById("share-svg").addEventListener("click", (event) => downloadShareSvg(event.target));
+}
+
+/* Serialize the preview card into a standalone SVG (page CSS inlined, no
+ * external resources) for the PNG/SVG download. Uses a data: URL so the
+ * page Content-Security-Policy (img-src data:) is respected. */
+function shareSvgText() {
+  const node = document.getElementById("share-card");
+  const css = document.getElementById("share-css").textContent;
+  /* Measure the full laid-out size: offsetWidth/offsetHeight are integers, so
+   * fractional layout pixels get rounded off and the raster ends up a few px
+   * narrower than the on-page card (right/bottom edge cropped). Ceil the
+   * scroll size and keep a small safety margin (invisible: same #14161f as
+   * the card background and canvas fill). */
+  const w = Math.ceil(Math.max(node.offsetWidth, node.scrollWidth)) + 2;
+  const h = Math.ceil(Math.max(node.offsetHeight, node.scrollHeight)) + 2;
+  const clone = node.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+  /* Pin the clone to the measured box so the foreignObject layout matches the
+   * on-page layout exactly instead of re-solving max-content differently. */
+  clone.style.width = `${w}px`;
+  clone.style.minWidth = "0";
+  const html = new XMLSerializer().serializeToString(clone);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
+    + `<style>${css}</style>`
+    + `<foreignObject x="0" y="0" width="${w}" height="${h}">${html}</foreignObject></svg>`;
+  return { svg, w, h };
+}
+
+function setShareBusy(btn, busy, label) {
+  for (const id of ["share-png", "share-copy", "share-svg"]) {
+    document.getElementById(id).disabled = busy;
+  }
+  if (busy) btn.setAttribute("aria-busy", "true");
+  else btn.removeAttribute("aria-busy");
+  if (label) document.querySelector("#share-audit small").textContent = label;
+}
+
+/* Render the preview card to an opaque canvas (shared by download + copy). */
+async function renderShareCanvas(scale) {
+  const { svg, w, h } = shareSvgText();
+  const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = () => reject(new Error("render"));
+    img.src = url;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(Math.round(w * scale), 1);
+  canvas.height = Math.max(Math.round(h * scale), 1);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#14161f";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+async function downloadSharePng(btn) {
+  if (!shareState.report) return;
+  setShareBusy(btn, true, "Rendering PNG…");
+  try {
+    const canvas = await renderShareCanvas(2);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("render");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = shareFilename("png");
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+    setShareAudit(buildShareData(shareState.report));
+  } catch (err) {
+    console.error("Share PNG failed:", err);
+    setShareBusy(btn, false);
+    document.querySelector("#share-audit small").textContent =
+      "PNG rendering was blocked by this browser (foreignObject export). The SVG download below uses the same image and always works — convert it to PNG locally.";
+  } finally {
+    setShareBusy(btn, false);
+  }
+}
+
+/* Copy the rendered image to the clipboard for pasting into chats. Needs a
+ * secure context (HTTPS/localhost) plus clipboard permission; otherwise the
+ * Download PNG button is the fallback. */
+async function copySharePng(btn) {
+  if (!shareState.report) return;
+  setShareBusy(btn, true, "Copying PNG…");
+  try {
+    if (typeof navigator === "undefined" || !navigator.clipboard
+        || typeof navigator.clipboard.write !== "function"
+        || typeof ClipboardItem === "undefined") {
+      throw new Error("clipboard-unsupported");
+    }
+    const canvas = await renderShareCanvas(2);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("render");
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    setShareAudit(buildShareData(shareState.report));
+    document.querySelector("#share-audit small").textContent += " Image copied — paste it anywhere.";
+  } catch (err) {
+    console.error("Share copy failed:", err);
+    document.querySelector("#share-audit small").textContent =
+      "Copy was blocked by this browser (clipboard needs HTTPS or localhost plus permission). Use Download PNG instead.";
+  } finally {
+    setShareBusy(btn, false);
+  }
+}
+
+function downloadShareSvg(btn) {
+  if (!shareState.report) return;
+  setShareBusy(btn, true);
+  try {
+    const { svg } = shareSvgText();
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = shareFilename("svg");
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  } finally {
+    setShareBusy(btn, false);
+  }
+}
+
+function renderConnectionHelp(container, diagnosis) {
+  const list = el("ol", {});
+  for (const step of diagnosis.steps) list.append(el("li", {}, [step]));
+  const children = [el("p", { class: "text-danger" }, [diagnosis.headline]), el("p", { class: "text-neutral" }, ["Do this:"]), list];
+  if (diagnosis.snippet) {
+    children.push(el("pre", {}, [el("code", {}, [diagnosis.snippet])]));
+  }
+  container.replaceChildren(...children);
+}
+
+/* Default API URL: the page's own origin when served over http(s) — handy when
+ * the page is hosted next to the bot's reverse proxy — otherwise the freqtrade
+ * default (file:// and about:blank have no usable origin). */
+function defaultBaseUrl() {
+  return /^https?:\/\//.test(window.location.origin) ? window.location.origin : "http://127.0.0.1:8080";
+}
+
+/* Default API URL: the page's own origin when served over http(s) — handy when
+ * the page is hosted next to the bot's reverse proxy — otherwise the freqtrade
+ * default (file:// and about:blank have no usable origin). */
+function defaultBaseUrl() {
+  return /^https?:\/\//.test(window.location.origin) ? window.location.origin : "http://127.0.0.1:8080";
+}
+
+/* Web-only closed-trades window presets: the freqtrade API cannot filter
+   /trades by date, so the full history is fetched and filtered client-side. */
+const WINDOW_MS = {
+  day: 24 * 3600000,
+  week: 7 * 24 * 3600000,
+  month: 30 * 24 * 3600000,
+  year: 365 * 24 * 3600000,
+};
+const WINDOW_LABELS = {
+  all: "all time",
+  day: "last 24 hours",
+  week: "last 7 days",
+  month: "last 30 days",
+  year: "last 365 days",
+};
+
+/* freqtrade returns naive UTC timestamps like "2026-09-01 15:00:00"; parse
+   them as UTC instead of letting Date.parse guess the local zone. */
+function parseUtcTimestamp(value) {
+  if (typeof value !== "string") return NaN;
+  const iso = value.includes("T") ? value : value.replace(" ", "T");
+  const zoned = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : `${iso}Z`;
+  return Date.parse(zoned);
+}
+
+function readFormOptions() {
+  const url = document.getElementById("f-url").value.trim() || defaultBaseUrl();
+  const win = document.getElementById("f-window").value;
+  let error = null;
+  if (!/^https?:\/\//i.test(url)) {
+    error = `The API base URL must start with http:// or https:// — got "${url}".`;
+  }
+  return {
+    url,
+    username: document.getElementById("f-user").value.trim() || null,
+    password: document.getElementById("f-pass").value || null,
+    redact: document.getElementById("f-redact").checked,
+    window: WINDOW_MS[win] ? win : "all",
+    timeout: REQUEST_TIMEOUT,
+    error,
+  };
+}
+
+/* ------------------------------------------------- browser password manager
+ * This page never stores credentials itself. Instead the form uses real
+ * username/password semantics (autocomplete attributes on a submit form) so
+ * Chrome's password manager can offer to save and fill them, and the
+ * Credential Management API explicitly stores the verified login after a
+ * successful Test connection / Export and silently refills it on the next
+ * visit. Everything here is best-effort: unsupported browsers simply get the
+ * plain form with no behavior change. */
+
+function passwordCredentialCtor() {
+  try {
+    if (typeof window !== "undefined" && typeof window.PasswordCredential !== "undefined") {
+      return window.PasswordCredential;
+    }
+  } catch (err) {}
+  return null;
+}
+
+/* Build the credential to store from verified form values (pure, testable).
+ * The API URL rides along in the display name so saved entries stay
+ * recognizable when several bots are used. Null unless complete. */
+function credentialFields(opts) {
+  const id = (opts && typeof opts.username === "string") ? opts.username.trim() : "";
+  const password = (opts && typeof opts.password === "string") ? opts.password : "";
+  if (!id || !password) return null;
+  return {
+    id,
+    name: (opts && typeof opts.url === "string") ? opts.url : "",
+    password,
+  };
+}
+
+/* Hand the verified login to the browser's password manager (fire-and-forget,
+ * call only on success). Resolves false when unavailable or declined. */
+async function credentialStore(opts) {
+  const Ctor = passwordCredentialCtor();
+  try {
+    if (!Ctor || typeof navigator === "undefined" || !navigator.credentials
+        || typeof navigator.credentials.store !== "function") return false;
+    const fields = credentialFields(opts);
+    if (!fields) return false;
+    await navigator.credentials.store(new Ctor(fields));
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/* Silently refill a previously saved login, if exactly one is available
+ * (fire-and-forget at startup; never shows browser UI on its own). */
+async function credentialFill() {
+  try {
+    if (typeof navigator === "undefined" || !navigator.credentials
+        || typeof navigator.credentials.get !== "function") return false;
+    const cred = await navigator.credentials.get({ password: true, mediation: "silent" });
+    if (!cred) return false;
+    if (typeof cred.id === "string" && cred.id) document.getElementById("f-user").value = cred.id;
+    if (typeof cred.password === "string" && cred.password) {
+      document.getElementById("f-pass").value = cred.password;
+    }
+    if (typeof cred.name === "string" && /^https?:\/\//i.test(cred.name)) {
+      document.getElementById("f-url").value = cred.name;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/* A blocked request is ambiguous from inside the page: CORS misconfiguration,
+ * an offline bot, and mixed-content blocking all reject identically. A no-cors
+ * request needs no CORS headers, so it resolves whenever *anything* is
+ * listening at the target and rejects only on network-level failures — that
+ * distinction tells us whether the fix is config (CORS) or connectivity. */
+async function probeReachable(baseUrl, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    await fetch(`${baseUrl}${API_PREFIX}/ping`, { mode: "no-cors", cache: "no-store", signal: controller.signal });
+    return true;
+  } catch (err) {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function diagnoseConnection(opts) {
+  const reachable = await probeReachable(opts.url, Math.min(opts.timeout * 1000, 8000));
+  if (reachable) return describeCorsBlock(opts.url);
+  return describeConnectionFailure(opts.url);
+}
+
+function describeCorsBlock(url) {
+  const origin = /^https?:\/\//.test(window.location.origin) ? window.location.origin : "<this page's origin>";
+  return {
+    kind: "cors",
+    headline: `Something answered at ${url}, but it did not send the CORS headers this page needs — almost always the missing "CORS_origins" entry in the bot's api_server config.`,
+    steps: [
+      `Add this page's exact origin "${origin}" (no trailing slash) to the bot's config:`,
+      "Restart freqtrade — config changes only apply after a restart.",
+      "Press Test connection again; it should report Connection OK before you export.",
+    ],
+    snippet: `"CORS_origins": ["${origin}"]`,
+  };
+}
+
+function describeConnectionFailure(url) {
+  let target = null;
+  try {
+    target = new URL(url);
+  } catch (err) {}
+  const pageHttps = window.location.protocol === "https:";
+  const targetHttp = target !== null && target.protocol === "http:";
+  const loopback = target !== null && (["127.0.0.1", "localhost", "::1"].includes(target.hostname) || target.hostname.endsWith(".localhost"));
+
+  if (pageHttps && targetHttp && !loopback) {
+    return {
+      kind: "mixed-content",
+      headline: `The browser blocked the request to ${url} as mixed content: an HTTPS page cannot call a plain-HTTP server on a non-local host.`,
+      steps: [
+        "Put the bot's API behind a TLS reverse proxy (Caddy, nginx, …) with a valid certificate and use its https:// URL here — browsers reject self-signed certificates and this page cannot skip verification.",
+        "Alternatively run the export with tools/bot_report.py, which has no browser restrictions.",
+      ],
+    };
+  }
+  return {
+    kind: "unreachable",
+    headline: `Nothing answered at ${url}, so the bot is offline, the URL/port is wrong, or the browser blocked the request.`,
+    steps: [
+      "Check the bot is running and the REST API is enabled (\"api_server\": {\"enabled\": true, …}).",
+      "Check the URL, port, and scheme — the freqtrade defaults are http://127.0.0.1:8080 with the username/password from the same config block.",
+      "If the URL uses https://, the certificate must be valid; browsers reject self-signed ones and this page cannot skip verification.",
+      loopback
+        ? "If the bot runs in Docker, 127.0.0.1 inside the container is not your machine — publish the port and point this page at the host."
+        : "If a firewall or VPN sits between this browser and the bot, allow the port there.",
+    ],
+  };
+}
+
+async function withBusyUi(form, initialStep, action) {
+  const progressSection = document.getElementById("progress");
+  const resultSection = document.getElementById("result");
+  const resultTitle = document.getElementById("result-title");
+  const resultBody = document.getElementById("result-body");
+  const button = document.getElementById("btn-export");
+
+  resultSection.hidden = true;
+  setFormDisabled(form, true);
+  button.setAttribute("aria-busy", "true");
+  const progress = makeProgress();
+  progress.step(initialStep);
+  try {
+    await action(resultTitle, resultBody, progress);
+  } finally {
+    progress.finish();
+    progressSection.hidden = true;
+    button.removeAttribute("aria-busy");
+    setFormDisabled(form, false);
+    resultSection.hidden = false;
+  }
+}
+
+function optionsErrorUi(opts, title) {
+  const titleEl = document.getElementById("result-title");
+  titleEl.textContent = title;
+  titleEl.className = "text-danger";
+  document.getElementById("result").hidden = false;
+  renderFailure(document.getElementById("result-body"), { friendly: opts.error });
+}
+
+async function onExport(form) {
+  const opts = readFormOptions();
+  if (opts.error) {
+    optionsErrorUi(opts, "Export failed");
+    hideShare();
+    return;
+  }
+  await withBusyUi(form, "Connecting to the bot — GET /api/v1/ping …", async (resultTitle, resultBody, progress) => {
+    try {
+      const { report, json, filename, redactedPaths } = await runExport(opts, progress);
+      resultTitle.textContent = "Report ready";
+      resultTitle.className = "text-success";
+      renderSuccess(resultBody, report, filename, json, redactedPaths);
+      renderShareImage(report);
+      credentialStore(opts);
+    } catch (err) {
+      hideShare();
+      resultTitle.textContent = "Export failed";
+      resultTitle.className = "text-danger";
+      if (err instanceof NetworkError) {
+        progress.step("Diagnosing the connection problem …");
+        renderConnectionHelp(resultBody, await diagnoseConnection(opts));
+      } else {
+        renderFailure(resultBody, err);
+      }
+    }
+  });
+}
+
+async function onTestConnection(form) {
+  const opts = readFormOptions();
+  if (opts.error) {
+    optionsErrorUi(opts, "Connection test failed");
+    return;
+  }
+  await withBusyUi(form, "Testing connection — GET /api/v1/version …", async (resultTitle, resultBody, progress) => {
+    try {
+      const api = new FreqtradeApi(opts);
+      const version = await api.get("version");
+      resultTitle.textContent = "Connection OK";
+      resultTitle.className = "text-success";
+      resultBody.replaceChildren(
+        el("p", { class: "text-success" }, [`freqtrade ${version.version || "unknown"} answered at ${opts.url} — CORS and credentials work. You can export the report now.`]),
+      );
+      credentialStore(opts);
+    } catch (err) {
+      resultTitle.textContent = "Connection failed";
+      resultTitle.className = "text-danger";
+      if (err instanceof NetworkError) {
+        progress.step("Diagnosing the connection problem …");
+        renderConnectionHelp(resultBody, await diagnoseConnection(opts));
+      } else {
+        renderFailure(resultBody, err);
+      }
+    }
+  });
+}
+
+if (typeof document !== "undefined") {
+  const start = () => {
+    /* Only swap the guide's generic example for a real origin over http(s);
+     * file:// has no usable origin, so the generic example stays. */
+    const origin = window.location.origin;
+    if (/^https?:\/\//.test(origin)) {
+      document.getElementById("page-origin").textContent = origin;
+      document.getElementById("page-origin-snippet").textContent = origin;
+    }
+    document.getElementById("f-url").placeholder = defaultBaseUrl();
+    /* Unchecking redaction is gated behind an explicit dialog confirmation. */
+    const redactCheckbox = document.getElementById("f-redact");
+    const confirmDialog = document.getElementById("redact-confirm");
+    let redactApproved = false;
+    redactCheckbox.addEventListener("change", () => {
+      if (redactCheckbox.checked) return;
+      /* every open starts unapproved — a past approval must not carry over */
+      redactApproved = false;
+      confirmDialog.showModal();
+    });
+    document.getElementById("redact-disable").addEventListener("click", () => {
+      redactApproved = true;
+      confirmDialog.close();
+    });
+    document.getElementById("redact-keep").addEventListener("click", () => {
+      redactApproved = false;
+      redactCheckbox.checked = true;
+      confirmDialog.close();
+    });
+    /* Esc-close safety net: an unapproved dismissal restores redaction. */
+    confirmDialog.addEventListener("close", () => {
+      if (!redactApproved) redactCheckbox.checked = true;
+    });
+    const form = document.getElementById("connect");
+    wireShareControls();
+    credentialFill();
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      onExport(form);
+    });
+    document.getElementById("btn-test").addEventListener("click", () => onTestConnection(form));
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+  else start();
+}
+</script>
+</body>
+</html>
