@@ -56,7 +56,7 @@
 <body>
 
 <h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
-<div class="subtitle">Generated 2026-09-16 22:30:57 UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
+<div class="subtitle">Generated 2026-09-17 00:59:27 UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
 
 
 <div class="card">
@@ -64,7 +64,7 @@
   <div class="table-scroll">
   <table class="compare-table">
     <tr><th>Metric</th><th>🟢 SPOT — OKX</th><th>🟣 FUTURES — OKX</th></tr>
-    <tr><td>Open / Closed trades</td><td>2 / 1</td><td>0 / 2</td></tr><tr><td>Win Rate</td><td>100.0%</td><td>100.0%</td></tr><tr><td>Total Profit (closed only)</td><td>+0.98 USDT</td><td>+1.94 USDT</td></tr><tr><td>True Total (realized+unrealized)</td><td><span class="profit-pos">+0.98 USDT</span></td><td><span class="profit-pos">+1.94 USDT</span></td></tr><tr><td>Blended return per capital-day</td><td>0.2831%/day (≈103.3%/yr)</td><td>3.9055%/day (≈1425.5%/yr)</td></tr><tr><td>Stuck Trades</td><td>1 (20% of open capital)</td><td>0 (0% of open capital)</td></tr>
+    <tr><td>Open / Closed trades</td><td>2 / 1</td><td>0 / 2</td></tr><tr><td>Win Rate</td><td>100.0%</td><td>100.0%</td></tr><tr><td>Total Profit (closed only)</td><td>+0.98 USDT</td><td>+1.94 USDT</td></tr><tr><td>True Total (realized+unrealized)</td><td><span class="profit-pos">+0.98 USDT</span></td><td><span class="profit-pos">+1.94 USDT</span></td></tr><tr><td>Blended return per capital-day</td><td>0.2706%/day (≈98.8%/yr)</td><td>3.9055%/day (≈1425.5%/yr)</td></tr><tr><td>Stuck Trades</td><td>2 (100% of open capital)</td><td>0 (0% of open capital)</td></tr>
   </table>
   </div>
   <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
@@ -137,8 +137,8 @@
         </div>
         <div class="stat-card">
           <div class="label">Stuck Trades</div>
-          <div class="value profit-neg">1 / 2</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">20% of open capital, open &gt;2.1d</div>
+          <div class="value profit-neg">2 / 2</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">100% of open capital, open &gt;2.1d</div>
         </div>
       </div>
       <p style="margin-top:16px;margin-bottom:4px;">
@@ -146,8 +146,8 @@
         (≈ 2759.7%/yr if repeated — simple, non-compounded extrapolation)
       </p>
       <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>0.2831%</b>
-        (≈ 103.3%/yr equivalent)
+        Blended return per capital-day (incl. unrealized): <b>0.2706%</b>
+        (≈ 98.8%/yr equivalent)
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
@@ -259,7 +259,7 @@
           <td>IOTX/USDT</td>
           <td>64  <span class="muted">(Rebuy)</span></td>
           <td>2026-09-14 07:06</td>
-          <td>2.6d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
+          <td>2.7d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
           <td>0</td>
           <td>30.94 USDT</td>
           <td>0.003461</td>
@@ -270,7 +270,7 @@
           <td>USELESS/USDT</td>
           <td>163  <span class="muted">(Scalp)</span></td>
           <td>2026-09-14 21:50</td>
-          <td>2.0d</td>
+          <td>2.1d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">🐌 stuck</span></td>
           <td>0</td>
           <td>123.74 USDT</td>
           <td>0.20487</td>
@@ -600,17 +600,17 @@ new Chart(document.getElementById('reasonChart_spot'), {
 new Chart(document.getElementById('trendChart_spot'), {
   type: 'bar',
   data: {
-    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05", "09-14 06:43", "09-14 12:51", "09-14 17:18", "09-14 21:13", "09-14 21:19", "09-15 00:07", "09-15 05:37", "09-15 10:44", "09-15 15:22", "09-15 19:24", "09-15 22:35", "09-16 00:55", "09-16 05:31", "09-16 07:35", "09-16 10:32", "09-16 15:14", "09-16 19:14", "09-16 22:30"],
+    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05", "09-14 06:43", "09-14 12:51", "09-14 17:18", "09-14 21:13", "09-14 21:19", "09-15 00:07", "09-15 05:37", "09-15 10:44", "09-15 15:22", "09-15 19:24", "09-15 22:35", "09-16 00:55", "09-16 05:31", "09-16 07:35", "09-16 10:32", "09-16 15:14", "09-16 19:14", "09-16 22:30", "09-17 00:59"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -2.49, -0.85, -2.04, 0.0, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98],
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -2.49, -0.85, -2.04, 0.0, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1],
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
@@ -670,17 +670,17 @@ new Chart(document.getElementById('reasonChart_futures'), {
 new Chart(document.getElementById('trendChart_futures'), {
   type: 'bar',
   data: {
-    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05", "09-14 06:43", "09-14 12:51", "09-14 17:18", "09-14 21:13", "09-14 21:19", "09-15 00:07", "09-15 05:37", "09-15 10:44", "09-15 15:22", "09-15 19:24", "09-15 22:35", "09-16 00:55", "09-16 05:31", "09-16 07:35", "09-16 10:32", "09-16 15:14", "09-16 19:14", "09-16 22:30"],
+    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05", "09-14 06:43", "09-14 12:51", "09-14 17:18", "09-14 21:13", "09-14 21:19", "09-15 00:07", "09-15 05:37", "09-15 10:44", "09-15 15:22", "09-15 19:24", "09-15 22:35", "09-16 00:55", "09-16 05:31", "09-16 07:35", "09-16 10:32", "09-16 15:14", "09-16 19:14", "09-16 22:30", "09-17 00:59"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.34, -0.2, 1.49, 1.94, 1.94],
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.34, -0.2, 1.49, 1.94, 1.94, 1.94],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
