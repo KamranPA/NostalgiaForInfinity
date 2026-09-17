@@ -25,6 +25,7 @@
   },
   "exchange": {
     "name": "okx",
+    "enable_ws": false,
     "key": "",
     "secret": "",
     "password": "",
