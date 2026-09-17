@@ -1,0 +1,153 @@
+# SAVE THIS FILE AS: .github/workflows/sync-upstream-strategy.yml
+# (in .github/workflows/, alongside the dry-run workflows)
+name: Sync Repo from Upstream (auto)
+
+# What this does (fully automatic — commits straight to main, no PR):
+# - Pulls the ENTIRE upstream repo (iterativv/NostalgiaForInfinity),
+#   copies every file that is NEW or CHANGED into this fork, and commits
+#   directly to main if anything changed.
+# - Files/paths in the exclude list below are never touched, added, or
+#   overwritten — that's how this project's own customizations
+#   (workflows, configs, the ML subclass) survive every sync.
+# - Never DELETES a file just because it disappeared upstream (rsync is
+#   run without --delete) — safer default; a removed-upstream file just
+#   sits there unused instead of vanishing silently.
+#
+# RISK NOTE: this pushes straight to main with no human review step, and
+# main is exactly what the dry-run bots read on their next self-queued
+# restart (see dry-run-telegram-signals.yml / dry-run-telegram-futures.yml).
+# A behavior-changing upstream update (new config keys required, changed
+# pairlist defaults, etc.) can reach the live dry-run bots automatically.
+# The only safety net here is the py_compile syntax check below — it
+# catches broken Python, not behavior changes.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # once a day, 03:00 UTC — adjust as you like
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REPO: iterativv/NostalgiaForInfinity
+  UPSTREAM_BRANCH: main
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python (for a syntax check only)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Clone upstream repo (shallow)
+        run: |
+          git clone --depth 1 --branch "$UPSTREAM_BRANCH" \
+            "https://github.com/${UPSTREAM_REPO}.git" /tmp/upstream
+
+      - name: Mirror new/changed upstream files into this repo (excluding our customizations)
+        id: sync
+        run: |
+          # ------------------------------------------------------------------
+          # Anything matching these paths is NEVER touched by this sync, no
+          # matter what upstream does with it. Add more lines here any time
+          # you create a new custom file at the repo root or under a custom
+          # folder — one path (or rsync-style glob) per line.
+          # ------------------------------------------------------------------
+          cat > /tmp/exclude.txt <<'EOF'
+          .git/
+          .github/
+          NostalgiaForInfinityX7ML.py
+          config_dryrun_telegram.json
+          config_dryrun_futures.json
+          EOF
+
+          rsync -a --itemize-changes \
+            --exclude-from=/tmp/exclude.txt \
+            --exclude='.git/' \
+            /tmp/upstream/ ./ \
+            | tee /tmp/rsync_output.txt
+
+          # rsync -a without --delete never removes anything, so this only
+          # ever adds new files or overwrites changed ones.
+          CHANGED_FILES=$(grep -E '^[><ch]' /tmp/rsync_output.txt | awk '{print $2}' || true)
+          {
+            echo "changed_files<<EOF_CHANGED"
+            echo "$CHANGED_FILES"
+            echo "EOF_CHANGED"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changes — already up to date with upstream."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "Changed/added files:"
+            echo "$CHANGED_FILES"
+          fi
+
+      - name: Sanity-check syntax of every changed Python file
+        if: steps.sync.outputs.has_changes == 'true'
+        run: |
+          FAILED=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              *.py)
+                if [ -f "$f" ]; then
+                  echo "Checking $f ..."
+                  python -m py_compile "$f" || FAILED=1
+                fi
+                ;;
+            esac
+          done <<< "${{ steps.sync.outputs.changed_files }}"
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo "::error::One or more changed Python files failed to compile. Aborting WITHOUT committing — repo left untouched by git (working tree changes will be discarded)."
+            exit 1
+          fi
+          echo "Syntax check passed for all changed .py files."
+
+      - name: Commit and push to main
+        if: steps.sync.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- . ':!.github' ':!NostalgiaForInfinityX7ML.py' ':!config_dryrun_telegram.json' ':!config_dryrun_futures.json'
+          if git diff --cached --quiet; then
+            echo "Nothing staged after exclusions — nothing to commit."
+          else
+            git commit -m "chore: sync from ${UPSTREAM_REPO}@${UPSTREAM_BRANCH} ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push origin HEAD:main
+          fi
+
+      - name: Notify Telegram — sync applied
+        if: steps.sync.outputs.has_changes == 'true'
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          FILE_COUNT=$(echo "${{ steps.sync.outputs.changed_files }}" | grep -c . || echo 0)
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🔄 Synced ${FILE_COUNT} file(s) from upstream (${UPSTREAM_REPO}) directly to main. Bots will pick this up on their next self-queued restart. Check the commit before assuming everything still behaves the same: ${{ github.server_url }}/${{ github.repository }}/commits/main" \
+            > /dev/null || true
+
+      - name: Notify Telegram — sync failed
+        if: failure()
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="❌ Upstream sync failed (nothing was committed). See: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            > /dev/null || true
