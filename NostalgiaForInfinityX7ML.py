@@ -1,154 +1,145 @@
-# SAVE THIS FILE AS: .github/workflows/sync-upstream-strategy.yml
-# (in .github/workflows/, alongside the dry-run workflows)
-name: Sync Repo from Upstream (auto)
+"""
+NostalgiaForInfinityX7ML.py
 
-# What this does (fully automatic — commits straight to main, no PR):
-# - Pulls the ENTIRE upstream repo (iterativv/NostalgiaForInfinity),
-#   copies every file that is NEW or CHANGED into this fork, and commits
-#   directly to main if anything changed.
-# - Files/paths in the exclude list below are never touched, added, or
-#   overwritten — that's how this project's own customizations
-#   (workflows, configs, the ML subclass) survive every sync.
-# - Never DELETES a file just because it disappeared upstream (rsync is
-#   run without --delete) — safer default; a removed-upstream file just
-#   sits there unused instead of vanishing silently.
-#
-# RISK NOTE: this pushes straight to main with no human review step, and
-# main is exactly what the dry-run bots read on their next self-queued
-# restart (see dry-run-telegram-signals.yml / dry-run-telegram-futures.yml).
-# A behavior-changing upstream update (new config keys required, changed
-# pairlist defaults, etc.) can reach the live dry-run bots automatically.
-# The only safety net here is the py_compile syntax check below — it
-# catches broken Python, not behavior changes.
+Thin subclass of the upstream NostalgiaForInfinityX7 strategy that adds
+ML-snapshot logging on every order fill (entry, rebuy, exit), without
+touching the upstream file itself. This means an `nfi-updater` job (or a
+manual git pull from iterativv/NostalgiaForInfinity) can freely overwrite
+NostalgiaForInfinityX7.py at any time without wiping out this project's
+custom data-collection logic.
 
-on:
-  schedule:
-    - cron: "0 3 * * *"   # once a day, 03:00 UTC — adjust as you like
-  workflow_dispatch: {}
+Point your config's "strategy" field at:
+    "NostalgiaForInfinityX7ML"
+instead of:
+    "NostalgiaForInfinityX7"
 
-permissions:
-  contents: write
+Both this file and the upstream NostalgiaForInfinityX7.py must sit next
+to each other (repo root), since this file imports the class directly
+from it.
+"""
 
-env:
-  UPSTREAM_REPO: iterativv/NostalgiaForInfinity
-  UPSTREAM_BRANCH: main
+import logging
 
-jobs:
-  sync-upstream:
-    runs-on: ubuntu-latest
+import numpy as np
+from freqtrade.persistence import Trade
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+from NostalgiaForInfinityX7 import NostalgiaForInfinityX7
 
-      - name: Set up Python (for a syntax check only)
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+log = logging.getLogger(__name__)
 
-      - name: Clone upstream repo (shallow)
-        run: |
-          git clone --depth 1 --branch "$UPSTREAM_BRANCH" \
-            "https://github.com/${UPSTREAM_REPO}.git" /tmp/upstream
 
-      - name: Mirror new/changed upstream files into this repo (excluding our customizations)
-        id: sync
-        run: |
-          # ------------------------------------------------------------------
-          # Anything matching these paths is NEVER touched by this sync, no
-          # matter what upstream does with it. Add more lines here any time
-          # you create a new custom file at the repo root or under a custom
-          # folder — one path (or rsync-style glob) per line.
-          # ------------------------------------------------------------------
-          cat > /tmp/exclude.txt <<'EOF'
-          .git/
-          .github/
-          NostalgiaForInfinityX7ML.py
-          config_dryrun_telegram.json
-          config_dryrun_futures.json
-          README.md
-          EOF
+class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
+    """
+    Identical strategy logic to NostalgiaForInfinityX7, with one addition:
+    on every order fill, a snapshot of pair-level and BTC-context
+    indicators is written to freqtrade's built-in trade_custom_data table
+    via trade.set_custom_data().
 
-          rsync -a --itemize-changes \
-            --exclude-from=/tmp/exclude.txt \
-            --exclude='.git/' \
-            /tmp/upstream/ ./ \
-            | tee /tmp/rsync_output.txt
+    ML analysis then has the *conditions at the time of the signal*
+    available, instead of only the final price/profit outcome.
 
-          # rsync -a without --delete never removes anything, so this only
-          # ever adds new files or overwrites changed ones.
-          CHANGED_FILES=$(grep -E '^[><ch]' /tmp/rsync_output.txt | awk '{print $2}' || true)
-          {
-            echo "changed_files<<EOF_CHANGED"
-            echo "$CHANGED_FILES"
-            echo "EOF_CHANGED"
-          } >> "$GITHUB_OUTPUT"
+    Data lives in freqtrade's built-in custom_data table (persisted to
+    the same SQLite db as trades/orders), queryable later via:
+        SELECT * FROM trade_custom_data WHERE ...
+    """
 
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo "No changes — already up to date with upstream."
-          else
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "Changed/added files:"
-            echo "$CHANGED_FILES"
-          fi
+    def order_filled(self, pair, trade, order, current_time, **kwargs) -> None:
+        # Let the upstream strategy do whatever it normally does on a fill
+        # first (currently a no-op in NFI, but future-proofing in case
+        # that ever changes upstream).
+        super().order_filled(pair, trade, order, current_time, **kwargs)
 
-      - name: Sanity-check syntax of every changed Python file
-        if: steps.sync.outputs.has_changes == 'true'
-        run: |
-          FAILED=0
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            case "$f" in
-              *.py)
-                if [ -f "$f" ]; then
-                  echo "Checking $f ..."
-                  python -m py_compile "$f" || FAILED=1
-                fi
-                ;;
-            esac
-          done <<< "${{ steps.sync.outputs.changed_files }}"
+        try:
+            is_entry_fill = order.ft_order_side == trade.entry_side
+            fill_number = (
+                trade.nr_of_successful_entries if is_entry_fill else None
+            )
 
-          if [ "$FAILED" -eq 1 ]; then
-            echo "::error::One or more changed Python files failed to compile. Aborting WITHOUT committing — repo left untouched by git (working tree changes will be discarded)."
-            exit 1
-          fi
-          echo "Syntax check passed for all changed .py files."
+            df, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+            candle = df.iloc[-1] if len(df) >= 1 else None
 
-      - name: Commit and push to main
-        if: steps.sync.outputs.has_changes == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A -- . ':!.github' ':!NostalgiaForInfinityX7ML.py' ':!config_dryrun_telegram.json' ':!config_dryrun_futures.json' ':!README.md'
-          if git diff --cached --quiet; then
-            echo "Nothing staged after exclusions — nothing to commit."
-          else
-            git commit -m "chore: sync from ${UPSTREAM_REPO}@${UPSTREAM_BRANCH} ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
-            git push origin HEAD:main
-          fi
+            def safe_get(row, col, default=None):
+                if row is None or col not in row:
+                    return default
+                val = row[col]
+                try:
+                    if val is None or (isinstance(val, float) and np.isnan(val)):
+                        return default
+                except TypeError:
+                    pass
+                return float(val) if isinstance(val, (int, float)) else val
 
-      - name: Notify Telegram — sync applied
-        if: steps.sync.outputs.has_changes == 'true'
-        env:
-          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          FILE_COUNT=$(echo "${{ steps.sync.outputs.changed_files }}" | grep -c . || echo 0)
-          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-            -d chat_id="${CHAT_ID}" \
-            -d text="🔄 Synced ${FILE_COUNT} file(s) from upstream (${UPSTREAM_REPO}) directly to main. Bots will pick this up on their next self-queued restart. Check the commit before assuming everything still behaves the same: ${{ github.server_url }}/${{ github.repository }}/commits/main" \
-            > /dev/null || true
+            snapshot = {
+                "fill_time": current_time.isoformat(),
+                "fill_type": "entry"
+                if is_entry_fill
+                else ("exit" if order.ft_order_side == trade.exit_side else "other"),
+                "fill_number": fill_number,
+                "order_side": order.ft_order_side,
+                "order_tag": order.ft_order_tag,
+                "fill_price": safe_get({"p": order.average or order.price}, "p"),
+                "current_profit_pct": None,
+                # Pair-level indicators, from the already-computed dataframe
+                # (nothing extra calculated here, just read off the last candle).
+                "rsi_14": safe_get(candle, "RSI_14"),
+                "rsi_3": safe_get(candle, "RSI_3"),
+                # ADX is only computed on the 4h informative timeframe in
+                # this strategy (used for entry conditions #7/#505), not on
+                # the base 5m dataframe -- so it carries the "_4h" suffix
+                # that merge_informative_pair() adds.
+                "adx_14": safe_get(candle, "ADX_14_4h"),
+                "plus_di_14": safe_get(candle, "PLUS_DI_14_4h"),
+                "minus_di_14": safe_get(candle, "MINUS_DI_14_4h"),
+                "ema_20": safe_get(candle, "EMA_20"),
+                "ema_50": safe_get(candle, "EMA_50"),
+                "ema_200": safe_get(candle, "EMA_200"),
+                "close": safe_get(candle, "close"),
+                "volume": safe_get(candle, "volume"),
+                # Broad market (BTC) context at the same moment -- this is what
+                # lets a later analysis tell "independent weak signal" apart
+                # from "correlated market-wide dip", instead of guessing from
+                # open-timestamp clustering alone.
+                # BTC informative indicators are only fetched on the 4h
+                # timeframe (see btc_info_timeframes = ["4h"]) and merged
+                # with the "_4h" suffix -- plain "BTC_RSI_14" etc. don't
+                # exist in the dataframe and would silently resolve to None.
+                "btc_rsi_14": safe_get(candle, "BTC_RSI_14_4h"),
+                "btc_ema_20": safe_get(candle, "BTC_EMA_20_4h"),
+                "btc_ema_200": safe_get(candle, "BTC_EMA_200_4h"),
+                "btc_roc_3": safe_get(candle, "BTC_ROC_3_4h"),
+                # Portfolio pressure at the moment of this fill -- were slots
+                # scarce (bot forced to be selective) or plentiful?
+                "open_trade_count_at_fill": Trade.get_open_trade_count(),
+                "max_open_trades_config": self.config.get("max_open_trades"),
+            }
 
-      - name: Notify Telegram — sync failed
-        if: failure()
-        env:
-          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-            -d chat_id="${CHAT_ID}" \
-            -d text="❌ Upstream sync failed (nothing was committed). See: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            > /dev/null || true
+            # current_profit isn't passed into order_filled; compute a cheap
+            # approximation for rebuy/exit fills from the trade's own state.
+            if not is_entry_fill and trade.open_rate:
+                try:
+                    fill_rate = order.average or order.price or trade.open_rate
+                    snapshot["current_profit_pct"] = round(
+                        ((fill_rate / trade.open_rate) - 1.0) * 100.0, 4
+                    )
+                except (TypeError, ZeroDivisionError):
+                    pass
+
+            trade.set_custom_data(
+                key=f"ml_snapshot_fill_{trade.nr_of_successful_entries}_{order.ft_order_side}",
+                value=snapshot,
+            )
+
+            # Also keep a single always-overwritten "entry_context" key holding
+            # ONLY the very first entry's snapshot, so querying "what were the
+            # conditions when this trade was opened" doesn't require knowing
+            # how many fills happened later.
+            if is_entry_fill and trade.nr_of_successful_entries == 1:
+                trade.set_custom_data(key="entry_context", value=snapshot)
+        except Exception:
+            # Analytics logging must never be able to break live trading.
+            # If anything above fails (missing column, None dataframe, etc.)
+            # just skip logging for this fill and continue normally.
+            log.warning(
+                f"[{current_time}] ml_snapshot logging failed for {pair}",
+                exc_info=True,
+            )
