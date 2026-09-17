@@ -1,120 +1,74 @@
-# NostalgiaForInfinity
+# NostalgiaForInfinity — Dry-Run + ML Data Collection Fork
 
-[![GitHub Pages](https://img.shields.io/badge/docs-online-blue)](https://iterativv.github.io/NostalgiaForInfinity/)
+This is a fork of [iterativv/NostalgiaForInfinity](https://github.com/iterativv/NostalgiaForInfinity),
+a trading strategy for the [Freqtrade](https://www.freqtrade.io/) crypto bot.
 
-## 📖 Documentation
+This fork does **not** change the trading logic itself. It adds:
+- two always-on **dry-run** bots (spot + futures) running entirely on GitHub Actions,
+- Telegram notifications for every simulated entry/exit,
+- structured **ML feature logging** on every order fill, for later meta-labeling,
+- an automatic **updater** that keeps the strategy file(s) in sync with upstream.
 
-Full documentation is available online at:  
-👉 [https://iterativv.github.io/NostalgiaForInfinity/](https://iterativv.github.io/NostalgiaForInfinity/)
+No real orders are ever placed. `dry_run: true` in both configs, always.
 
-## Introduction
+---
 
-Trading strategy for the [Freqtrade](https://www.freqtrade.io) crypto bot. For backtesting results, check out the comments in the individual [commit](https://github.com/iterativv/NostalgiaForInfinity/commits/main) page.
+## Repo layout
 
-## General Recommendations
+| File | Purpose |
+|---|---|
+| `NostalgiaForInfinityX7.py` | Upstream strategy, unmodified. Kept in sync automatically — see [Updater](#updater) below. Do not hand-edit this file; edits will be silently overwritten. |
+| `NostalgiaForInfinityX7ML.py` | **This project's own file.** A thin subclass of `NostalgiaForInfinityX7` that adds ML-snapshot logging on every order fill. This is what both bots actually run. Never touched by the updater. |
+| `NostalgiaForInfinityX8.py` | Upstream's newer strategy version, pulled in automatically once it appeared. **Not currently used by either bot** — as of writing, upstream itself hasn't confirmed X8 is out of testing. Kept around for a possible future third, separate dry-run bot. |
+| `config_dryrun_telegram.json` | Spot bot config (OKX, no leverage). Never touched by the updater. |
+| `config_dryrun_futures.json` | Futures bot config (OKX, isolated margin, 3x default leverage). Never touched by the updater. |
+| `.github/workflows/dry-run-telegram-signals.yml` | Runs the spot bot. Self-queueing restart chain (~5h45m per session, see comments in the file for why). |
+| `.github/workflows/dry-run-telegram-futures.yml` | Runs the futures bot. Same architecture, separate config/state/Telegram bot. |
+| `.github/workflows/sync-upstream-strategy.yml` | The updater — see below. |
 
-For optimal performance, suggested to use between 6 and 12 open trades, with unlimited stake.
+State (SQLite trade databases) is **not** stored in this repo's working tree. Each bot persists its database to its own dedicated git branch (`state-spot` / `state-futures`) between restarts.
 
-A pairlist with 40 to 80 pairs. Volume pairlist works well.
+---
 
-Prefer stable coin (USDT, USDC etc) pairs, instead of BTC or ETH pairs.
+## Why two bots
 
-Highly recommended to blacklist leveraged tokens (*BULL, *BEAR, *UP, *DOWN etc).
+- **Spot** (`config_dryrun_telegram.json`) — no leverage.
+- **Futures** (`config_dryrun_futures.json`) — isolated margin, 3x leverage, can go both long and short.
 
-Ensure that you don't override any variables in you config.json. Especially the timeframe (must be 5m).
+Both run the same strategy logic (`NostalgiaForInfinityX7ML`) on the same exchange (OKX), so their entries/exits can be compared directly (a "Signal Overlap" analysis: does a spot long fire on futures too, and vice versa) without the comparison being confounded by two exchanges' different price/volume data.
 
-- `use_exit_signal` must set to true (or not set at all).
-- `exit_profit_only` must set to false (or not set at all).
-- `ignore_roi_if_entry_signal` must set to true (or not set at all).
+---
 
-## Automatic Updates (Standalone Script)
+## ML data collection
 
-For users who are not using the Docker Compose updater, the repository also includes the [`tools/checkupdates.sh`](tools/checkupdates.sh) script.
+`NostalgiaForInfinityX7ML.py` overrides `order_filled()` to write a snapshot of indicator values to freqtrade's built-in `trade_custom_data` table (in the same SQLite file as `trades`/`orders`) on every fill — entry, rebuy, and exit. This is meant to let a later ML model see the *conditions at the time of the signal*, not just the final profit/loss outcome.
 
-**What this script does:**
-- Checks the NFI repository for updates and downloads the latest release or main branch commit
-- Extracts the archive and updates the strategy files and all blacklist JSON files
-- Cleans up downloaded and extracted files
-- Optionally restarts a Docker container and sends Telegram notifications
+Each snapshot includes: fill metadata (time, type, order tag, fill price), pair-level indicators (RSI, ADX/DI, EMA20/50/200, close, volume — note ADX/DI only exist on the 4h informative timeframe, hence the `_4h` suffix), BTC market context (RSI/EMA/ROC, also 4h), and portfolio pressure (open trade count vs. `max_open_trades`). The first entry's snapshot is also kept under a separate always-current `entry_context` key.
 
-The script supports two update modes:
-- `releases` - Use official GitHub releases and update to the latest stable release
-- `commits` - Use the latest commit from the main branch
+Query it directly via Telegram: `/list_custom_data <trade_id>`.
 
-**How to automate the update process:**
-1. Run the script manually first to create the configuration file and select your preferred update mode.
-2. After the configuration file is created, set up a cron job to run the script periodically.
-3. Run `crontab -e` and add a line such as the following to run the script every hour:
+Logging is wrapped in a broad `try/except` so a logging failure can never break live (simulated) trading — if something goes wrong, it's silently skipped and a warning is written to the freqtrade log.
 
-```cron
-0 * * * * /path/to/your/script/checkupdates.sh
-```
+---
 
-## Automatic Updates (Docker)
+## Updater
 
-The repository includes an `nfi-updater` sidecar service for Docker Compose users that keeps the strategy, blacklist, and pairlist automatically up to date without manual intervention.
+`.github/workflows/sync-upstream-strategy.yml` runs daily (and on manual trigger). It:
 
-**What it does:**
-- Checks the strategy file, blacklist, and pairlist against the latest version on GitHub on a configurable schedule (default: every day at 10:00 AM in your timezone)
-- Watches the blacklist file via HTTP ETag every 60 seconds and applies critical updates immediately
-- Automatically restarts the freqtrade container only when a file actually changed
+1. Clones the upstream repo (`iterativv/NostalgiaForInfinity`) fresh.
+2. Copies every **new or changed** file into this repo (never deletes anything, even if removed upstream).
+3. **Never touches**: `.github/`, `NostalgiaForInfinityX7ML.py`, both `config_dryrun_*.json` files, or this `README.md`.
+4. Runs a `py_compile` syntax check on every changed Python file. If anything fails to compile, nothing is committed.
+5. Commits straight to `main` (no PR/review step — see the risk note in the workflow file itself) and posts a Telegram notification with the commit link.
 
-**How to enable it:**
+**The bots do not restart when this runs.** They only pick up whatever is on `main` at the start of their *next* self-queued session. So an upstream update can sit on `main` for up to ~5h45m before it actually takes effect — check the Telegram notification and the commit diff in that window if you want to catch something before it goes live.
 
-The `nfi-updater` service is already defined in `docker-compose.yml`. It starts alongside freqtrade automatically when you run:
+If you ever add another custom file at the repo root, add it to the exclude list near the top of `sync-upstream-strategy.yml`, or the updater will silently overwrite it on its next run.
 
-```bash
-docker compose up -d --build
-```
+---
 
-**Configuration (add to your `.env`):**
+## Known gotchas (learned the hard way)
 
-```env
-# Timezone for the cron schedule
-TZ=Europe/London
-
-# How often to check for updates (cron syntax, default: daily at 10:00 AM)
-NFI_UPDATE_CRON=0 10 * * *
-
-# Docker Compose project name — must match what 'docker compose ls' shows
-# Docker uses the lowercase folder name by default
-COMPOSE_PROJECT_NAME=nostalgiaforinfinity
-```
-
-**View updater logs:**
-
-```bash
-docker compose logs -f nfi-updater
-```
-
-## Discord Link
-This is where we chat, hangout and contribute as a community (both links is the same server)
-
-- [Discord Invite 1](https://discord.gg/DeAmv3btxQ)
-- [Discord Invite 2](https://discord.gg/nzVeNvZsQq)
-
-## Referral Links
-If you like to help, you can also use the following links to sign up to various exchanges:
-
-- [Binance: (20% discount on trading fees)](https://www.binance.com/join?ref=C68K26A9)
-- [Kucoin: (20% lifetime discount on trading fees)](https://www.kucoin.com/r/af/QBSSS5J2)
-- [Gate: (20% lifetime discount on trading fees)](https://www.gate.io/share/nfinfinity)
-- [OKX: (20% discount on trading fees)](https://www.okx.com/join/11749725931)
-- [MEXC: (10% discount on trading fees)](https://promote.mexc.com/b/nfinfinity)
-- [ByBit: (signup bonuses)](https://partner.bybit.com/b/nfi)
-- [ByBit.EU: (signup bonuses)](https://partner.bybit.eu/b/NFINFINITY)
-- [Bitget: (lifetime 20% rebate all plus 10% discount on spot fees)](https://bonus.bitget.com/nfinfinity)
-- [Kraken: ](https://proinvite.kraken.com/rrru/m021lz9e)
-- [BitMart: (20% lifetime discount on trading fees)](https://www.bitmart.com/invite/nfinfinity)
-- [HTX: (Welcome Bonus worth 241 USDT upon completion of a deposit and trade)](https://www.htx.com/invite/en-us/1f?invite_code=ubpt2223)
-- [ByBit: (no fees for the first € 10000)](https://bitvavo.com/invite?a=D22103A4BC)
-
-## Donations
-Absolutely not required. However, will be accepted as a token of appreciation.
-
-- BTC: `bc1qvflsvddkmxh7eqhc4jyu5z5k6xcw3ay8jl49sk`
-- ETH (ERC20): `0x83D3cFb8001BDC5d2211cBeBB8cB3461E5f7Ec91`
-- BEP20/BSC (USDT, ETH, BNB, ...): `0x86A0B21a20b39d16424B7c8003E4A7e12d78ABEe`
-- TRC20/TRON (USDT, TRON, ...): `TTAa9MX6zMLXNgWMhg7tkNormVHWCoq8Xk`
-
-- Patreon : https://www.patreon.com/iterativ
+- **`refresh_period` vs. `lookback_days` on pairlist filters.** Any pairlist entry (`VolumePairList`, `RangeStabilityFilter`, etc.) that sets `lookback_days` needs `refresh_period` at least `86400` (one day). A smaller value makes freqtrade refuse to start — and because this happens right after pairlist resolution, before anything else logs, it can look like the bot is "running" for hours while actually stuck. Always check Telegram `/count` and `/status table` after any pairlist change — `trader is not running` means it never got past this check.
+- **OKX exchange support notes**, from this project's own configs: OKX's live-ticker data doesn't expose `quoteVolume` in the format `VolumePairList` expects by default, so `lookback_days` (candle-based volume) is required for both spot and futures on OKX.
+- **`NostalgiaForInfinityX7ML.py` must ship together with `NostalgiaForInfinityX7.py`** in `user_data/strategies/` — it imports the base class directly. Both dry-run workflows copy both files; if you ever add a third bot/workflow, remember to do the same.
