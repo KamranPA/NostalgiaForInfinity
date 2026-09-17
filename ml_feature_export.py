@@ -2,9 +2,11 @@
 ml_feature_export.py
 
 Reads the ml_snapshot_* and entry_context custom_data entries logged by
-the modified order_filled() in NostalgiaForInfinityX7.py, and flattens
-them into a single wide table — one row per fill (entry, every rebuy
-step, and exits) — ready to load into pandas/sklearn/whatever later.
+the order_filled() override in NostalgiaForInfinityX7ML.py (a thin
+subclass of NostalgiaForInfinityX7 — kept separate so upstream strategy
+updates never wipe out this logging), and flattens them into a single
+wide table — one row per fill (entry, every rebuy step, and exits) —
+ready to load into pandas/sklearn/whatever later.
 
 This is purely a READ tool. It never touches the bot's decision-making.
 
@@ -174,9 +176,9 @@ def build_telegram_summary(df: pd.DataFrame) -> str:
             n_closed = (grp["is_open"] == False).sum()  # noqa: E712
             lines.append(f"  tag {tag}: {n_closed}/{len(grp)}")
 
-    # Basic feature completeness check — flags if BTC/indicator columns
+    # Basic feature completeness check — flags if BTC/indicator/ADX columns
     # are coming back empty, which would mean the logging silently broke.
-    key_cols = ["rsi_14", "btc_rsi_14", "ema_20"]
+    key_cols = ["rsi_14", "btc_rsi_14", "ema_20", "adx_14"]
     lines.append("")
     lines.append("Feature health check (non-null rate):")
     for c in key_cols:
@@ -203,7 +205,7 @@ if __name__ == "__main__":
     if df.empty:
         msg = (
             "No ml_snapshot/entry_context custom_data found yet.\n"
-            "Make sure the updated NostalgiaForInfinityX7.py is deployed and at least\n"
+            "Make sure the updated NostalgiaForInfinityX7ML.py is deployed and at least\n"
             "one trade has opened since then."
         )
         print(msg)
