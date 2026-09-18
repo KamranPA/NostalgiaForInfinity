@@ -41,6 +41,13 @@ a shared time window (default 15 min, both run the same 5m timeframe) —
 to answer "when spot signals, does futures signal too?" Futures-only
 short entries (tags 501-673) are excluded since spot has no short side.
 
+FIX (2026-09-18): pair-name mismatch was silently zeroing out every
+match. ccxt reports futures/swap symbols with a ':SETTLE' suffix (e.g.
+'ARB/USDT:USDT') while spot symbols have none (e.g. 'ARB/USDT'), so the
+old (pair, enter_tag) key never matched across the two bots even when a
+trade was a perfect overlap. Every pair used in overlap matching now
+goes through normalize_pair() first, which strips that suffix.
+
 Usage:
     python generate_dashboard.py <spot_sqlite_path> <futures_sqlite_path> <history_sqlite_path> <output_html_path>
 """
@@ -380,6 +387,14 @@ SIGNAL_OVERLAP_WINDOW_MINUTES = 15  # generous vs. the 5m timeframe, to
                                      # timing jitter without over-matching
 
 
+def normalize_pair(pair):
+    """Strip the ':SETTLE' suffix ccxt adds to futures/swap symbols
+    (e.g. 'ARB/USDT:USDT' -> 'ARB/USDT') so spot and futures pair names
+    compare equal for signal-overlap matching. Spot symbols have no
+    colon and pass through unchanged."""
+    return pair.split(":")[0] if pair else pair
+
+
 def is_long_tag(enter_tag):
     """Futures-only short tags are 501-673 (mirroring long tags 1-173) —
     exclude those, since spot has no short side to compare against."""
@@ -397,12 +412,12 @@ def compute_signal_overlap(spot_trades, futures_trades, window_minutes=SIGNAL_OV
     window = window_minutes * 60  # seconds
     fut_by_key = defaultdict(list)
     for t in fut_long:
-        fut_by_key[(t["pair"], str(t["enter_tag"]))].append(t)
+        fut_by_key[(normalize_pair(t["pair"]), str(t["enter_tag"]))].append(t)
 
     matched_pairs = []
     spot_matched = 0
     for s in spot_long:
-        key = (s["pair"], str(s["enter_tag"]))
+        key = (normalize_pair(s["pair"]), str(s["enter_tag"]))
         candidates = fut_by_key.get(key, [])
         best = None
         best_gap = None
@@ -418,10 +433,10 @@ def compute_signal_overlap(spot_trades, futures_trades, window_minutes=SIGNAL_OV
     # as matched if ANY spot entry on the same pair+tag falls in its window).
     spot_by_key = defaultdict(list)
     for t in spot_long:
-        spot_by_key[(t["pair"], str(t["enter_tag"]))].append(t)
+        spot_by_key[(normalize_pair(t["pair"]), str(t["enter_tag"]))].append(t)
     futures_matched = 0
     for f in fut_long:
-        key = (f["pair"], str(f["enter_tag"]))
+        key = (normalize_pair(f["pair"]), str(f["enter_tag"]))
         for s in spot_by_key.get(key, []):
             gap = abs((to_aware_utc(f["open_date"]) - to_aware_utc(s["open_date"])).total_seconds())
             if gap <= window:
