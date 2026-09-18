@@ -16,6 +16,22 @@ instead of:
 Both this file and the upstream NostalgiaForInfinityX7.py must sit next
 to each other (repo root), since this file imports the class directly
 from it.
+
+SNAPSHOT SCHEMA v2 (2026-09-18): added enter_tag/exit_reason (previously
+only visible via Telegram, not stored in the snapshot itself), ATR_14,
+1h/1d context indicators, and a strategy_version field so future ML
+analysis can tell which snapshot shape a given row came from.
+
+NOTE ON THE 1h/1d COLUMN NAMES BELOW: these follow the same pattern as
+the existing 4h columns (merge_informative_pair appends "_<timeframe>"
+to informative columns merged onto the base dataframe) and assume the
+upstream strategy's informative_pairs() already pulls in 1h/1d data with
+these indicator names. This mirrors the adx_14/BTC bug fixed earlier
+(those were silently None until the "_4h" suffix was added) -- run
+/list_custom_data after the next new trade and confirm these come back
+non-null; if a given column name doesn't exist upstream, safe_get()
+degrades to None rather than raising, so nothing breaks, but the field
+just won't be useful until the real column name is confirmed and swapped in.
 """
 
 import logging
@@ -26,6 +42,8 @@ from freqtrade.persistence import Trade
 from NostalgiaForInfinityX7 import NostalgiaForInfinityX7
 
 log = logging.getLogger(__name__)
+
+ML_SNAPSHOT_SCHEMA_VERSION = 2
 
 
 class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
@@ -69,7 +87,17 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
                     pass
                 return float(val) if isinstance(val, (int, float)) else val
 
+            # Strategy version: prefer upstream's own version() if it defines
+            # one (some NFI releases report their own version string there),
+            # falling back to just this subclass's snapshot schema version.
+            try:
+                upstream_version = super().version()
+            except Exception:
+                upstream_version = None
+
             snapshot = {
+                "schema_version": ML_SNAPSHOT_SCHEMA_VERSION,
+                "strategy_version": upstream_version,
                 "fill_time": current_time.isoformat(),
                 "fill_type": "entry"
                 if is_entry_fill
@@ -79,10 +107,18 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
                 "order_tag": order.ft_order_tag,
                 "fill_price": safe_get({"p": order.average or order.price}, "p"),
                 "current_profit_pct": None,
+                # Explicit enter_tag/exit_reason: Telegram already surfaces
+                # these from trade.enter_tag/exit_reason, but they weren't
+                # previously copied into the snapshot itself -- without them,
+                # joining a snapshot row back to "which setup fired" required
+                # a separate join against the trades table.
+                "enter_tag": trade.enter_tag,
+                "exit_reason": trade.exit_reason,
                 # Pair-level indicators, from the already-computed dataframe
                 # (nothing extra calculated here, just read off the last candle).
                 "rsi_14": safe_get(candle, "RSI_14"),
                 "rsi_3": safe_get(candle, "RSI_3"),
+                "atr_14": safe_get(candle, "ATR_14"),
                 # ADX is only computed on the 4h informative timeframe in
                 # this strategy (used for entry conditions #7/#505), not on
                 # the base 5m dataframe -- so it carries the "_4h" suffix
@@ -95,6 +131,17 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
                 "ema_200": safe_get(candle, "EMA_200"),
                 "close": safe_get(candle, "close"),
                 "volume": safe_get(candle, "volume"),
+                # Higher-timeframe context (1h/1d) -- see the schema-v2 note
+                # in the module docstring about confirming these column
+                # names against what merge_informative_pair() actually
+                # produces upstream.
+                "rsi_14_1h": safe_get(candle, "RSI_14_1h"),
+                "ema_50_1h": safe_get(candle, "EMA_50_1h"),
+                "ema_200_1h": safe_get(candle, "EMA_200_1h"),
+                "adx_14_1h": safe_get(candle, "ADX_14_1h"),
+                "rsi_14_1d": safe_get(candle, "RSI_14_1d"),
+                "ema_50_1d": safe_get(candle, "EMA_50_1d"),
+                "ema_200_1d": safe_get(candle, "EMA_200_1d"),
                 # Broad market (BTC) context at the same moment -- this is what
                 # lets a later analysis tell "independent weak signal" apart
                 # from "correlated market-wide dip", instead of guessing from
@@ -135,6 +182,20 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
             # how many fills happened later.
             if is_entry_fill and trade.nr_of_successful_entries == 1:
                 trade.set_custom_data(key="entry_context", value=snapshot)
+
+            # exit_reason is often only finalized on the trade right as/after
+            # the exit order fills, so entry_context's exit_reason usually
+            # stays None -- also refresh entry_context's exit_reason (without
+            # touching anything else about it) once an exit fill lands, so
+            # "what closed this trade" is queryable from the same row.
+            elif not is_entry_fill:
+                try:
+                    existing = trade.get_custom_data("entry_context")
+                    if isinstance(existing, dict) and trade.exit_reason:
+                        existing["exit_reason"] = trade.exit_reason
+                        trade.set_custom_data(key="entry_context", value=existing)
+                except Exception:
+                    pass
         except Exception:
             # Analytics logging must never be able to break live trading.
             # If anything above fails (missing column, None dataframe, etc.)
