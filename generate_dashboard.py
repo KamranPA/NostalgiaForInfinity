@@ -227,7 +227,13 @@ ML_MIN_FOR_MODEL = 100
 # since ADX is only computed on the 4h informative timeframe) was fixed
 # in NostalgiaForInfinityX7ML.py — before that it was always null, so
 # there was no point tracking its health here.
-ML_HEALTH_CHECK_KEYS = ["rsi_14", "btc_rsi_14", "ema_20", "adx_14"]
+ML_HEALTH_CHECK_KEYS = [
+    "rsi_14", "btc_rsi_14", "ema_20", "adx_14",
+    # added with the ML snapshot schema v2 (2026-09-18)
+    "atr_14", "enter_tag", "exit_reason",
+    "rsi_14_1h", "ema_12_1h", "ema_200_1h",
+    "rsi_14_1d", "ema_50_1d", "ema_200_1d", "range_pct_14_1d",
+]
 
 
 def fetch_ml_readiness(db_path: str):
