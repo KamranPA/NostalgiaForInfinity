@@ -178,7 +178,15 @@ def build_telegram_summary(df: pd.DataFrame) -> str:
 
     # Basic feature completeness check — flags if BTC/indicator/ADX columns
     # are coming back empty, which would mean the logging silently broke.
-    key_cols = ["rsi_14", "btc_rsi_14", "ema_20", "adx_14"]
+    # Updated 2026-09-18 alongside the ML snapshot schema v2 change (adds
+    # enter_tag/exit_reason, atr_14, and 1h/1d context) so this health
+    # check actually covers the fields that were just added.
+    key_cols = [
+        "rsi_14", "btc_rsi_14", "ema_20", "adx_14",
+        "atr_14", "enter_tag", "exit_reason",
+        "rsi_14_1h", "ema_12_1h", "ema_200_1h",
+        "rsi_14_1d", "ema_50_1d", "ema_200_1d", "range_pct_14_1d",
+    ]
     lines.append("")
     lines.append("Feature health check (non-null rate):")
     for c in key_cols:
