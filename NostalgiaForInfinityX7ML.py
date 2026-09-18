@@ -22,21 +22,26 @@ only visible via Telegram, not stored in the snapshot itself), ATR_14,
 1h/1d context indicators, and a strategy_version field so future ML
 analysis can tell which snapshot shape a given row came from.
 
-NOTE ON THE 1h/1d COLUMN NAMES BELOW: these follow the same pattern as
-the existing 4h columns (merge_informative_pair appends "_<timeframe>"
-to informative columns merged onto the base dataframe) and assume the
-upstream strategy's informative_pairs() already pulls in 1h/1d data with
-these indicator names. This mirrors the adx_14/BTC bug fixed earlier
-(those were silently None until the "_4h" suffix was added) -- run
-/list_custom_data after the next new trade and confirm these come back
-non-null; if a given column name doesn't exist upstream, safe_get()
-degrades to None rather than raising, so nothing breaks, but the field
-just won't be useful until the real column name is confirmed and swapped in.
+1h/1d COLUMN NAMES (verified 2026-09-18 directly against
+NostalgiaForInfinityX7.py's informative_1h_indicators()/
+informative_1d_indicators()): 1h only computes EMA_12/EMA_200 (there is
+no EMA_50_1h), and neither the 1h nor 1d informative function computes
+ADX at all (ADX_14 only exists on the 4h merge, as ADX_14_4h) -- so
+those two guessed fields from the first draft were dropped/corrected
+below. RANGE_PCT_14_1d (used upstream by the bad-trade/stale-range
+check) is included instead as the 1d volatility figure.
+
+ATR: not computed anywhere in the upstream strategy, so it isn't
+available on any existing dataframe column. It's computed here instead,
+directly from the base-timeframe OHLC via talib, wrapped in the same
+try/except as everything else so a computation failure just drops this
+one field rather than breaking the fill.
 """
 
 import logging
 
 import numpy as np
+import talib.abstract as ta
 from freqtrade.persistence import Trade
 
 from NostalgiaForInfinityX7 import NostalgiaForInfinityX7
@@ -60,6 +65,23 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
     the same SQLite db as trades/orders), queryable later via:
         SELECT * FROM trade_custom_data WHERE ...
     """
+
+    @staticmethod
+    def _safe_atr_14(df, timeperiod: int = 14):
+        """ATR isn't computed anywhere upstream, so it's derived here
+        straight from the base-timeframe OHLC using talib. Returns None
+        (rather than raising) if the dataframe is too short or missing
+        the expected columns."""
+        try:
+            if df is None or len(df) < timeperiod + 1:
+                return None
+            atr_series = ta.ATR(df, timeperiod=timeperiod)
+            val = atr_series.iloc[-1]
+            if val is None or (isinstance(val, float) and np.isnan(val)):
+                return None
+            return float(val)
+        except Exception:
+            return None
 
     def order_filled(self, pair, trade, order, current_time, **kwargs) -> None:
         # Let the upstream strategy do whatever it normally does on a fill
@@ -118,7 +140,7 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
                 # (nothing extra calculated here, just read off the last candle).
                 "rsi_14": safe_get(candle, "RSI_14"),
                 "rsi_3": safe_get(candle, "RSI_3"),
-                "atr_14": safe_get(candle, "ATR_14"),
+                "atr_14": self._safe_atr_14(df),
                 # ADX is only computed on the 4h informative timeframe in
                 # this strategy (used for entry conditions #7/#505), not on
                 # the base 5m dataframe -- so it carries the "_4h" suffix
@@ -131,17 +153,16 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
                 "ema_200": safe_get(candle, "EMA_200"),
                 "close": safe_get(candle, "close"),
                 "volume": safe_get(candle, "volume"),
-                # Higher-timeframe context (1h/1d) -- see the schema-v2 note
-                # in the module docstring about confirming these column
-                # names against what merge_informative_pair() actually
-                # produces upstream.
+                # Higher-timeframe context (1h/1d) -- column names verified
+                # directly against informative_1h_indicators()/
+                # informative_1d_indicators() upstream (see module docstring).
                 "rsi_14_1h": safe_get(candle, "RSI_14_1h"),
-                "ema_50_1h": safe_get(candle, "EMA_50_1h"),
+                "ema_12_1h": safe_get(candle, "EMA_12_1h"),
                 "ema_200_1h": safe_get(candle, "EMA_200_1h"),
-                "adx_14_1h": safe_get(candle, "ADX_14_1h"),
                 "rsi_14_1d": safe_get(candle, "RSI_14_1d"),
                 "ema_50_1d": safe_get(candle, "EMA_50_1d"),
                 "ema_200_1d": safe_get(candle, "EMA_200_1d"),
+                "range_pct_14_1d": safe_get(candle, "RANGE_PCT_14_1d"),
                 # Broad market (BTC) context at the same moment -- this is what
                 # lets a later analysis tell "independent weak signal" apart
                 # from "correlated market-wide dip", instead of guessing from
