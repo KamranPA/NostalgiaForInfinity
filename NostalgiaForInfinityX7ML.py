@@ -50,6 +50,19 @@ log = logging.getLogger(__name__)
 
 ML_SNAPSHOT_SCHEMA_VERSION = 2
 
+# Overrides the upstream default of ["4h"] (see NostalgiaForInfinityX7.py's
+# commented-out alternatives at that line) so BTC_EMA_20/BTC_ROC_3 (only
+# computed on 1h/15m/5m) and BTC_EMA_200 (only computed on 1d) actually
+# get merged onto the base dataframe instead of silently staying None.
+# populate_indicators() iterates self.btc_info_timeframes dynamically and
+# merges each timeframe independently -- confirmed by reading that loop
+# directly -- so this is purely additive: BTC_RSI_14_4h and every existing
+# entry/exit condition that depends on it are completely unaffected.
+# Placed here (subclass) rather than edited into the upstream file so an
+# nfi-updater re-sync of NostalgiaForInfinityX7.py from iterativv can't
+# silently revert it back to ["4h"] only.
+BTC_INFO_TIMEFRAMES_OVERRIDE = ["4h", "1h", "1d"]
+
 
 class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
     """
@@ -65,6 +78,8 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
     the same SQLite db as trades/orders), queryable later via:
         SELECT * FROM trade_custom_data WHERE ...
     """
+
+    btc_info_timeframes = BTC_INFO_TIMEFRAMES_OVERRIDE
 
     @staticmethod
     def _safe_atr_14(df, timeperiod: int = 14):
@@ -167,14 +182,18 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
                 # lets a later analysis tell "independent weak signal" apart
                 # from "correlated market-wide dip", instead of guessing from
                 # open-timestamp clustering alone.
-                # BTC informative indicators are only fetched on the 4h
-                # timeframe (see btc_info_timeframes = ["4h"]) and merged
-                # with the "_4h" suffix -- plain "BTC_RSI_14" etc. don't
-                # exist in the dataframe and would silently resolve to None.
+                # BTC informative columns come from different timeframes
+                # upstream, confirmed directly against
+                # btc_informative_4h/1h/1d_indicators(): BTC_RSI_14 is only
+                # computed on 4h; BTC_EMA_20/BTC_ROC_3 only on 1h/15m/5m;
+                # BTC_EMA_200 only on 1d. btc_info_timeframes is overridden
+                # above (BTC_INFO_TIMEFRAMES_OVERRIDE) specifically so all
+                # three of these merge onto the dataframe with real values
+                # instead of resolving to None.
                 "btc_rsi_14": safe_get(candle, "BTC_RSI_14_4h"),
-                "btc_ema_20": safe_get(candle, "BTC_EMA_20_4h"),
-                "btc_ema_200": safe_get(candle, "BTC_EMA_200_4h"),
-                "btc_roc_3": safe_get(candle, "BTC_ROC_3_4h"),
+                "btc_ema_20_1h": safe_get(candle, "BTC_EMA_20_1h"),
+                "btc_ema_200_1d": safe_get(candle, "BTC_EMA_200_1d"),
+                "btc_roc_3_1h": safe_get(candle, "BTC_ROC_3_1h"),
                 # Portfolio pressure at the moment of this fill -- were slots
                 # scarce (bot forced to be selective) or plentiful?
                 "open_trade_count_at_fill": Trade.get_open_trade_count(),
