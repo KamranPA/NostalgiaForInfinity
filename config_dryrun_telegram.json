@@ -36,7 +36,7 @@
       ".*(_PREMIUM|BEAR|BULL|DOWN|HALF|HEDGE|UP|[1235][SL])/.*"
     ]
   },
-  "_COMMENT_pairlist": "Same filter chain as before (matches NostalgiaForInfinity's own official pairlist-volume config). lookback_days=1 added to both VolumePairList entries — required for OKX (its live-ticker data doesn't expose quoteVolume in the format VolumePairList defaults to, so it must use candle-based/advanced-mode volume calculation instead; this was already confirmed necessary for the futures OKX config).",
+  "_COMMENT_pairlist": "Same filter chain as before (matches NostalgiaForInfinity's own official pairlist-volume config). lookback_days removed from both VolumePairList entries on 2026-09-19 after diagnose-okx-pairlist.yml confirmed OKX's SPOT ticker DOES expose quoteVolume directly (unlike the futures/swap ticker, which genuinely needs lookback_days — that stays as-is in config_dryrun_futures.json). refresh_period restored to 1800s (30min) accordingly — it had been forced to 86400s (24h) only because lookback_days required daily-timeframe-based refresh timing, which no longer applies here. This should meaningfully increase how often the tradeable pair list actually updates.",
   "entry_pricing": {
     "price_side": "same",
     "use_order_book": true,
@@ -57,8 +57,7 @@
       "method": "VolumePairList",
       "number_assets": 130,
       "sort_key": "quoteVolume",
-      "refresh_period": 86400,
-      "lookback_days": 1
+      "refresh_period": 1800
     },
     {
       "method": "FullTradesFilter"
@@ -80,14 +79,13 @@
       "lookback_days": 3,
       "min_rate_of_change": 0.03,
       "max_rate_of_change": 0.95,
-      "refresh_period": 86400,
-    }
+      "refresh_period": 86400
+    },
     {
       "method": "VolumePairList",
       "number_assets": 100,
       "sort_key": "quoteVolume",
-      "refresh_period": 86400,
-      "lookback_days": 1
+      "refresh_period": 1800
     }
   ],
   "_COMMENT_telegram": "token/chat_id below are dummy placeholders satisfying the config schema's required fields. The REAL values are injected at runtime via FREQTRADE__TELEGRAM__TOKEN / FREQTRADE__TELEGRAM__CHAT_ID environment variables (sourced from GitHub Secrets in the workflow) — never commit real credentials into this file.",
