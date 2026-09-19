@@ -1,0 +1,181 @@
+# SAVE THIS FILE AS: .github/workflows/backtest-signal-frequency.yml
+# (in .github/workflows/, in the ROOT of your NostalgiaForInfinity repo)
+name: Backtest Signal Frequency (last 30 days, spot)
+
+# Manual-only, read-only diagnostic. Answers: "is the current low entry
+# frequency a property of the market itself, independent of any
+# infrastructure/config issue?" — by backtesting the EXACT live spot
+# strategy+config (NostalgiaForInfinityX7ML + config_dryrun_telegram.json,
+# completely unmodified) over the last 30 days, and reporting how many
+# entries it would have taken.
+#
+# LEAKAGE SAFEGUARDS (all standard freqtrade behavior, made explicit here
+# so this doesn't need re-justifying later):
+#   1. Data is downloaded for a 90-day window (60-day warmup buffer +
+#      the 30-day test window), but --timerange restricts REPORTED
+#      results to only the last 30 days — so nothing about how the
+#      first 60 days performed can bias the reported window.
+#   2. Freqtrade's own VolumePairList/RangeStabilityFilter recalculate
+#      the whitelist at each historical refresh_period using ONLY data
+#      up to that point in the backtest — never future data. This is
+#      built into freqtrade's backtesting engine, not something this
+#      workflow has to implement.
+#   3. No parameters are hyperopted/tuned against this window — this
+#      runs the strategy completely as-is, with zero fitting.
+#   4. The config used is copied byte-for-byte from the real
+#      config_dryrun_telegram.json (only dry_run/telegram/db_url-type
+#      fields are irrelevant to backtesting and freqtrade ignores them),
+#      so the pairlist refresh_period constraint (86400s) that's
+#      currently live is faithfully reproduced, not "fixed" for this
+#      test — the point is to see what the CURRENT setup would have
+#      done, not an idealized one.
+#
+# Result: total entries over 30 days, entries by week, and entries by
+# enter_tag, posted to the Job Summary. If this comes back similarly
+# low, the market/config-as-is is the explanation, not something newly
+# broken by the OKX switch or the refresh_period fix.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install TA-Lib system library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential wget
+          wget -q http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+          tar -xzf ta-lib-0.4.0-src.tar.gz
+          cd ta-lib
+          ./configure --prefix=/usr
+          make
+          sudo make install
+          cd ..
+
+      - name: Install Freqtrade + dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install freqtrade
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Prepare backtest user_data (exact live spot config, unmodified)
+        run: |
+          mkdir -p user_data/strategies user_data/logs user_data/data/okx
+          cp NostalgiaForInfinityX7ML.py user_data/strategies/ 2>/dev/null || cp NostalgiaForInfinityX7.py user_data/strategies/
+          # Byte-for-byte copy of the real, currently-deployed spot config —
+          # nothing here is edited for this test.
+          cp config_dryrun_telegram.json user_data/config.json
+
+      - name: Compute date range (30-day test window + 60-day warmup buffer)
+        id: dates
+        run: |
+          TEST_END=$(date -u +%Y%m%d)
+          TEST_START=$(date -u -d '30 days ago' +%Y%m%d)
+          DOWNLOAD_START=$(date -u -d '90 days ago' +%Y%m%d)
+          echo "test_start=$TEST_START" >> "$GITHUB_OUTPUT"
+          echo "test_end=$TEST_END" >> "$GITHUB_OUTPUT"
+          echo "download_start=$DOWNLOAD_START" >> "$GITHUB_OUTPUT"
+          echo "Test window (reported results): $TEST_START - $TEST_END"
+          echo "Download window (incl. warmup buffer): $DOWNLOAD_START - $TEST_END"
+
+      - name: Download OKX spot historical data (5m/1h/4h/1d, 90-day window)
+        run: |
+          freqtrade download-data \
+            --config user_data/config.json \
+            --exchange okx \
+            --timerange "${{ steps.dates.outputs.download_start }}-${{ steps.dates.outputs.test_end }}" \
+            --timeframes 5m 1h 4h 1d \
+            --erase
+
+      - name: Run backtest (results restricted to the last 30 days only)
+        run: |
+          freqtrade backtesting \
+            --config user_data/config.json \
+            --strategy NostalgiaForInfinityX7ML \
+            --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
+            --timeframe 5m \
+            --export trades \
+            --export-filename user_data/backtest_results/result.json \
+            | tee user_data/logs/backtest.log
+
+      - name: Summarize entries by week and by tag
+        if: always()
+        run: |
+          python3 << 'PYEOF'
+          import json, glob
+          from collections import defaultdict
+          from datetime import datetime
+
+          files = sorted(glob.glob("user_data/backtest_results/result*.json"))
+          if not files:
+              print("No result file found — backtest likely failed before producing output.")
+              raise SystemExit(0)
+
+          with open(files[-1]) as f:
+              data = json.load(f)
+
+          # freqtrade export format: {"strategy": {"<name>": {"trades": [...]}}}
+          strat_key = next(iter(data.get("strategy", {})), None)
+          trades = data.get("strategy", {}).get(strat_key, {}).get("trades", []) if strat_key else []
+
+          print(f"Total entries in 30-day window: {len(trades)}\n")
+
+          by_week = defaultdict(int)
+          by_tag = defaultdict(int)
+          for t in trades:
+              open_date = t.get("open_date", "")[:10]
+              try:
+                  dt = datetime.strptime(open_date, "%Y-%m-%d")
+                  week_label = dt.strftime("Week of %Y-%m-%d")
+              except ValueError:
+                  week_label = "unknown"
+              by_week[week_label] += 1
+              by_tag[str(t.get("enter_tag"))] += 1
+
+          with open("user_data/logs/summary.txt", "w") as out:
+              out.write(f"Total entries in 30-day window: {len(trades)}\n\n")
+              out.write("By week:\n")
+              for wk in sorted(by_week):
+                  out.write(f"  {wk}: {by_week[wk]}\n")
+              out.write("\nBy enter_tag:\n")
+              for tag, n in sorted(by_tag.items(), key=lambda x: -x[1]):
+                  out.write(f"  tag {tag}: {n}\n")
+          PYEOF
+          cat user_data/logs/summary.txt 2>/dev/null || echo "No summary produced."
+
+      - name: Post result to Job Summary
+        if: always()
+        run: |
+          {
+            echo "## Backtest Signal Frequency — last 30 days (spot, live config as-is)"
+            echo ""
+            echo "Test window: ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }}"
+            echo ""
+            if [ -f user_data/logs/summary.txt ]; then
+              echo '```'
+              cat user_data/logs/summary.txt
+              echo '```'
+            fi
+            echo ""
+            echo "<details><summary>Full freqtrade backtest report</summary>"
+            echo ""
+            echo '```'
+            cat user_data/logs/backtest.log 2>/dev/null | tail -150
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
