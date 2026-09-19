@@ -9,31 +9,62 @@ name: Backtest Signal Frequency (last 30 days, spot)
 # completely unmodified) over the last 30 days, and reporting how many
 # entries it would have taken.
 #
-# LEAKAGE SAFEGUARDS (all standard freqtrade behavior, made explicit here
-# so this doesn't need re-justifying later):
-#   1. Data is downloaded for a 90-day window (60-day warmup buffer +
-#      the 30-day test window), but --timerange restricts REPORTED
-#      results to only the last 30 days — so nothing about how the
-#      first 60 days performed can bias the reported window.
-#   2. Freqtrade's own VolumePairList/RangeStabilityFilter recalculate
-#      the whitelist at each historical refresh_period using ONLY data
-#      up to that point in the backtest — never future data. This is
-#      built into freqtrade's backtesting engine, not something this
-#      workflow has to implement.
-#   3. No parameters are hyperopted/tuned against this window — this
-#      runs the strategy completely as-is, with zero fitting.
-#   4. The config used is copied byte-for-byte from the real
-#      config_dryrun_telegram.json (only dry_run/telegram/db_url-type
-#      fields are irrelevant to backtesting and freqtrade ignores them),
-#      so the pairlist refresh_period constraint (86400s) that's
-#      currently live is faithfully reproduced, not "fixed" for this
-#      test — the point is to see what the CURRENT setup would have
-#      done, not an idealized one.
+# KNOWN LIMITATIONS OF THIS APPROACH (fixed/documented 2026-09-18 after
+# review — earlier draft of this workflow got two of these backwards):
 #
-# Result: total entries over 30 days, entries by week, and entries by
-# enter_tag, posted to the Job Summary. If this comes back similarly
-# low, the market/config-as-is is the explanation, not something newly
-# broken by the OKX switch or the refresh_period fix.
+#   1. Timeframes: the strategy declares
+#      info_timeframes = ["15m", "1h", "4h", "1d"] (NostalgiaForInfinityX7.py)
+#      — 15m is REQUIRED as an informative timeframe for every pair, not
+#      optional. The first draft of this workflow only downloaded
+#      5m/1h/4h/1d and omitted 15m entirely, which would have made the
+#      backtest fail outright or silently leave every 15m-based condition
+#      unusable. Fixed below.
+#
+#   2. Warmup buffer: informative_1d_indicators() computes an EMA_200 on
+#      the 1d timeframe (200 daily candles needed before it's non-NaN).
+#      The first draft only downloaded a 60-day buffer before the test
+#      window, so EMA_200 (1d) — and any entry condition that reads it —
+#      would have stayed NaN for the ENTIRE 30-day test window, silently
+#      undercounting entries. The buffer below is widened to 250 days so
+#      the 200-period daily EMA has genuinely warmed up before the
+#      reported test window starts.
+#
+#   3. VolumePairList does NOT reconstruct the historical pairlist day by
+#      day — official freqtrade docs are explicit that dynamic pairlists
+#      in backtesting "rely on the current market conditions, which will
+#      not reflect the historic status of the pairlist" and that
+#      reproducibility "cannot be guaranteed" for anything other than
+#      StaticPairList. (An earlier draft of this workflow's comments
+#      claimed the opposite — that it recalculates per historical
+#      refresh_period from only past data. That claim was wrong and has
+#      been removed.) Practically: this backtest's pairlist reflects
+#      TODAY's top-100-by-volume pairs applied across the whole test
+#      window, not what was actually in the top 100 on each historical
+#      day. This can both add pairs that weren't actually tradeable
+#      then and miss pairs that were high-volume then but aren't now.
+#
+#   4. FullTradesFilter (used live to shrink the whitelist to only
+#      in-trade pairs once all `max_open_trades` slots are full) is
+#      explicitly documented as NOT supported in backtesting mode.
+#      So this backtest's entry count does NOT reflect the live
+#      slot-scarcity effect — if anything, it will show MORE entries
+#      than live actually took during periods when all slots were full,
+#      not fewer. A low count here is therefore a meaningful signal
+#      that low frequency is structural to the market/strategy; a HIGH
+#      count here doesn't rule out FullTradesFilter suppressing live
+#      entries below what's reported.
+#
+#   Net effect of 3+4: this backtest is not a byte-for-byte reproduction
+#   of live conditions — it answers "how many entries would this
+#   strategy+config generate if pairlist/slot mechanics were not a
+#   factor", which is still the useful comparison for separating
+#   "market is quiet" from "something changed in our infra/ML config".
+#
+#   5. Export: `--export-filename` is deprecated and no longer honored
+#      for backtesting in current freqtrade — a custom path there is
+#      silently ignored. Switched to `--export-directory` (still
+#      supported) and the summarize step now globs broadly for whatever
+#      file freqtrade actually wrote, instead of assuming a fixed name.
 
 on:
   workflow_dispatch: {}
@@ -44,7 +75,7 @@ permissions:
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -75,31 +106,36 @@ jobs:
 
       - name: Prepare backtest user_data (exact live spot config, unmodified)
         run: |
-          mkdir -p user_data/strategies user_data/logs user_data/data/okx
-          cp NostalgiaForInfinityX7ML.py user_data/strategies/ 2>/dev/null || cp NostalgiaForInfinityX7.py user_data/strategies/
+          mkdir -p user_data/strategies user_data/logs user_data/data/okx user_data/backtest_results
+          # ML subclass imports NostalgiaForInfinityX7 directly, so both
+          # files must sit together in user_data/strategies/.
+          cp NostalgiaForInfinityX7.py user_data/strategies/
+          cp NostalgiaForInfinityX7ML.py user_data/strategies/
           # Byte-for-byte copy of the real, currently-deployed spot config —
           # nothing here is edited for this test.
           cp config_dryrun_telegram.json user_data/config.json
 
-      - name: Compute date range (30-day test window + 60-day warmup buffer)
+      - name: Compute date range (30-day test window + 250-day warmup buffer)
         id: dates
         run: |
           TEST_END=$(date -u +%Y%m%d)
           TEST_START=$(date -u -d '30 days ago' +%Y%m%d)
-          DOWNLOAD_START=$(date -u -d '90 days ago' +%Y%m%d)
+          # 250 days covers the 200-period daily EMA (informative_1d_indicators)
+          # with margin to spare, plus everything shorter (4h/1h/15m/5m periods).
+          DOWNLOAD_START=$(date -u -d '250 days ago' +%Y%m%d)
           echo "test_start=$TEST_START" >> "$GITHUB_OUTPUT"
           echo "test_end=$TEST_END" >> "$GITHUB_OUTPUT"
           echo "download_start=$DOWNLOAD_START" >> "$GITHUB_OUTPUT"
           echo "Test window (reported results): $TEST_START - $TEST_END"
-          echo "Download window (incl. warmup buffer): $DOWNLOAD_START - $TEST_END"
+          echo "Download window (incl. 200-day-EMA warmup buffer): $DOWNLOAD_START - $TEST_END"
 
-      - name: Download OKX spot historical data (5m/1h/4h/1d, 90-day window)
+      - name: Download OKX spot historical data (5m/15m/1h/4h/1d, 250-day window)
         run: |
           freqtrade download-data \
             --config user_data/config.json \
             --exchange okx \
             --timerange "${{ steps.dates.outputs.download_start }}-${{ steps.dates.outputs.test_end }}" \
-            --timeframes 5m 1h 4h 1d \
+            --timeframes 5m 15m 1h 4h 1d \
             --erase
 
       - name: Run backtest (results restricted to the last 30 days only)
@@ -110,24 +146,45 @@ jobs:
             --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframe 5m \
             --export trades \
-            --export-filename user_data/backtest_results/result.json \
+            --export-directory user_data/backtest_results \
             | tee user_data/logs/backtest.log
 
       - name: Summarize entries by week and by tag
         if: always()
         run: |
           python3 << 'PYEOF'
-          import json, glob
+          import json, glob, zipfile
           from collections import defaultdict
           from datetime import datetime
 
-          files = sorted(glob.glob("user_data/backtest_results/result*.json"))
-          if not files:
-              print("No result file found — backtest likely failed before producing output.")
+          # --export-filename is deprecated/ignored, so don't assume a fixed
+          # name — freqtrade writes its own auto-named file(s) under
+          # --export-directory. Results may be a plain .json or a .zip
+          # containing one; handle both rather than guessing.
+          candidates = sorted(
+              glob.glob("user_data/backtest_results/*.json")
+              + glob.glob("user_data/backtest_results/*.zip")
+          )
+          if not candidates:
+              print("No result file found under user_data/backtest_results/ — "
+                    "backtest likely failed before producing output, or wrote "
+                    "somewhere unexpected. Check the full log below.")
               raise SystemExit(0)
 
-          with open(files[-1]) as f:
-              data = json.load(f)
+          latest = candidates[-1]
+          print(f"Reading backtest result from: {latest}")
+
+          if latest.endswith(".zip"):
+              with zipfile.ZipFile(latest) as zf:
+                  json_names = [n for n in zf.namelist() if n.endswith(".json")]
+                  if not json_names:
+                      print(f"No .json file found inside {latest}.")
+                      raise SystemExit(0)
+                  with zf.open(json_names[0]) as f:
+                      data = json.load(f)
+          else:
+              with open(latest) as f:
+                  data = json.load(f)
 
           # freqtrade export format: {"strategy": {"<name>": {"trades": [...]}}}
           strat_key = next(iter(data.get("strategy", {})), None)
@@ -165,6 +222,12 @@ jobs:
             echo "## Backtest Signal Frequency — last 30 days (spot, live config as-is)"
             echo ""
             echo "Test window: ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }}"
+            echo "(downloaded from ${{ steps.dates.outputs.download_start }} for warmup)"
+            echo ""
+            echo "**Read this with the limitations noted at the top of the workflow file in mind** —"
+            echo "in particular, this run does not reproduce FullTradesFilter's live slot-scarcity"
+            echo "behavior, and VolumePairList here reflects today's volume ranking, not each"
+            echo "historical day's."
             echo ""
             if [ -f user_data/logs/summary.txt ]; then
               echo '```'
