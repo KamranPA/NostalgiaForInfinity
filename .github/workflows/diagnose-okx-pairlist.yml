@@ -1,0 +1,171 @@
+# SAVE THIS FILE AS: .github/workflows/diagnose-okx-pairlist.yml
+# (in .github/workflows/, in the ROOT of your NostalgiaForInfinity repo)
+name: Diagnose OKX Pairlist (manual, isolated test)
+
+# Manual-only, throwaway diagnostic. Runs freqtrade against a TEST
+# pairlist config (empty DB, no Telegram) just long enough to resolve
+# the pairlist and print either "Whitelist with N pairs" (success) or
+# the specific error freqtrade gives (failure) — then force-stops.
+# Never touches the real bots' state (state-spot/state-futures) or
+# Telegram bots in any way. Output goes to the Job Summary, viewable
+# from the Actions tab on mobile without downloading logs.
+#
+# CURRENT TEST (2026-09-18): checking whether OKX's SPOT ticker exposes
+# quoteVolume directly, which would mean lookback_days isn't actually
+# needed on config_dryrun_telegram.json's VolumePairList entries — only
+# needed for the FUTURES swap ticker (already confirmed separately).
+# If this test succeeds, refresh_period can drop back from 86400s (24h)
+# to 1800s (30min) on spot's pairlist, which should meaningfully restore
+# how often the tradeable pair list actually updates.
+#
+# Edit the PAIRLIST_JSON block below to test other combinations later.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install TA-Lib system library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential wget
+          wget -q http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+          tar -xzf ta-lib-0.4.0-src.tar.gz
+          cd ta-lib
+          ./configure --prefix=/usr
+          make
+          sudo make install
+          cd ..
+
+      - name: Install Freqtrade + dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install freqtrade
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Prepare isolated test user_data (empty DB, no Telegram)
+        run: |
+          mkdir -p user_data/strategies user_data/logs
+          cp NostalgiaForInfinityX7ML.py user_data/strategies/ 2>/dev/null || cp NostalgiaForInfinityX7.py user_data/strategies/
+
+          # TEST pairlist: same filter chain as config_dryrun_telegram.json,
+          # but WITHOUT lookback_days on either VolumePairList, and
+          # refresh_period back down to 1800s. RangeStabilityFilter keeps
+          # its own lookback_days (that's a separate, always-needed 3-day
+          # rate-of-change calc, not the same mechanism VolumePairList uses).
+          cat > user_data/config.json << 'EOF'
+          {
+            "trading_mode": "spot",
+            "margin_mode": "",
+            "max_open_trades": 8,
+            "stake_currency": "USDT",
+            "stake_amount": "unlimited",
+            "tradable_balance_ratio": 0.99,
+            "fiat_display_currency": "USD",
+            "dry_run": true,
+            "dry_run_wallet": 1000,
+            "timeframe": "5m",
+            "cancel_open_orders_on_exit": true,
+            "position_adjustment_enable": true,
+            "max_entry_position_adjustment": -1,
+            "unfilledtimeout": { "entry": 10, "exit": 30 },
+            "exchange": {
+              "name": "okx",
+              "enable_ws": false,
+              "key": "",
+              "secret": "",
+              "password": "",
+              "ccxt_config": {},
+              "ccxt_async_config": {},
+              "pair_whitelist": [],
+              "pair_blacklist": [".*(_PREMIUM|BEAR|BULL|DOWN|HALF|HEDGE|UP|[1235][SL])/.*"]
+            },
+            "entry_pricing": {
+              "price_side": "same", "use_order_book": true, "order_book_top": 1,
+              "price_last_balance": 0.0,
+              "check_depth_of_market": { "enabled": false, "bids_to_ask_delta": 1 }
+            },
+            "exit_pricing": { "price_side": "same", "use_order_book": true, "order_book_top": 1 },
+            "pairlists": [
+              {
+                "method": "VolumePairList",
+                "number_assets": 130,
+                "sort_key": "quoteVolume",
+                "refresh_period": 1800
+              },
+              { "method": "FullTradesFilter" },
+              { "method": "AgeFilter", "min_days_listed": 60 },
+              { "method": "PriceFilter", "low_price_ratio": 0.003 },
+              { "method": "SpreadFilter", "max_spread_ratio": 0.005 },
+              {
+                "method": "RangeStabilityFilter",
+                "lookback_days": 3,
+                "min_rate_of_change": 0.03,
+                "max_rate_of_change": 0.95,
+                "refresh_period": 86400
+              },
+              {
+                "method": "VolumePairList",
+                "number_assets": 100,
+                "sort_key": "quoteVolume",
+                "refresh_period": 1800
+              }
+            ],
+            "telegram": { "enabled": false, "token": "unused", "chat_id": "unused" },
+            "db_url": "sqlite:///user_data/diagnose_test.sqlite",
+            "api_server": { "enabled": false },
+            "bot_name": "diagnose-okx-pairlist-test",
+            "force_entry_enable": false,
+            "initial_state": "running",
+            "internals": { "process_throttle_secs": 30 }
+          }
+          EOF
+
+      - name: Run freqtrade briefly with -vv and capture output
+        run: |
+          set +e
+          timeout --signal=TERM 90s freqtrade trade \
+            --config user_data/config.json \
+            --strategy NostalgiaForInfinityX7ML \
+            --logfile user_data/logs/diagnose.log \
+            -vv
+          echo "Freqtrade exited (or was force-stopped after 90s) — this is expected."
+
+      - name: Post result to Job Summary
+        if: always()
+        run: |
+          {
+            echo "## Diagnose OKX Pairlist — result"
+            echo ""
+            if grep -q "Whitelist with" user_data/logs/diagnose.log; then
+              echo "✅ **SUCCESS** — pairlist resolved fine without \`lookback_days\`:"
+              echo '```'
+              grep "Whitelist with" user_data/logs/diagnose.log
+              echo '```'
+            elif grep -qi "refresh_period\|does not support dynamic whitelist\|quoteVolume" user_data/logs/diagnose.log; then
+              echo "❌ **FAILED** — same class of error as before, lookback_days is still required on spot:"
+              echo '```'
+              grep -i "ERROR\|refresh_period\|quoteVolume\|does not support" user_data/logs/diagnose.log | head -20
+              echo '```'
+            else
+              echo "⚠️ **INCONCLUSIVE** — no clear success or failure line found. Last 40 log lines:"
+              echo '```'
+              tail -40 user_data/logs/diagnose.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
