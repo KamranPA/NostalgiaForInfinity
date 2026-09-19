@@ -186,6 +186,10 @@ def build_telegram_summary(df: pd.DataFrame) -> str:
         "atr_14", "enter_tag", "exit_reason",
         "rsi_14_1h", "ema_12_1h", "ema_200_1h",
         "rsi_14_1d", "ema_50_1d", "ema_200_1d", "range_pct_14_1d",
+        # btc_ema_20/btc_roc_3/btc_ema_200 renamed to _1h/_1h/_1d once
+        # btc_info_timeframes was overridden to actually populate them
+        # (previously always None on the 4h-only default)
+        "btc_ema_20_1h", "btc_roc_3_1h", "btc_ema_200_1d",
     ]
     lines.append("")
     lines.append("Feature health check (non-null rate):")
