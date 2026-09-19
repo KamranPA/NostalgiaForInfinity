@@ -81,7 +81,7 @@
       "min_rate_of_change": 0.03,
       "max_rate_of_change": 0.95,
       "refresh_period": 86400,
-    },
+    }
     {
       "method": "VolumePairList",
       "number_assets": 100,
