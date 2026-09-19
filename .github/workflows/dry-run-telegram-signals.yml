@@ -34,6 +34,11 @@ name: NFI Dry-Run Telegram Signals
 # upstream NostalgiaForInfinityX7 class directly, so a future re-sync of
 # NostalgiaForInfinityX7.py from iterativv/NostalgiaForInfinity can't wipe
 # out this project's custom ML data-collection logic.
+#
+# FIX (2026-09-18): the startup Telegram notification still said "KuCoin"
+# in its text even though the spot bot switched to trading on OKX on
+# 2026-09-14 (see config_dryrun_telegram.json) — a leftover label from
+# before that switch that never got updated. Fixed below.
 
 on:
   workflow_dispatch: {}
@@ -59,7 +64,7 @@ jobs:
         run: |
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
-            -d text="🟢 NFI SPOT (KuCoin) started — run #${{ github.run_number }} | dry-run | NostalgiaForInfinityX7ML | 5m")
+            -d text="🟢 NFI SPOT (OKX) started — run #${{ github.run_number }} | dry-run | NostalgiaForInfinityX7ML | 5m")
           echo "Telegram API response: $RESPONSE"
           if ! echo "$RESPONSE" | grep -q '"ok":true'; then
             echo "::warning::Telegram did not accept the message — check TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets."
