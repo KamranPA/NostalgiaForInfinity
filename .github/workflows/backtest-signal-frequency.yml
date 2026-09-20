@@ -133,9 +133,14 @@ jobs:
           fi
           TEST_END=$(date -u +%Y%m%d)
           TEST_START=$(date -u -d "${TEST_DAYS} days ago" +%Y%m%d)
-          # 250 days covers the 200-period daily EMA (informative_1d_indicators)
-          # with margin to spare, plus everything shorter (4h/1h/15m/5m periods).
-          DOWNLOAD_START=$(date -u -d '250 days ago' +%Y%m%d)
+          # 400 days: widened from 250 (2026-09-20) to test a hypothesis —
+          # the ML subclass's extra BTC 1h/1d informative merges appeared to
+          # cost a few entries specifically in the first ~4 days of a
+          # 250-day-buffered window (edge-of-warmup effect), while every
+          # week further from the buffer edge matched the pure-upstream
+          # backtest exactly. A wider buffer should absorb that edge if
+          # this hypothesis is correct.
+          DOWNLOAD_START=$(date -u -d '400 days ago' +%Y%m%d)
           echo "test_days=$TEST_DAYS" >> "$GITHUB_OUTPUT"
           echo "test_start=$TEST_START" >> "$GITHUB_OUTPUT"
           echo "test_end=$TEST_END" >> "$GITHUB_OUTPUT"
