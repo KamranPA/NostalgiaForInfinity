@@ -2,84 +2,57 @@
 # (in .github/workflows/, in the ROOT of your NostalgiaForInfinity repo)
 name: Backtest Signal Frequency (last 30 days, spot)
 
-# Manual-only, read-only diagnostic. Answers: "is the current low entry
-# frequency a property of the market itself, independent of any
-# infrastructure/config issue?" — by backtesting the EXACT live spot
-# strategy+config (NostalgiaForInfinityX7ML + config_dryrun_telegram.json,
-# completely unmodified) over the last 30 days, and reporting how many
-# entries it would have taken.
+# Manual-only, read-only diagnostic. Answers ONE question: "is the low
+# entry frequency caused by a bug in code WE wrote (ML subclass,
+# btc_info_timeframes override, pairlist config), or is it inherent to
+# the strategy+market itself?" — by backtesting the PURE UPSTREAM
+# NostalgiaForInfinityX7 strategy (not the NostalgiaForInfinityX7ML
+# subclass — deliberately excluded so this result can't be blamed on
+# anything we added) over the requested window.
 #
-# KNOWN LIMITATIONS OF THIS APPROACH (fixed/documented 2026-09-18 after
-# review — earlier draft of this workflow got two of these backwards):
+# WHY THIS DOESN'T (CAN'T) USE THE LIVE CONFIG'S PAIRLIST AS-IS:
+# freqtrade's own docs are unconditional here — VolumePairList, AgeFilter,
+# SpreadFilter, and RangeStabilityFilter "do not support backtesting mode",
+# full stop. No flag enables them (--enable-dynamic-pairlist only helps
+# handlers that DO support backtesting but need per-candle refresh, e.g.
+# ShuffleFilter — it does not unlock these four). This was tried and
+# confirmed to hard-error, twice, before landing on the approach below.
 #
-#   1. Timeframes: the strategy declares
-#      info_timeframes = ["15m", "1h", "4h", "1d"] (NostalgiaForInfinityX7.py)
-#      — 15m is REQUIRED as an informative timeframe for every pair, not
-#      optional. The first draft of this workflow only downloaded
-#      5m/1h/4h/1d and omitted 15m entirely, which would have made the
-#      backtest fail outright or silently leave every 15m-based condition
-#      unusable. Fixed below.
+# APPROACH: freqtrade's own documented workaround for this exact situation
+# is to snapshot the dynamic pairlist once (via `freqtrade test-pairlist`,
+# which runs the SAME filter chain as the live config) into a plain pair
+# list, then backtest against that list using StaticPairList. This is
+# openly a simplification, not a perfect reconstruction — see the one
+# unavoidable limitation below — but it's the only approach freqtrade
+# actually supports, and it fully answers the question this workflow
+# exists for.
 #
-#   2. Warmup buffer: informative_1d_indicators() computes an EMA_200 on
-#      the 1d timeframe (200 daily candles needed before it's non-NaN).
-#      The first draft only downloaded a 60-day buffer before the test
-#      window, so EMA_200 (1d) — and any entry condition that reads it —
-#      would have stayed NaN for the ENTIRE 30-day test window, silently
-#      undercounting entries. The buffer below is widened to 250 days so
-#      the 200-period daily EMA has genuinely warmed up before the
-#      reported test window starts.
+# ONE UNAVOIDABLE LIMITATION (not a bug, inherent to how freqtrade works):
+# the snapshotted pairlist reflects TODAY's top-100-by-volume pairs,
+# applied across the entire historical test window — not what was
+# actually in the top 100 on each individual day of that window. A coin
+# that pumped into high volume 3 weeks ago and has since cooled off won't
+# be in today's snapshot; a coin that's hot today but was quiet 3 weeks
+# ago will be, for the whole window. Official freqtrade docs confirm
+# reproducibility "cannot be guaranteed" for anything other than
+# StaticPairList for exactly this reason. There is no freqtrade-supported
+# way around this — it's a property of backtesting dynamic pairlists.
 #
-#   3. VolumePairList does NOT reconstruct the historical pairlist day by
-#      day — official freqtrade docs are explicit that dynamic pairlists
-#      in backtesting "rely on the current market conditions, which will
-#      not reflect the historic status of the pairlist" and that
-#      reproducibility "cannot be guaranteed" for anything other than
-#      StaticPairList. (An earlier draft of this workflow's comments
-#      claimed the opposite — that it recalculates per historical
-#      refresh_period from only past data. That claim was wrong and has
-#      been removed.) Practically: this backtest's pairlist reflects
-#      TODAY's top-100-by-volume pairs applied across the whole test
-#      window, not what was actually in the top 100 on each historical
-#      day. This can both add pairs that weren't actually tradeable
-#      then and miss pairs that were high-volume then but aren't now.
+# WARMUP: informative_1d_indicators() needs a 200-period daily EMA, so
+# the download window includes a 250-day buffer before the requested
+# test window regardless of how long that window is.
 #
-#   4. FullTradesFilter (used live to shrink the whitelist to only
-#      in-trade pairs once all `max_open_trades` slots are full) is
-#      explicitly documented as NOT supported in backtesting mode.
-#      So this backtest's entry count does NOT reflect the live
-#      slot-scarcity effect — if anything, it will show MORE entries
-#      than live actually took during periods when all slots were full,
-#      not fewer. A low count here is therefore a meaningful signal
-#      that low frequency is structural to the market/strategy; a HIGH
-#      count here doesn't rule out FullTradesFilter suppressing live
-#      entries below what's reported.
-#
-#   Net effect of 3+4: this backtest is not a byte-for-byte reproduction
-#   of live conditions — it answers "how many entries would this
-#   strategy+config generate if pairlist/slot mechanics were not a
-#   factor", which is still the useful comparison for separating
-#   "market is quiet" from "something changed in our infra/ML config".
-#
-#   6. Without `--enable-dynamic-pairlist` on the backtesting command,
-#      freqtrade resolves the pairlist only ONCE at the start and hard-
-#      ERRORs that VolumePairList/AgeFilter/SpreadFilter/RangeStabilityFilter
-#      "do not support backtesting" — this flag makes it re-evaluate the
-#      pairlist on each new candle instead, which is required for a
-#      config like this one that leans on those handlers.
-#
-#   5. Export: `--export-filename` is deprecated and no longer honored
-#      for backtesting in current freqtrade — a custom path there is
-#      silently ignored. Switched to `--export-directory` (still
-#      supported) and the summarize step now globs broadly for whatever
-#      file freqtrade actually wrote, instead of assuming a fixed name.
-#
-#   7. Prepare step: the repo layout can have NostalgiaForInfinityX7.py
-#      already symlinked into user_data/strategies/ — a blind `cp` onto
-#      itself fails with exit code 1. Guarded the same way as
-#      dry-run-telegram-signals.yml (check -e before copying).
+# TEST WINDOW LENGTH: defaults to 30 days; pass a smaller value (the
+# workflow accepts a minimum of 20) via workflow_dispatch input if 30
+# days of historical OKX data + backtest runtime proves too slow.
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test_window_days:
+        description: "How many days back to report entries for (min 20, default 30)"
+        required: false
+        default: "30"
 
 permissions:
   contents: read
@@ -87,7 +60,7 @@ permissions:
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
 
     steps:
       - name: Checkout repository
@@ -116,44 +89,83 @@ jobs:
           pip install freqtrade
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Prepare backtest user_data (exact live spot config, unmodified)
+      - name: Prepare backtest user_data (PURE upstream strategy — no ML subclass)
         run: |
           mkdir -p user_data/strategies user_data/logs user_data/data/okx user_data/backtest_results
-          # ML subclass imports NostalgiaForInfinityX7 directly, so both
-          # files must sit together in user_data/strategies/. Guarded the
-          # same way as dry-run-telegram-signals.yml, because in this
-          # repo's layout the root-level file and the one under
-          # user_data/strategies/ can already be the same file (symlink),
-          # in which case `cp` onto itself fails with exit code 1.
+          # Deliberately NOT copying NostalgiaForInfinityX7ML.py here — this
+          # backtest exists specifically to check the result independent of
+          # anything in our ML subclass, so it runs the upstream class
+          # directly instead of pointing at NostalgiaForInfinityX7ML.
           if [ -e user_data/strategies/NostalgiaForInfinityX7.py ]; then
             echo "Strategy file already present at destination (symlink from repo layout) — skipping copy."
           else
             cp NostalgiaForInfinityX7.py user_data/strategies/
           fi
-          if [ -e user_data/strategies/NostalgiaForInfinityX7ML.py ]; then
-            echo "ML strategy file already present at destination — skipping copy."
-          else
-            cp NostalgiaForInfinityX7ML.py user_data/strategies/
-          fi
-          # Byte-for-byte copy of the real, currently-deployed spot config —
-          # nothing here is edited for this test.
-          cp config_dryrun_telegram.json user_data/config.json
+          # Base config to snapshot the pairlist from, and to derive the
+          # backtest config from — byte-for-byte the real live spot config.
+          cp config_dryrun_telegram.json user_data/live_config.json
 
-      - name: Compute date range (30-day test window + 250-day warmup buffer)
+      - name: Compute date range
         id: dates
         run: |
+          RAW_DAYS="${{ github.event.inputs.test_window_days }}"
+          TEST_DAYS="${RAW_DAYS:-30}"
+          if [ "$TEST_DAYS" -lt 20 ]; then
+            echo "::warning::Requested $TEST_DAYS days is below the 20-day minimum — using 20."
+            TEST_DAYS=20
+          fi
           TEST_END=$(date -u +%Y%m%d)
-          TEST_START=$(date -u -d '30 days ago' +%Y%m%d)
+          TEST_START=$(date -u -d "${TEST_DAYS} days ago" +%Y%m%d)
           # 250 days covers the 200-period daily EMA (informative_1d_indicators)
           # with margin to spare, plus everything shorter (4h/1h/15m/5m periods).
           DOWNLOAD_START=$(date -u -d '250 days ago' +%Y%m%d)
+          echo "test_days=$TEST_DAYS" >> "$GITHUB_OUTPUT"
           echo "test_start=$TEST_START" >> "$GITHUB_OUTPUT"
           echo "test_end=$TEST_END" >> "$GITHUB_OUTPUT"
           echo "download_start=$DOWNLOAD_START" >> "$GITHUB_OUTPUT"
-          echo "Test window (reported results): $TEST_START - $TEST_END"
+          echo "Test window (reported results): $TEST_START - $TEST_END ($TEST_DAYS days)"
           echo "Download window (incl. 200-day-EMA warmup buffer): $DOWNLOAD_START - $TEST_END"
 
-      - name: Download OKX spot historical data (5m/15m/1h/4h/1d, 250-day window)
+      - name: Snapshot today's dynamic pairlist (test-pairlist, same filter chain as live)
+        run: |
+          freqtrade test-pairlist \
+            --config user_data/live_config.json \
+            --quote USDT \
+            --print-json > user_data/pairlist_snapshot.json
+          echo "Snapshotted pairlist:"
+          cat user_data/pairlist_snapshot.json
+
+      - name: Build backtest config (live config + StaticPairList from snapshot)
+        run: |
+          python3 << 'PYEOF'
+          import json
+
+          with open("user_data/live_config.json") as f:
+              cfg = json.load(f)
+          with open("user_data/pairlist_snapshot.json") as f:
+              pairs = json.load(f)
+
+          if not isinstance(pairs, list) or not pairs:
+              raise SystemExit(f"test-pairlist returned no usable pair list: {pairs!r}")
+
+          # Replace the dynamic filter chain with a plain static list of
+          # today's snapshot — the only pairlist handler freqtrade actually
+          # supports in backtesting. Everything else in the config (strategy
+          # params, exchange, stake sizing, etc.) is left exactly as-is.
+          cfg["exchange"]["pair_whitelist"] = pairs
+          cfg["pairlists"] = [{"method": "StaticPairList"}]
+          # Backtesting ignores telegram/dry_run/db_url, but strip the
+          # placeholder telegram block anyway so nothing about it can
+          # confuse the run.
+          cfg["telegram"] = {"enabled": False, "token": "", "chat_id": ""}
+
+          with open("user_data/config.json", "w") as f:
+              json.dump(cfg, f, indent=2)
+
+          print(f"Backtest config built with {len(pairs)} statically-pinned pairs.")
+          PYEOF
+
+      - name: Download OKX spot historical data (5m/15m/1h/4h/1d)
         run: |
           freqtrade download-data \
             --config user_data/config.json \
@@ -162,14 +174,13 @@ jobs:
             --timeframes 5m 15m 1h 4h 1d \
             --erase
 
-      - name: Run backtest (results restricted to the last 30 days only)
+      - name: Run backtest (pure upstream strategy, results restricted to test window)
         run: |
           freqtrade backtesting \
             --config user_data/config.json \
-            --strategy NostalgiaForInfinityX7ML \
+            --strategy NostalgiaForInfinityX7 \
             --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframe 5m \
-            --enable-dynamic-pairlist \
             --export trades \
             --export-directory user_data/backtest_results \
             | tee user_data/logs/backtest.log
@@ -215,7 +226,7 @@ jobs:
           strat_key = next(iter(data.get("strategy", {})), None)
           trades = data.get("strategy", {}).get(strat_key, {}).get("trades", []) if strat_key else []
 
-          print(f"Total entries in 30-day window: {len(trades)}\n")
+          print(f"Total entries in test window: {len(trades)}\n")
 
           by_week = defaultdict(int)
           by_tag = defaultdict(int)
@@ -230,7 +241,7 @@ jobs:
               by_tag[str(t.get("enter_tag"))] += 1
 
           with open("user_data/logs/summary.txt", "w") as out:
-              out.write(f"Total entries in 30-day window: {len(trades)}\n\n")
+              out.write(f"Total entries in test window: {len(trades)}\n\n")
               out.write("By week:\n")
               for wk in sorted(by_week):
                   out.write(f"  {wk}: {by_week[wk]}\n")
@@ -244,15 +255,19 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Backtest Signal Frequency — last 30 days (spot, live config as-is)"
+            echo "## Backtest Signal Frequency — pure upstream strategy, no ML subclass"
             echo ""
-            echo "Test window: ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }}"
+            echo "Test window: ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }} (${{ steps.dates.outputs.test_days }} days)"
             echo "(downloaded from ${{ steps.dates.outputs.download_start }} for warmup)"
             echo ""
-            echo "**Read this with the limitations noted at the top of the workflow file in mind** —"
-            echo "in particular, this run does not reproduce FullTradesFilter's live slot-scarcity"
-            echo "behavior, and VolumePairList here reflects today's volume ranking, not each"
-            echo "historical day's."
+            echo "**Purpose:** this run uses NostalgiaForInfinityX7 directly — the ML subclass"
+            echo "(order_filled logging, btc_info_timeframes override) is completely excluded — so"
+            echo "a low count here means the frequency is inherent to the strategy/market/pairlist"
+            echo "snapshot, not something in our code."
+            echo ""
+            echo "**Known limitation:** the pairlist is a snapshot of TODAY's top pairs by volume,"
+            echo "applied across the whole historical window (freqtrade doesn't support reconstructing"
+            echo "the historical pairlist day-by-day in backtesting) — see the workflow file header."
             echo ""
             if [ -f user_data/logs/summary.txt ]; then
               echo '```'
