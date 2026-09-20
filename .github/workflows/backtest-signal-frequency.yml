@@ -5,10 +5,11 @@ name: Backtest Signal Frequency (last 30 days, spot)
 # Manual-only, read-only diagnostic. Answers ONE question: "is the low
 # entry frequency caused by a bug in code WE wrote (ML subclass,
 # btc_info_timeframes override, pairlist config), or is it inherent to
-# the strategy+market itself?" — by backtesting the PURE UPSTREAM
-# NostalgiaForInfinityX7 strategy (not the NostalgiaForInfinityX7ML
-# subclass — deliberately excluded so this result can't be blamed on
-# anything we added) over the requested window.
+# the strategy+market itself?" — by backtesting either the PURE UPSTREAM
+# NostalgiaForInfinityX7 strategy or our NostalgiaForInfinityX7ML
+# subclass (selectable via the `strategy` input below — default is the
+# ML subclass, since that's what's actually deployed live) over the
+# requested window.
 #
 # WHY THIS DOESN'T (CAN'T) USE THE LIVE CONFIG'S PAIRLIST AS-IS:
 # freqtrade's own docs are unconditional here — VolumePairList, AgeFilter,
@@ -53,6 +54,14 @@ on:
         description: "How many days back to report entries for (min 20, default 30)"
         required: false
         default: "30"
+      strategy:
+        description: "Which strategy to backtest"
+        required: false
+        default: "NostalgiaForInfinityX7ML"
+        type: choice
+        options:
+          - "NostalgiaForInfinityX7ML"
+          - "NostalgiaForInfinityX7"
 
 permissions:
   contents: read
@@ -89,17 +98,25 @@ jobs:
           pip install freqtrade
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Prepare backtest user_data (PURE upstream strategy — no ML subclass)
+      - name: Prepare backtest user_data
         run: |
           mkdir -p user_data/strategies user_data/logs user_data/data/okx user_data/backtest_results
-          # Deliberately NOT copying NostalgiaForInfinityX7ML.py here — this
-          # backtest exists specifically to check the result independent of
-          # anything in our ML subclass, so it runs the upstream class
-          # directly instead of pointing at NostalgiaForInfinityX7ML.
+          # Always need the upstream file (NostalgiaForInfinityX7ML imports
+          # it directly, and it's the strategy itself when that's selected).
           if [ -e user_data/strategies/NostalgiaForInfinityX7.py ]; then
             echo "Strategy file already present at destination (symlink from repo layout) — skipping copy."
           else
             cp NostalgiaForInfinityX7.py user_data/strategies/
+          fi
+          # Only copy the ML subclass when it's actually the selected
+          # strategy — keeping it out for the pure-upstream run makes that
+          # run provably independent of anything in our subclass.
+          if [ "${{ github.event.inputs.strategy }}" = "NostalgiaForInfinityX7ML" ] || [ -z "${{ github.event.inputs.strategy }}" ]; then
+            if [ -e user_data/strategies/NostalgiaForInfinityX7ML.py ]; then
+              echo "ML strategy file already present at destination — skipping copy."
+            else
+              cp NostalgiaForInfinityX7ML.py user_data/strategies/
+            fi
           fi
           # Base config to snapshot the pairlist from, and to derive the
           # backtest config from — byte-for-byte the real live spot config.
@@ -174,11 +191,14 @@ jobs:
             --timeframes 5m 15m 1h 4h 1d \
             --erase
 
-      - name: Run backtest (pure upstream strategy, results restricted to test window)
+      - name: Run backtest (results restricted to test window)
         run: |
+          STRATEGY="${{ github.event.inputs.strategy }}"
+          STRATEGY="${STRATEGY:-NostalgiaForInfinityX7ML}"
+          echo "Backtesting strategy: $STRATEGY"
           freqtrade backtesting \
             --config user_data/config.json \
-            --strategy NostalgiaForInfinityX7 \
+            --strategy "$STRATEGY" \
             --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframe 5m \
             --export trades \
@@ -255,15 +275,16 @@ jobs:
         if: always()
         run: |
           {
-            echo "## Backtest Signal Frequency — pure upstream strategy, no ML subclass"
+            echo "## Backtest Signal Frequency"
             echo ""
+            echo "Strategy: \`${{ github.event.inputs.strategy }}\`"
             echo "Test window: ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }} (${{ steps.dates.outputs.test_days }} days)"
             echo "(downloaded from ${{ steps.dates.outputs.download_start }} for warmup)"
             echo ""
-            echo "**Purpose:** this run uses NostalgiaForInfinityX7 directly — the ML subclass"
-            echo "(order_filled logging, btc_info_timeframes override) is completely excluded — so"
-            echo "a low count here means the frequency is inherent to the strategy/market/pairlist"
-            echo "snapshot, not something in our code."
+            echo "**Purpose:** compare this count against the same run with the other strategy"
+            echo "choice (NostalgiaForInfinityX7 vs NostalgiaForInfinityX7ML) — a similar count on"
+            echo "both means the frequency is inherent to the strategy/market/pairlist snapshot,"
+            echo "not something in our ML subclass."
             echo ""
             echo "**Known limitation:** the pairlist is a snapshot of TODAY's top pairs by volume,"
             echo "applied across the whole historical window (freqtrade doesn't support reconstructing"
