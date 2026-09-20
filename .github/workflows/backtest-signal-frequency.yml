@@ -1,6 +1,6 @@
 # SAVE THIS FILE AS: .github/workflows/backtest-signal-frequency.yml
 # (in .github/workflows/, in the ROOT of your NostalgiaForInfinity repo)
-name: Backtest Signal Frequency (last 30 days, spot)
+name: Backtest Signal Frequency (spot or futures, selectable window)
 
 # Manual-only, read-only diagnostic. Answers ONE question: "is the low
 # entry frequency caused by a bug in code WE wrote (ML subclass,
@@ -62,6 +62,14 @@ on:
         options:
           - "NostalgiaForInfinityX7ML"
           - "NostalgiaForInfinityX7"
+      market:
+        description: "Which bot's config/market to backtest"
+        required: false
+        default: "spot"
+        type: choice
+        options:
+          - "spot"
+          - "futures"
 
 permissions:
   contents: read
@@ -119,8 +127,23 @@ jobs:
             fi
           fi
           # Base config to snapshot the pairlist from, and to derive the
-          # backtest config from — byte-for-byte the real live spot config.
-          cp config_dryrun_telegram.json user_data/live_config.json
+          # backtest config from — byte-for-byte the real live config for
+          # whichever market was selected. Futures genuinely needs
+          # lookback_days on its VolumePairList (OKX's swap ticker doesn't
+          # expose quoteVolume directly, unlike spot) — that's a live-mode
+          # concern for refresh_period only and doesn't affect this
+          # workflow, since test-pairlist runs the filter chain once
+          # regardless, and VolumePairList/AgeFilter/etc. still can't run
+          # in backtesting either way (see header notes) — the static
+          # snapshot approach below sidesteps this identically for both.
+          MARKET="${{ github.event.inputs.market }}"
+          MARKET="${MARKET:-spot}"
+          if [ "$MARKET" = "futures" ]; then
+            cp config_dryrun_futures.json user_data/live_config.json
+          else
+            cp config_dryrun_telegram.json user_data/live_config.json
+          fi
+          echo "market=$MARKET" >> "$GITHUB_ENV"
 
       - name: Compute date range
         id: dates
@@ -150,9 +173,14 @@ jobs:
 
       - name: Snapshot today's dynamic pairlist (test-pairlist, same filter chain as live)
         run: |
+          EXTRA_ARGS=()
+          if [ "$market" = "futures" ]; then
+            EXTRA_ARGS+=(--trading-mode futures --margin-mode isolated)
+          fi
           freqtrade test-pairlist \
             --config user_data/live_config.json \
             --quote USDT \
+            "${EXTRA_ARGS[@]}" \
             --print-json > user_data/pairlist_snapshot.json
           echo "Snapshotted pairlist:"
           cat user_data/pairlist_snapshot.json
@@ -187,25 +215,35 @@ jobs:
           print(f"Backtest config built with {len(pairs)} statically-pinned pairs.")
           PYEOF
 
-      - name: Download OKX spot historical data (5m/15m/1h/4h/1d)
+      - name: Download OKX historical data (5m/15m/1h/4h/1d)
         run: |
+          EXTRA_ARGS=()
+          if [ "$market" = "futures" ]; then
+            EXTRA_ARGS+=(--trading-mode futures --margin-mode isolated)
+          fi
           freqtrade download-data \
             --config user_data/config.json \
             --exchange okx \
             --timerange "${{ steps.dates.outputs.download_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframes 5m 15m 1h 4h 1d \
+            "${EXTRA_ARGS[@]}" \
             --erase
 
       - name: Run backtest (results restricted to test window)
         run: |
           STRATEGY="${{ github.event.inputs.strategy }}"
           STRATEGY="${STRATEGY:-NostalgiaForInfinityX7ML}"
-          echo "Backtesting strategy: $STRATEGY"
+          echo "Backtesting strategy: $STRATEGY on market: $market"
+          EXTRA_ARGS=()
+          if [ "$market" = "futures" ]; then
+            EXTRA_ARGS+=(--trading-mode futures --margin-mode isolated)
+          fi
           freqtrade backtesting \
             --config user_data/config.json \
             --strategy "$STRATEGY" \
             --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframe 5m \
+            "${EXTRA_ARGS[@]}" \
             --export trades \
             --export-directory user_data/backtest_results \
             | tee user_data/logs/backtest.log
@@ -282,7 +320,7 @@ jobs:
           {
             echo "## Backtest Signal Frequency"
             echo ""
-            echo "Strategy: \`${{ github.event.inputs.strategy }}\`"
+            echo "Market: \`$market\` &nbsp; Strategy: \`${{ github.event.inputs.strategy }}\`"
             echo "Test window: ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }} (${{ steps.dates.outputs.test_days }} days)"
             echo "(downloaded from ${{ steps.dates.outputs.download_start }} for warmup)"
             echo ""
