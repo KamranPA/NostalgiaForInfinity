@@ -60,11 +60,23 @@ name: Backtest Signal Frequency (last 30 days, spot)
 #   factor", which is still the useful comparison for separating
 #   "market is quiet" from "something changed in our infra/ML config".
 #
+#   6. Without `--enable-dynamic-pairlist` on the backtesting command,
+#      freqtrade resolves the pairlist only ONCE at the start and hard-
+#      ERRORs that VolumePairList/AgeFilter/SpreadFilter/RangeStabilityFilter
+#      "do not support backtesting" — this flag makes it re-evaluate the
+#      pairlist on each new candle instead, which is required for a
+#      config like this one that leans on those handlers.
+#
 #   5. Export: `--export-filename` is deprecated and no longer honored
 #      for backtesting in current freqtrade — a custom path there is
 #      silently ignored. Switched to `--export-directory` (still
 #      supported) and the summarize step now globs broadly for whatever
 #      file freqtrade actually wrote, instead of assuming a fixed name.
+#
+#   7. Prepare step: the repo layout can have NostalgiaForInfinityX7.py
+#      already symlinked into user_data/strategies/ — a blind `cp` onto
+#      itself fails with exit code 1. Guarded the same way as
+#      dry-run-telegram-signals.yml (check -e before copying).
 
 on:
   workflow_dispatch: {}
@@ -157,6 +169,7 @@ jobs:
             --strategy NostalgiaForInfinityX7ML \
             --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframe 5m \
+            --enable-dynamic-pairlist \
             --export trades \
             --export-directory user_data/backtest_results \
             | tee user_data/logs/backtest.log
