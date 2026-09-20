@@ -108,9 +108,21 @@ jobs:
         run: |
           mkdir -p user_data/strategies user_data/logs user_data/data/okx user_data/backtest_results
           # ML subclass imports NostalgiaForInfinityX7 directly, so both
-          # files must sit together in user_data/strategies/.
-          cp NostalgiaForInfinityX7.py user_data/strategies/
-          cp NostalgiaForInfinityX7ML.py user_data/strategies/
+          # files must sit together in user_data/strategies/. Guarded the
+          # same way as dry-run-telegram-signals.yml, because in this
+          # repo's layout the root-level file and the one under
+          # user_data/strategies/ can already be the same file (symlink),
+          # in which case `cp` onto itself fails with exit code 1.
+          if [ -e user_data/strategies/NostalgiaForInfinityX7.py ]; then
+            echo "Strategy file already present at destination (symlink from repo layout) — skipping copy."
+          else
+            cp NostalgiaForInfinityX7.py user_data/strategies/
+          fi
+          if [ -e user_data/strategies/NostalgiaForInfinityX7ML.py ]; then
+            echo "ML strategy file already present at destination — skipping copy."
+          else
+            cp NostalgiaForInfinityX7ML.py user_data/strategies/
+          fi
           # Byte-for-byte copy of the real, currently-deployed spot config —
           # nothing here is edited for this test.
           cp config_dryrun_telegram.json user_data/config.json
