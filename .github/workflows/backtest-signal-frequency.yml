@@ -46,6 +46,14 @@ name: Backtest Signal Frequency (spot or futures, selectable window)
 # TEST WINDOW LENGTH: defaults to 30 days; pass a smaller value (the
 # workflow accepts a minimum of 20) via workflow_dispatch input if 30
 # days of historical OKX data + backtest runtime proves too slow.
+#
+# SPOT vs FUTURES: the market is selected purely by which live config is
+# copied to user_data/live_config.json (trading_mode / margin_mode live
+# inside that file). No --trading-mode / --margin-mode CLI flags are
+# passed to any freqtrade command: test-pairlist rejects them, download-data
+# only accepts --trading-mode (not --margin-mode), and they are not needed
+# anyway since every command is given --config. In futures mode,
+# download-data automatically fetches the mark + funding_rate candles too.
 
 on:
   workflow_dispatch:
@@ -174,10 +182,10 @@ jobs:
       - name: Snapshot today's dynamic pairlist (test-pairlist, same filter chain as live)
         run: |
           # NOTE: test-pairlist does NOT accept --trading-mode/--margin-mode
-          # (confirmed the hard way: "unrecognized arguments") — unlike
-          # download-data/backtesting. It doesn't need them anyway, since
-          # trading_mode/margin_mode are already set inside live_config.json
-          # itself for whichever market was selected.
+          # (confirmed the hard way: "unrecognized arguments"). It doesn't
+          # need them anyway, since trading_mode/margin_mode are already
+          # set inside live_config.json itself for whichever market was
+          # selected.
           freqtrade test-pairlist \
             --config user_data/live_config.json \
             --quote USDT \
@@ -217,16 +225,14 @@ jobs:
 
       - name: Download OKX historical data (5m/15m/1h/4h/1d)
         run: |
-          EXTRA_ARGS=()
-          if [ "$market" = "futures" ]; then
-            EXTRA_ARGS+=(--trading-mode futures --margin-mode isolated)
-          fi
+          # trading_mode (spot/futures) is read from user_data/config.json —
+          # no extra CLI flags needed. In futures mode, download-data also
+          # fetches the mark + funding_rate candles automatically.
           freqtrade download-data \
             --config user_data/config.json \
             --exchange okx \
             --timerange "${{ steps.dates.outputs.download_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframes 5m 15m 1h 4h 1d \
-            "${EXTRA_ARGS[@]}" \
             --erase
 
       - name: Run backtest (results restricted to test window)
@@ -234,16 +240,13 @@ jobs:
           STRATEGY="${{ github.event.inputs.strategy }}"
           STRATEGY="${STRATEGY:-NostalgiaForInfinityX7ML}"
           echo "Backtesting strategy: $STRATEGY on market: $market"
-          EXTRA_ARGS=()
-          if [ "$market" = "futures" ]; then
-            EXTRA_ARGS+=(--trading-mode futures --margin-mode isolated)
-          fi
+          # trading_mode / margin_mode / leverage come from the config and
+          # the strategy itself — no extra CLI flags needed.
           freqtrade backtesting \
             --config user_data/config.json \
             --strategy "$STRATEGY" \
             --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframe 5m \
-            "${EXTRA_ARGS[@]}" \
             --export trades \
             --export-directory user_data/backtest_results \
             | tee user_data/logs/backtest.log
