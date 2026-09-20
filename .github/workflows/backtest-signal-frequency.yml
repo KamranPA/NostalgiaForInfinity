@@ -173,14 +173,14 @@ jobs:
 
       - name: Snapshot today's dynamic pairlist (test-pairlist, same filter chain as live)
         run: |
-          EXTRA_ARGS=()
-          if [ "$market" = "futures" ]; then
-            EXTRA_ARGS+=(--trading-mode futures --margin-mode isolated)
-          fi
+          # NOTE: test-pairlist does NOT accept --trading-mode/--margin-mode
+          # (confirmed the hard way: "unrecognized arguments") — unlike
+          # download-data/backtesting. It doesn't need them anyway, since
+          # trading_mode/margin_mode are already set inside live_config.json
+          # itself for whichever market was selected.
           freqtrade test-pairlist \
             --config user_data/live_config.json \
             --quote USDT \
-            "${EXTRA_ARGS[@]}" \
             --print-json > user_data/pairlist_snapshot.json
           echo "Snapshotted pairlist:"
           cat user_data/pairlist_snapshot.json
