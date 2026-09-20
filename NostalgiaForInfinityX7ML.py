@@ -81,6 +81,30 @@ class NostalgiaForInfinityX7ML(NostalgiaForInfinityX7):
 
     btc_info_timeframes = BTC_INFO_TIMEFRAMES_OVERRIDE
 
+    def btc_info_switcher(self, btc_pair: str, btc_info_timeframe) -> "DataFrame":
+        """Override, not just a config toggle: upstream's own
+        btc_info_switcher() only dispatches "4h" -- the 1h/15m/5m/1d
+        branches are fully-implemented functions (btc_informative_1h/
+        1d_indicators etc. all exist and work) but their dispatch is
+        commented out, so calling with anything but "4h" raises
+        RuntimeError. Confirmed the hard way: BTC_INFO_TIMEFRAMES_OVERRIDE
+        adding "1h"/"1d" without this override crashed populate_indicators
+        for every pair, every candle -- caught in backtesting before it
+        reached live, but only just. This re-enables the two branches we
+        actually need, calling upstream's own indicator functions
+        unchanged -- nothing about the indicator logic itself is touched,
+        only which of the already-written functions gets called for which
+        timeframe.
+        """
+        if btc_info_timeframe == "4h":
+            return self.btc_informative_4h_indicators(btc_pair, btc_info_timeframe)
+        elif btc_info_timeframe == "1h":
+            return self.btc_informative_1h_indicators(btc_pair, btc_info_timeframe)
+        elif btc_info_timeframe == "1d":
+            return self.btc_informative_1d_indicators(btc_pair, btc_info_timeframe)
+        else:
+            raise RuntimeError(f"{btc_info_timeframe} not supported as informative timeframe for BTC pair.")
+
     @staticmethod
     def _safe_atr_14(df, timeperiod: int = 14):
         """ATR isn't computed anywhere upstream, so it's derived here
