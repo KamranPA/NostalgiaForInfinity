@@ -85,7 +85,7 @@ permissions:
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 350
 
     steps:
       - name: Checkout repository
@@ -172,6 +172,14 @@ jobs:
           # backtest exactly. A wider buffer should absorb that edge if
           # this hypothesis is correct.
           DOWNLOAD_START=$(date -u -d '400 days ago' +%Y%m%d)
+          # 5m/15m are ~90% of the download time (400 days of 5m = ~115k
+          # candles per pair, and the futures run timed out at 150 min
+          # during download). They only need a short warmup (~2 days for
+          # the strategy's startup candles), so they get test window + 60
+          # days. Only 1h/4h/1d — the timeframes with the long EMA200
+          # lookbacks, plus mark/funding_rate — keep the full 400 days.
+          SHORT_DOWNLOAD_START=$(date -u -d "$((TEST_DAYS + 60)) days ago" +%Y%m%d)
+          echo "short_download_start=$SHORT_DOWNLOAD_START" >> "$GITHUB_OUTPUT"
           echo "test_days=$TEST_DAYS" >> "$GITHUB_OUTPUT"
           echo "test_start=$TEST_START" >> "$GITHUB_OUTPUT"
           echo "test_end=$TEST_END" >> "$GITHUB_OUTPUT"
@@ -223,17 +231,30 @@ jobs:
           print(f"Backtest config built with {len(pairs)} statically-pinned pairs.")
           PYEOF
 
-      - name: Download OKX historical data (5m/15m/1h/4h/1d)
+      - name: Download OKX historical data (1h/4h/1d long window, 5m/15m short window)
         run: |
           # trading_mode (spot/futures) is read from user_data/config.json —
-          # no extra CLI flags needed. In futures mode, download-data also
-          # fetches the mark + funding_rate candles automatically.
+          # no extra CLI flags needed. In futures mode, each download-data
+          # call also fetches the mark + funding_rate candles.
+          #
+          # Call 1 (long window, runs FIRST): 1h/4h/1d over the full 400
+          # days, plus mark/funding_rate for that same full window.
           freqtrade download-data \
             --config user_data/config.json \
             --exchange okx \
             --timerange "${{ steps.dates.outputs.download_start }}-${{ steps.dates.outputs.test_end }}" \
-            --timeframes 5m 15m 1h 4h 1d \
+            --timeframes 1h 4h 1d \
             --erase
+          # Call 2 (short window): the heavy 5m/15m timeframes only need
+          # test window + 60 days. No --erase here on purpose: it would
+          # also wipe the mark/funding_rate data call 1 just downloaded and
+          # replace it with this shorter window. Without it, mark/funding
+          # are already present and only topped up.
+          freqtrade download-data \
+            --config user_data/config.json \
+            --exchange okx \
+            --timerange "${{ steps.dates.outputs.short_download_start }}-${{ steps.dates.outputs.test_end }}" \
+            --timeframes 5m 15m
 
       - name: Run backtest (results restricted to test window)
         run: |
