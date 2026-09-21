@@ -1,0 +1,145 @@
+{
+  "_COMMENT_FILE_PATH": "SAVE THIS FILE AS: config_dryrun_telegram_x8.json — in the ROOT of your NostalgiaForInfinity repo (same folder as config_dryrun_telegram.json). NOT inside user_data/, NOT inside configs/.",
+  "$schema": "https://schema.freqtrade.io/schema.json",
+  "_COMMENT_purpose": "X8 SPOT dry-run (OKX). Deliberately IDENTICAL to config_dryrun_telegram.json in every functional setting (exchange, pairlist chain, refresh periods, stake/wallet, max_open_trades, pricing, timeframe, telegram notification settings) so the only variable between the two bots is the strategy (NostalgiaForInfinityX8 vs NostalgiaForInfinityX7ML). ONLY these differ: bot_name, db_url, and the Telegram bot/token used by the workflow. If you change ANY functional setting in one file, change it in the other too, or the comparison stops being valid. dry_run stays true — no real orders are ever placed.",
+  "_COMMENT_restart_architecture": "Runs under its own self-queueing GitHub Actions chain (dry-run-telegram-signals-x8.yml). db_url below is local SQLite, persisted across restarts via its own git branch (state-spot-x8). Nothing is shared with the X7ML bots.",
+  "_COMMENT_position_adjustment": "Same as the X7ML config: position_adjustment_enable=true, as the NFI strategies' Grinding/Buyback systems require it.",
+  "trading_mode": "spot",
+  "margin_mode": "",
+  "max_open_trades": 8,
+  "stake_currency": "USDT",
+  "stake_amount": "unlimited",
+  "tradable_balance_ratio": 0.99,
+  "fiat_display_currency": "USD",
+  "dry_run": true,
+  "dry_run_wallet": 1000,
+  "timeframe": "5m",
+  "cancel_open_orders_on_exit": true,
+  "position_adjustment_enable": true,
+  "max_entry_position_adjustment": -1,
+  "unfilledtimeout": {
+    "entry": 10,
+    "exit": 30
+  },
+  "exchange": {
+    "name": "okx",
+    "enable_ws": false,
+    "key": "",
+    "secret": "",
+    "password": "",
+    "_COMMENT_password": "OKX's API requires a passphrase (the 'password' field) in addition to key/secret. Left empty here since dry-run never calls authenticated endpoints for real trading — only public market-data endpoints are used to simulate trades.",
+    "ccxt_config": {},
+    "ccxt_async_config": {},
+    "pair_whitelist": [],
+    "pair_blacklist": [
+      ".*(_PREMIUM|BEAR|BULL|DOWN|HALF|HEDGE|UP|[1235][SL])/.*"
+    ]
+  },
+  "_COMMENT_pairlist": "Identical to config_dryrun_telegram.json: OKX's SPOT ticker exposes quoteVolume directly, so no lookback_days is needed and refresh_period is 1800s (30min). Do not change one file without the other.",
+  "entry_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1,
+    "price_last_balance": 0.0,
+    "check_depth_of_market": {
+      "enabled": false,
+      "bids_to_ask_delta": 1
+    }
+  },
+  "exit_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+  "pairlists": [
+    {
+      "method": "VolumePairList",
+      "number_assets": 130,
+      "sort_key": "quoteVolume",
+      "refresh_period": 1800
+    },
+    {
+      "method": "FullTradesFilter"
+    },
+    {
+      "method": "AgeFilter",
+      "min_days_listed": 60
+    },
+    {
+      "method": "PriceFilter",
+      "low_price_ratio": 0.003
+    },
+    {
+      "method": "SpreadFilter",
+      "max_spread_ratio": 0.005
+    },
+    {
+      "method": "RangeStabilityFilter",
+      "lookback_days": 3,
+      "min_rate_of_change": 0.03,
+      "max_rate_of_change": 0.95,
+      "refresh_period": 86400
+    },
+    {
+      "method": "VolumePairList",
+      "number_assets": 100,
+      "sort_key": "quoteVolume",
+      "refresh_period": 1800
+    }
+  ],
+  "_COMMENT_telegram": "token/chat_id below are dummy placeholders satisfying the config schema. The REAL values are injected at runtime via FREQTRADE__TELEGRAM__TOKEN / FREQTRADE__TELEGRAM__CHAT_ID environment variables — for this bot the token comes from the TELEGRAM_TOKEN_SPOT_X8 secret (its OWN dedicated Telegram bot; sharing a token between two running freqtrade instances causes telegram.error.Conflict). Never commit real credentials into this file.",
+  "telegram": {
+    "enabled": true,
+    "token": "placeholder_overridden_by_env_var",
+    "chat_id": "placeholder_overridden_by_env_var",
+    "keyboard": [
+      [
+        "/daily",
+        "/stats",
+        "/balance",
+        "/profit"
+      ],
+      [
+        "/status table",
+        "/performance"
+      ],
+      [
+        "/reload_config",
+        "/count",
+        "/logs"
+      ]
+    ],
+    "notification_settings": {
+      "status": "on",
+      "warning": "on",
+      "startup": "off",
+      "entry": "off",
+      "entry_fill": "on",
+      "entry_cancel": "on",
+      "exit": "off",
+      "exit_fill": "on",
+      "exit_cancel": "on",
+      "protection_trigger": "on",
+      "protection_trigger_global": "on"
+    }
+  },
+  "_COMMENT_db_url": "Local SQLite, its own file — restored from / saved to the state-spot-x8 branch by the workflow. Never shared with the X7ML spot bot's tradesv3.dryrun.sqlite.",
+  "db_url": "sqlite:///user_data/tradesv3.dryrun_x8.sqlite",
+  "api_server": {
+    "enabled": false,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8080,
+    "verbosity": "error",
+    "enable_openapi": false,
+    "jwt_secret_key": "not_used_because_api_server_disabled",
+    "CORS_origins": [],
+    "username": "freqtrader",
+    "password": "not_used_because_api_server_disabled"
+  },
+  "bot_name": "nfi-dryrun-signals-x8-okx",
+  "force_entry_enable": false,
+  "initial_state": "running",
+  "internals": {
+    "process_throttle_secs": 30
+  }
+}
