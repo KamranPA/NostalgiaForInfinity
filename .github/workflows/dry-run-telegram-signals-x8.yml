@@ -1,0 +1,259 @@
+# SAVE THIS FILE AS: .github/workflows/dry-run-telegram-signals-x8.yml
+# (in .github/workflows/, alongside dry-run-telegram-signals.yml)
+name: NFI X8 Spot Dry-Run Telegram Signals (OKX)
+
+# X8 SPOT bot — a parallel, completely separate twin of
+# dry-run-telegram-signals.yml (the X7ML spot bot), built for a
+# like-for-like strategy comparison. Everything functional is identical
+# (same self-queueing restart chain, same 5h15m session length, same
+# hourly WAL-checkpoint push, same config values via
+# config_dryrun_telegram_x8.json). Only the strategy differs, and every
+# piece of state is separate so the two bots can never interfere:
+#
+#   - strategy:            NostalgiaForInfinityX8 (pure upstream — no ML subclass)
+#   - config:              config_dryrun_telegram_x8.json
+#   - SQLite file:         tradesv3.dryrun_x8.sqlite
+#   - state branch:        state-spot-x8   (X7ML spot uses state-spot)
+#   - concurrency group:   nfi-dryrun-spot-x8
+#   - Telegram bot token:  TELEGRAM_TOKEN_SPOT_X8 secret (its OWN bot — a
+#                          token shared between two running freqtrade
+#                          instances causes telegram.error.Conflict).
+#                          TELEGRAM_CHAT_ID is shared (same chat).
+#   - next-run dispatch:   dry-run-telegram-signals-x8.yml (itself)
+#
+# TO START: Actions tab -> "NFI X8 Spot Dry-Run Telegram Signals (OKX)" ->
+# Run workflow (once). From then on it re-queues itself.
+#
+# X8 CAVEAT: NostalgiaForInfinityX8 is a newer upstream strategy that
+# iterativv has not yet declared stable. If freqtrade exits at startup,
+# read the log before assuming a workflow problem.
+#
+# SQLite runs in WAL mode; both the periodic push and the final "Save
+# SQLite state" step force a WAL checkpoint before copying, so fresh
+# trade rows can't be stranded in the "-wal" side file.
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: nfi-dryrun-spot-x8
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # read for checkout; write so this run can push the state-spot-x8 branch
+  actions: write    # so this run's own GITHUB_TOKEN can queue the next run
+
+jobs:
+  dryrun-spot-x8:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Notify Telegram — X8 spot workflow started
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN_SPOT_X8 }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🔵 NFI X8 SPOT (OKX) started — run #${{ github.run_number }} | dry-run | NostalgiaForInfinityX8 | 5m")
+          echo "Telegram API response: $RESPONSE"
+          if ! echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "::warning::Telegram did not accept the message — check TELEGRAM_TOKEN_SPOT_X8/TELEGRAM_CHAT_ID secrets."
+          fi
+
+      - name: Verify required secrets are set
+        run: |
+          MISSING=""
+          [ -z "${{ secrets.TELEGRAM_TOKEN_SPOT_X8 }}" ] && MISSING="$MISSING TELEGRAM_TOKEN_SPOT_X8"
+          [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ] && MISSING="$MISSING TELEGRAM_CHAT_ID"
+          if [ -n "$MISSING" ]; then
+            echo "::error::These GitHub Secrets are empty or not set:$MISSING — go to Settings > Secrets and variables > Actions and add them."
+            exit 1
+          fi
+          echo "All required secrets are present (values not shown here for security)."
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed so later steps can fetch/create the state-spot-x8 branch
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-nfi-spot-x8-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-nfi-spot-x8-
+
+      - name: Install TA-Lib system library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential wget
+          wget -q http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+          tar -xzf ta-lib-0.4.0-src.tar.gz
+          cd ta-lib
+          ./configure --prefix=/usr
+          make
+          sudo make install
+          cd ..
+
+      - name: Install Freqtrade + dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install freqtrade
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Prepare Freqtrade user_data layout
+        run: |
+          mkdir -p user_data/strategies
+          mkdir -p user_data/logs
+          # X8 is an independent upstream strategy file (not a subclass of
+          # X7), so only its own file is needed here.
+          if [ -e user_data/strategies/NostalgiaForInfinityX8.py ]; then
+            echo "X8 strategy file already present at destination (symlink from repo layout) — skipping copy."
+          else
+            cp NostalgiaForInfinityX8.py user_data/strategies/
+          fi
+          cp config_dryrun_telegram_x8.json user_data/config.json
+
+      - name: Restore previous SQLite state (if any)
+        run: |
+          git fetch origin state-spot-x8 2>/dev/null && \
+            git show origin/state-spot-x8:tradesv3.dryrun_x8.sqlite > user_data/tradesv3.dryrun_x8.sqlite 2>/dev/null && \
+            echo "Restored previous state ($(du -h user_data/tradesv3.dryrun_x8.sqlite | cut -f1))." || \
+            echo "No previous state found (first run, or state-spot-x8 branch doesn't exist yet) — starting fresh."
+
+      - name: Run Freqtrade (dry-run, background) and tail logs
+        env:
+          FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN_SPOT_X8 }}
+          FREQTRADE__TELEGRAM__CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN_SPOT_X8 }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_URL: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+        run: |
+          cd user_data/..
+
+          SELF_TIMEOUT_SECONDS=$((5*3600 + 15*60))
+          CHECKPOINT_INTERVAL_SECONDS=3600   # hourly
+
+          timeout --signal=TERM "${SELF_TIMEOUT_SECONDS}s" freqtrade trade \
+            --config user_data/config.json \
+            --strategy NostalgiaForInfinityX8 \
+            --logfile user_data/logs/freqtrade.log &
+          FREQTRADE_PID=$!
+
+          QUEUE_LEAD_SECONDS=120
+          (
+            sleep $((SELF_TIMEOUT_SECONDS - QUEUE_LEAD_SECONDS))
+            echo "Queueing the next run now (this run stops in ~${QUEUE_LEAD_SECONDS}s)..."
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/dry-run-telegram-signals-x8.yml/dispatches" \
+              -d "{\"ref\": \"${{ github.ref_name }}\"}"
+          ) &
+          QUEUE_PID=$!
+
+          # Periodic mid-session state push: keeps state-spot-x8 (and thus
+          # the dashboard) reasonably fresh instead of only updating once
+          # every ~5h45m. Uses its OWN throwaway git clone in /tmp so it
+          # never touches this job's main checkout/working tree.
+          (
+            SQLITE_FILE="user_data/tradesv3.dryrun_x8.sqlite"
+            while true; do
+              sleep "$CHECKPOINT_INTERVAL_SECONDS"
+              if [ ! -f "$SQLITE_FILE" ]; then continue; fi
+              sqlite3 "$SQLITE_FILE" "PRAGMA wal_checkpoint(TRUNCATE);" || true
+              TMP_DIR=$(mktemp -d)
+              cp "$SQLITE_FILE" "$TMP_DIR/tradesv3.dryrun_x8.sqlite"
+              (
+                cd "$TMP_DIR"
+                git init -q
+                git config user.name "github-actions[bot]"
+                git config user.email "github-actions[bot]@users.noreply.github.com"
+                git checkout -q -b state-spot-x8
+                git add tradesv3.dryrun_x8.sqlite
+                git commit -q -m "periodic checkpoint sync $(date -u +%Y-%m-%dT%H:%M:%SZ) run #${{ github.run_number }}"
+                git remote add origin "$REPO_URL"
+                git push -q origin state-spot-x8 --force
+              ) && echo "Periodic checkpoint pushed to state-spot-x8 at $(date -u)." \
+                || echo "::warning::Periodic checkpoint push failed (will retry next interval)."
+              rm -rf "$TMP_DIR"
+            done
+          ) &
+          CHECKPOINT_PID=$!
+
+          external_cancel_handler() {
+            echo "Received external termination signal — forwarding to freqtrade (PID $FREQTRADE_PID) for graceful shutdown..."
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              -d text="⚠️ NFI X8 SPOT (OKX) dry-run (run #${{ github.run_number }}) was cancelled externally — shutting down gracefully. State will still be saved." \
+              > /dev/null || true
+            kill -TERM "$FREQTRADE_PID" 2>/dev/null || true
+            wait "$FREQTRADE_PID" 2>/dev/null || true
+            exit 0
+          }
+          trap external_cancel_handler SIGTERM SIGINT
+
+          sleep 20
+          tail -f user_data/logs/freqtrade.log &
+          TAIL_PID=$!
+
+          wait $FREQTRADE_PID || true
+          kill $TAIL_PID 2>/dev/null || true
+          kill $QUEUE_PID 2>/dev/null || true
+          kill $CHECKPOINT_PID 2>/dev/null || true
+
+          echo "Planned self-restart: freqtrade ran for its allotted ${SELF_TIMEOUT_SECONDS}s and stopped on its own — this is expected, not a failure."
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🔁 NFI X8 SPOT (OKX) dry-run (run #${{ github.run_number }}) completed its planned ${SELF_TIMEOUT_SECONDS}s session and is stopping on schedule. State is being saved; the next run was already queued and should start immediately." \
+            > /dev/null || true
+
+          exit 0
+
+      - name: Save SQLite state (persist across restarts)
+        if: always()
+        run: |
+          SQLITE_FILE="user_data/tradesv3.dryrun_x8.sqlite"
+          if [ ! -f "$SQLITE_FILE" ]; then
+            echo "No SQLite file found — freqtrade may have failed before creating it. Skipping state save."
+            exit 0
+          fi
+
+          echo "Forcing a full WAL checkpoint so all committed trade data is flushed into the main file..."
+          sqlite3 "$SQLITE_FILE" "PRAGMA wal_checkpoint(TRUNCATE);"
+
+          echo "Post-checkpoint sanity check — closed trade count in file about to be saved:"
+          sqlite3 "$SQLITE_FILE" "SELECT count(*) FROM trades WHERE is_open=0;"
+
+          cp "$SQLITE_FILE" /tmp/state_backup_spot_x8.sqlite
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout --orphan state-spot-x8-tmp
+          git rm -rf . > /dev/null 2>&1 || true
+          cp /tmp/state_backup_spot_x8.sqlite tradesv3.dryrun_x8.sqlite
+          git add tradesv3.dryrun_x8.sqlite
+          git commit -m "state sync $(date -u +%Y-%m-%dT%H:%M:%SZ) run #${{ github.run_number }}" --quiet
+          git push origin state-spot-x8-tmp:state-spot-x8 --force
+          echo "State saved to state-spot-x8 branch ($(du -h /tmp/state_backup_spot_x8.sqlite | cut -f1))."
+
+      - name: Notify Telegram — X8 spot workflow failed
+        if: failure()
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN_SPOT_X8 }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="❌ NFI X8 SPOT (OKX) dry-run workflow (run #${{ github.run_number }}) FAILED. Check GitHub Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            > /dev/null
