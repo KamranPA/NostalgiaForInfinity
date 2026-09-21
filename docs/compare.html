@@ -66,7 +66,7 @@
 <body>
 
 <h1>⚔️ NostalgiaForInfinity — X7ML vs X8</h1>
-<div class="subtitle">Generated 2026-09-21 21:04:21 UTC · dry-run (simulated) — no real funds involved · all four bots on OKX</div>
+<div class="subtitle">Generated 2026-09-21 21:28:06 UTC · dry-run (simulated) — no real funds involved · all four bots on OKX</div>
 <div class="nav">
   <a href="index.html">← Main dashboard (X7ML)</a>
   <a href="#cmp-spot">Spot comparison</a>
@@ -239,7 +239,7 @@
 
 <div class="card">
   <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
-  <p class="muted">Not enough history yet — this chart fills in as more dashboard runs are recorded (one point per run).</p>
+  <div class="chart-wrap"><canvas id="trendChart_spot_x8"></canvas></div>
 </div>
 
 
@@ -393,7 +393,7 @@
 
 <div class="card">
   <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
-  <p class="muted">Not enough history yet — this chart fills in as more dashboard runs are recorded (one point per run).</p>
+  <div class="chart-wrap"><canvas id="trendChart_futures_x8"></canvas></div>
 </div>
 
 
@@ -474,9 +474,9 @@
 new Chart(document.getElementById('cmpEquity_spot'), {
   type: 'scatter',
   data: { datasets: [
-    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 1.44, "y": 0.0}], borderColor: '#d29922', backgroundColor: '#d29922',
+    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 1.84, "y": 0.0}], borderColor: '#d29922', backgroundColor: '#d29922',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 },
-    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 1.44, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
+    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 1.84, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 }
   ]},
   options: {
@@ -495,9 +495,9 @@ new Chart(document.getElementById('cmpEquity_spot'), {
 new Chart(document.getElementById('cmpEquity_futures'), {
   type: 'scatter',
   data: { datasets: [
-    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 1.4, "y": 0.0}], borderColor: '#d29922', backgroundColor: '#d29922',
+    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 1.8, "y": 0.0}], borderColor: '#d29922', backgroundColor: '#d29922',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 },
-    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 1.4, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
+    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 1.8, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 }
   ]},
   options: {
@@ -550,6 +550,37 @@ new Chart(document.getElementById('reasonChart_spot_x8'), {
 });
 
 
+new Chart(document.getElementById('trendChart_spot_x8'), {
+  type: 'bar',
+  data: {
+    labels: ["09-21 21:04", "09-21 21:28"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [0.0, 0.0],
+        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0],
+        backgroundColor: 'rgba(248,81,73,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#8b949e', maxTicksLimit: 8 }, grid: { color: '#30363d' } },
+      y: { position: 'left', ticks: { color: '#8b949e' }, grid: { color: '#30363d' },
+           title: { display: true, text: 'USDT', color: '#8b949e' } },
+      y1: { position: 'right', ticks: { color: '#8b949e', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#8b949e' } }
+    },
+    plugins: { legend: { labels: { color: '#c9d1d9' } } }
+  }
+});
+
 
 
 new Chart(document.getElementById('equityChart_futures_x8'), {
@@ -588,6 +619,37 @@ new Chart(document.getElementById('reasonChart_futures_x8'), {
   }
 });
 
+
+new Chart(document.getElementById('trendChart_futures_x8'), {
+  type: 'bar',
+  data: {
+    labels: ["09-21 21:04", "09-21 21:28"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [0.0, 0.0],
+        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0],
+        backgroundColor: 'rgba(248,81,73,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#8b949e', maxTicksLimit: 8 }, grid: { color: '#30363d' } },
+      y: { position: 'left', ticks: { color: '#8b949e' }, grid: { color: '#30363d' },
+           title: { display: true, text: 'USDT', color: '#8b949e' } },
+      y1: { position: 'right', ticks: { color: '#8b949e', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#8b949e' } }
+    },
+    plugins: { legend: { labels: { color: '#c9d1d9' } } }
+  }
+});
 
 
 </script>
