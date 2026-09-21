@@ -6,9 +6,10 @@ name: Backtest Signal Frequency (spot or futures, selectable window)
 # entry frequency caused by a bug in code WE wrote (ML subclass,
 # btc_info_timeframes override, pairlist config), or is it inherent to
 # the strategy+market itself?" — by backtesting either the PURE UPSTREAM
-# NostalgiaForInfinityX7 strategy or our NostalgiaForInfinityX7ML
-# subclass (selectable via the `strategy` input below — default is the
-# ML subclass, since that's what's actually deployed live) over the
+# NostalgiaForInfinityX7 strategy, our NostalgiaForInfinityX7ML
+# subclass, or the newer upstream NostalgiaForInfinityX8 strategy
+# (selectable via the `strategy` input below — default is the ML
+# subclass, since that's what's actually deployed live) over the
 # requested window.
 #
 # WHY THIS DOESN'T (CAN'T) USE THE LIVE CONFIG'S PAIRLIST AS-IS:
@@ -40,8 +41,10 @@ name: Backtest Signal Frequency (spot or futures, selectable window)
 # way around this — it's a property of backtesting dynamic pairlists.
 #
 # WARMUP: informative_1d_indicators() needs a 200-period daily EMA, so
-# the download window includes a 250-day buffer before the requested
-# test window regardless of how long that window is.
+# the download window includes a 400-day buffer before the requested
+# test window regardless of how long that window is (widened from 250
+# to 400 to absorb an edge-of-warmup effect observed near the start of
+# the test window — see git history / project notes for details).
 #
 # TEST WINDOW LENGTH: defaults to 30 days; pass a smaller value (the
 # workflow accepts a minimum of 20) via workflow_dispatch input if 30
@@ -54,6 +57,14 @@ name: Backtest Signal Frequency (spot or futures, selectable window)
 # only accepts --trading-mode (not --margin-mode), and they are not needed
 # anyway since every command is given --config. In futures mode,
 # download-data automatically fetches the mark + funding_rate candles too.
+#
+# X8 CAVEAT: NostalgiaForInfinityX8 is a newer, independent upstream
+# strategy file (not a subclass of X7) that iterativv has not yet
+# declared stable. It has not been checked here for the same
+# btc_info_switcher-style pitfalls that broke the ML subclass on X7 —
+# if X8 backtesting fails with a RuntimeError or similar, check its
+# source for an equivalent hardcoded/limited dispatch before assuming
+# it's a workflow bug.
 
 on:
   workflow_dispatch:
@@ -70,6 +81,7 @@ on:
         options:
           - "NostalgiaForInfinityX7ML"
           - "NostalgiaForInfinityX7"
+          - "NostalgiaForInfinityX8"
       market:
         description: "Which bot's config/market to backtest"
         required: false
@@ -117,23 +129,39 @@ jobs:
       - name: Prepare backtest user_data
         run: |
           mkdir -p user_data/strategies user_data/logs user_data/data/okx user_data/backtest_results
-          # Always need the upstream file (NostalgiaForInfinityX7ML imports
-          # it directly, and it's the strategy itself when that's selected).
+          STRATEGY="${{ github.event.inputs.strategy }}"
+          STRATEGY="${STRATEGY:-NostalgiaForInfinityX7ML}"
+
+          # X7 base file: needed whenever the selected strategy is X7 itself,
+          # or the ML subclass (which imports the class directly from it).
+          # Not needed for X8 (independent file), but copying it anyway is
+          # harmless — it just sits unused in that case.
           if [ -e user_data/strategies/NostalgiaForInfinityX7.py ]; then
             echo "Strategy file already present at destination (symlink from repo layout) — skipping copy."
           else
             cp NostalgiaForInfinityX7.py user_data/strategies/
           fi
-          # Only copy the ML subclass when it's actually the selected
-          # strategy — keeping it out for the pure-upstream run makes that
-          # run provably independent of anything in our subclass.
-          if [ "${{ github.event.inputs.strategy }}" = "NostalgiaForInfinityX7ML" ] || [ -z "${{ github.event.inputs.strategy }}" ]; then
+
+          # ML subclass: only copy when it's actually the selected strategy —
+          # keeping it out for the pure-upstream runs makes those runs
+          # provably independent of anything in our subclass.
+          if [ "$STRATEGY" = "NostalgiaForInfinityX7ML" ]; then
             if [ -e user_data/strategies/NostalgiaForInfinityX7ML.py ]; then
               echo "ML strategy file already present at destination — skipping copy."
             else
               cp NostalgiaForInfinityX7ML.py user_data/strategies/
             fi
           fi
+
+          # X8: independent upstream file, only needed when selected.
+          if [ "$STRATEGY" = "NostalgiaForInfinityX8" ]; then
+            if [ -e user_data/strategies/NostalgiaForInfinityX8.py ]; then
+              echo "X8 strategy file already present at destination — skipping copy."
+            else
+              cp NostalgiaForInfinityX8.py user_data/strategies/
+            fi
+          fi
+
           # Base config to snapshot the pairlist from, and to derive the
           # backtest config from — byte-for-byte the real live config for
           # whichever market was selected. Futures genuinely needs
@@ -164,13 +192,12 @@ jobs:
           fi
           TEST_END=$(date -u +%Y%m%d)
           TEST_START=$(date -u -d "${TEST_DAYS} days ago" +%Y%m%d)
-          # 400 days: widened from 250 (2026-09-20) to test a hypothesis —
-          # the ML subclass's extra BTC 1h/1d informative merges appeared to
-          # cost a few entries specifically in the first ~4 days of a
+          # 400 days: widened from 250 to test a hypothesis — the ML
+          # subclass's extra BTC 1h/1d informative merges appeared to cost
+          # a few entries specifically in the first ~4 days of a
           # 250-day-buffered window (edge-of-warmup effect), while every
           # week further from the buffer edge matched the pure-upstream
-          # backtest exactly. A wider buffer should absorb that edge if
-          # this hypothesis is correct.
+          # backtest exactly. A wider buffer absorbs that edge.
           DOWNLOAD_START=$(date -u -d '400 days ago' +%Y%m%d)
           # 5m/15m are ~90% of the download time (400 days of 5m = ~115k
           # candles per pair, and the futures run timed out at 150 min
@@ -349,9 +376,10 @@ jobs:
             echo "(downloaded from ${{ steps.dates.outputs.download_start }} for warmup)"
             echo ""
             echo "**Purpose:** compare this count against the same run with the other strategy"
-            echo "choice (NostalgiaForInfinityX7 vs NostalgiaForInfinityX7ML) — a similar count on"
-            echo "both means the frequency is inherent to the strategy/market/pairlist snapshot,"
-            echo "not something in our ML subclass."
+            echo "choices (NostalgiaForInfinityX7 / NostalgiaForInfinityX7ML / NostalgiaForInfinityX8)"
+            echo "— a similar count across them means the frequency is inherent to the"
+            echo "strategy/market/pairlist snapshot, not something in our ML subclass or specific"
+            echo "to one strategy generation."
             echo ""
             echo "**Known limitation:** the pairlist is a snapshot of TODAY's top pairs by volume,"
             echo "applied across the whole historical window (freqtrade doesn't support reconstructing"
