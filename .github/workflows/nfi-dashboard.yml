@@ -2,19 +2,32 @@
 # (in .github/workflows/, alongside the other workflow files)
 name: NFI Dashboard
 
-# Reads BOTH bots' live trading state directly from their SQLite state
-# branches (state-spot / state-futures — the same files
-# dry-run-telegram-signals.yml / dry-run-telegram-futures.yml persist
-# across restarts) instead of a Postgres database. This never touches
-# Postgres at all anymore — that whole layer (Supabase, schemas, the
-# futures_bot role) was retired after it caused repeated free-tier
-# egress quota problems (freqtrade's own internal polling loop was
-# generating millions of tiny queries per session).
+# Reads ALL FOUR bots' live trading state directly from their SQLite state
+# branches:
+#   X7ML spot     -> state-spot         (tradesv3.dryrun.sqlite)
+#   X7ML futures  -> state-futures      (tradesv3.dryrun_futures.sqlite)
+#   X8 spot       -> state-spot-x8      (tradesv3.dryrun_x8.sqlite)
+#   X8 futures    -> state-futures-x8   (tradesv3.dryrun_futures_x8.sqlite)
+# (the same files the dry-run-*.yml workflows persist across restarts)
+# instead of a Postgres database. This never touches Postgres at all
+# anymore — that whole layer (Supabase, schemas, the futures_bot role)
+# was retired after it caused repeated free-tier egress quota problems
+# (freqtrade's own internal polling loop was generating millions of tiny
+# queries per session).
 #
-# This workflow's OWN read/write is to a THIRD, separate branch
+# TWO PAGES are produced:
+#   docs/index.html    — main dashboard, X7ML spot + futures
+#                        (generate_dashboard.py, unchanged)
+#   docs/compare.html  — X7ML vs X8 head-to-head per market + full X8
+#                        detail sections (generate_dashboard_compare.py,
+#                        which imports generate_dashboard.py). Built with
+#                        continue-on-error so a problem in the comparison
+#                        page can never stop the main dashboard updating.
+#
+# This workflow's OWN read/write is to a separate branch
 # (dashboard-history) that holds nothing but the trend-chart history —
-# kept apart from both bots' live state files so there's never a write
-# race between three independent things updating git branches.
+# kept apart from all bots' live state files so there's never a write
+# race between independent things updating git branches.
 
 on:
   workflow_dispatch: {}
@@ -33,7 +46,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # needed to fetch the state-spot/state-futures/dashboard-history branches
+          fetch-depth: 0   # needed to fetch the state-*/dashboard-history branches
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -45,19 +58,29 @@ jobs:
           python -m pip install --upgrade pip
           pip install numpy ccxt
 
-      - name: Fetch spot and futures SQLite state
+      - name: Fetch SQLite state of all four bots
         run: |
           mkdir -p /tmp/dashboard_data
 
           git fetch origin state-spot 2>/dev/null && \
             git show origin/state-spot:tradesv3.dryrun.sqlite > /tmp/dashboard_data/spot.sqlite 2>/dev/null && \
-            echo "Spot state found ($(du -h /tmp/dashboard_data/spot.sqlite | cut -f1))." || \
-            echo "No spot state yet (bot may not have completed a session yet) — dashboard will show it as empty."
+            echo "Spot (X7ML) state found ($(du -h /tmp/dashboard_data/spot.sqlite | cut -f1))." || \
+            echo "No spot (X7ML) state yet (bot may not have completed a session yet) — dashboard will show it as empty."
 
           git fetch origin state-futures 2>/dev/null && \
             git show origin/state-futures:tradesv3.dryrun_futures.sqlite > /tmp/dashboard_data/futures.sqlite 2>/dev/null && \
-            echo "Futures state found ($(du -h /tmp/dashboard_data/futures.sqlite | cut -f1))." || \
-            echo "No futures state yet (bot may not have completed a session yet) — dashboard will show it as empty."
+            echo "Futures (X7ML) state found ($(du -h /tmp/dashboard_data/futures.sqlite | cut -f1))." || \
+            echo "No futures (X7ML) state yet (bot may not have completed a session yet) — dashboard will show it as empty."
+
+          git fetch origin state-spot-x8 2>/dev/null && \
+            git show origin/state-spot-x8:tradesv3.dryrun_x8.sqlite > /tmp/dashboard_data/spot_x8.sqlite 2>/dev/null && \
+            echo "Spot (X8) state found ($(du -h /tmp/dashboard_data/spot_x8.sqlite | cut -f1))." || \
+            echo "No spot (X8) state yet (first hourly checkpoint not pushed yet) — comparison page will show it as empty."
+
+          git fetch origin state-futures-x8 2>/dev/null && \
+            git show origin/state-futures-x8:tradesv3.dryrun_futures_x8.sqlite > /tmp/dashboard_data/futures_x8.sqlite 2>/dev/null && \
+            echo "Futures (X8) state found ($(du -h /tmp/dashboard_data/futures_x8.sqlite | cut -f1))." || \
+            echo "No futures (X8) state yet (first hourly checkpoint not pushed yet) — comparison page will show it as empty."
 
       - name: Fetch (or initialize) dashboard history
         run: |
@@ -66,7 +89,7 @@ jobs:
             echo "Existing dashboard history found ($(du -h /tmp/dashboard_data/history.sqlite | cut -f1))." || \
             echo "No dashboard history yet — trend chart will start fresh from this run."
 
-      - name: Generate combined dashboard (spot + futures)
+      - name: Generate combined dashboard (X7ML spot + futures)
         run: |
           mkdir -p docs
           python generate_dashboard.py \
@@ -75,11 +98,25 @@ jobs:
             /tmp/dashboard_data/history.sqlite \
             docs/index.html
 
-      - name: Commit and push docs/index.html
+      - name: Generate X7ML vs X8 comparison page
+        # Never let a problem in the new comparison page block the main
+        # dashboard from updating and being committed.
+        continue-on-error: true
+        run: |
+          python generate_dashboard_compare.py \
+            /tmp/dashboard_data/spot.sqlite \
+            /tmp/dashboard_data/futures.sqlite \
+            /tmp/dashboard_data/spot_x8.sqlite \
+            /tmp/dashboard_data/futures_x8.sqlite \
+            /tmp/dashboard_data/history.sqlite \
+            docs/compare.html
+
+      - name: Commit and push docs pages
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/index.html
+          [ -f docs/compare.html ] && git add docs/compare.html || true
           git diff --cached --quiet && echo "No dashboard changes to commit." || \
             (git commit -m "Update dashboard $(date -u +%Y-%m-%dT%H:%M:%SZ)" --quiet && git push origin HEAD:${{ github.ref_name }})
 
