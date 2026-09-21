@@ -15,11 +15,20 @@ name: Sync Repo from Upstream (auto)
 #
 # RISK NOTE: this pushes straight to main with no human review step, and
 # main is exactly what the dry-run bots read on their next self-queued
-# restart (see dry-run-telegram-signals.yml / dry-run-telegram-futures.yml).
-# A behavior-changing upstream update (new config keys required, changed
-# pairlist defaults, etc.) can reach the live dry-run bots automatically.
-# The only safety net here is the py_compile syntax check below — it
-# catches broken Python, not behavior changes.
+# restart (see dry-run-telegram-signals.yml / dry-run-telegram-futures.yml
+# and their -x8 twins). A behavior-changing upstream update (new config
+# keys required, changed pairlist defaults, etc.) can reach the live
+# dry-run bots automatically. The only safety net here is the py_compile
+# syntax check below — it catches broken Python, not behavior changes.
+#
+# X8 NOTE: NostalgiaForInfinityX8.py is NOT excluded, so upstream changes
+# to it reach the X8 bots on their next restart, exactly like X7. X8 is
+# still under active development upstream, so its behavior can shift
+# mid-comparison — note the sync dates when comparing X8 against X7ML.
+#
+# WHEN YOU ADD A NEW CUSTOM FILE: it must be added in TWO places below —
+# the rsync exclude list (so it isn't overwritten) AND the `git add`
+# pathspec in the commit step (so it isn't staged/committed by the sync).
 
 on:
   schedule:
@@ -68,6 +77,8 @@ jobs:
           NostalgiaForInfinityX7ML.py
           config_dryrun_telegram.json
           config_dryrun_futures.json
+          config_dryrun_telegram_x8.json
+          config_dryrun_futures_x8.json
           README.md
           EOF
 
@@ -122,7 +133,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A -- . ':!.github' ':!NostalgiaForInfinityX7ML.py' ':!config_dryrun_telegram.json' ':!config_dryrun_futures.json' ':!README.md'
+          git add -A -- . ':!.github' ':!NostalgiaForInfinityX7ML.py' ':!config_dryrun_telegram.json' ':!config_dryrun_futures.json' ':!config_dryrun_telegram_x8.json' ':!config_dryrun_futures_x8.json' ':!README.md'
           if git diff --cached --quiet; then
             echo "Nothing staged after exclusions — nothing to commit."
           else
