@@ -71,7 +71,7 @@ class NostalgiaForInfinityX7(IStrategy):
   INTERFACE_VERSION = 3
 
   def version(self) -> str:
-    return "v17.5.93"
+    return "v17.5.97"
 
   stoploss = -0.99
 
@@ -20918,6 +20918,8 @@ class NostalgiaForInfinityX7(IStrategy):
             & ((rsi_3_1h_gt_60) | (rsi_3_4h_gt_60) | (aroonu_14_4h_lt_90))
             # 1h & 4h down move, 4h & 1d high
             & ((rsi_3_1h_gt_60) | (rsi_3_4h_gt_60) | (stochrsi_k_4h_lt_70) | (stochrsi_k_1d_lt_70))
+            # 1h & 4h down move, 1h high, 1d high
+            & ((rsi_3_1h_gt_60) | (rsi_3_4h_gt_65) | (aroonu_14_1h_lt_80) | (stochrsi_k_1d_lt_90))
             # 1h down move, 15m high, 1d high
             & ((rsi_3_1h_gt_65) | (stochrsi_k_15m_lt_60) | (stochrsi_k_1d_lt_90))
             # 1h down move, 1h & 4h high, 1d high
@@ -29755,6 +29757,8 @@ class NostalgiaForInfinityX7(IStrategy):
             & ((rsi_3_15m_gt_10) | (rsi_3_1h_gt_30) | (rsi_3_4h_gt_30) | (aroonu_14_1h_gt_10) | (stochrsi_k_15m_gt_10))
             # 15m & 1h down move, 1h & 4h low
             & ((rsi_3_15m_gt_10) | (rsi_3_1h_gt_30) | (aroonu_14_1h_gt_10) | (aroonu_14_4h_gt_10))
+            # 15m & 1h down move, 1h & 1d low
+            & ((rsi_3_15m_gt_10) | (rsi_3_1h_gt_30) | (aroonu_14_1h_gt_10) | (aroonu_14_1d_gt_10))
             # 15m & 1h down move, 15m & 4h low
             & ((rsi_3_15m_gt_10) | (rsi_3_1h_gt_30) | (stochrsi_k_15m_gt_10) | (stochrsi_k_4h_gt_20))
             # 15m & 1h down move, 15m & 1h low
@@ -29951,10 +29955,14 @@ class NostalgiaForInfinityX7(IStrategy):
             & ((rsi_3_15m_gt_20) | (rsi_3_1d_gt_20) | (aroonu_14_4h_gt_30) | (aroonu_14_1d_gt_30))
             # 15m & 1d down move, 4h low, 1d oversold
             & ((rsi_3_15m_gt_20) | (rsi_3_1d_gt_20) | (aroonu_14_4h_gt_30) | (roc_9_1d_gt_neg_20))
+            # 15m & 1d down move, 15m & 1d low
+            & ((rsi_3_15m_gt_20) | (rsi_3_1d_gt_20) | (stochrsi_k_15m_gt_20) | (stochrsi_k_1d_gt_20))
             # 15m & 1d down move, 15m & 1h & 1d low
             & ((rsi_3_15m_gt_20) | (rsi_3_1d_gt_30) | (aroonu_14_15m_gt_0) | (aroonu_14_1h_gt_0) | (aroonu_14_1d_gt_0))
             # 15m & 1d down move, 1d low, 1d oversold
             & ((rsi_3_15m_gt_20) | (rsi_3_1d_gt_30) | (aroonu_14_1d_gt_0) | (roc_9_1d_gt_neg_10))
+            # 15m down move, 1h & 1d low
+            & ((rsi_3_15m_gt_20) | (aroonu_14_1h_gt_0) | (aroonu_14_1d_gt_0))
             # 15m & 1h & 4h down move, 1d low, 1d oversold
             & ((rsi_3_15m_gt_25) | (rsi_3_1h_gt_25) | (rsi_3_4h_gt_25) | (aroonu_14_1d_gt_10) | (roc_9_1d_gt_neg_20))
             # 15m & 1h & 4h down move, 1h & 4h low
