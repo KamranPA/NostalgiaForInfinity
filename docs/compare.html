@@ -66,7 +66,7 @@
 <body>
 
 <h1>⚔️ NostalgiaForInfinity — X7ML vs X8</h1>
-<div class="subtitle">Generated 2026-09-22 05:40:00 UTC · dry-run (simulated) — no real funds involved · all four bots on OKX</div>
+<div class="subtitle">Generated 2026-09-22 10:38:54 UTC · dry-run (simulated) — no real funds involved · all four bots on OKX</div>
 <div class="nav">
   <a href="index.html">← Main dashboard (X7ML)</a>
   <a href="#cmp-spot">Spot comparison</a>
@@ -82,15 +82,15 @@
   <h3>Head to head <span class="muted" style="font-weight:400;font-size:0.75rem;">— trades opened since the X8 bot started, both strategies</span></h3>
   
   <p class="muted" style="font-size:0.8rem;margin:0 0 12px 0;">
-    Window = trades opened since <b>2026-09-21 19:37 UTC</b> (0.4 days ago; start taken from freqtrade bot_start_time).
+    Window = trades opened since <b>2026-09-21 19:37 UTC</b> (0.6 days ago; start taken from freqtrade bot_start_time).
     X7ML began this window with <b>2</b> older trade(s) still open, occupying slots X8 had free.
   </p>
-  <p class="warn-note">⚠️ Small sample: 0 (X7ML) and 0 (X8) closed trades — below 30, so differences here can easily be chance.</p>
+  <p class="warn-note">⚠️ Small sample: 1 (X7ML) and 1 (X8) closed trades — below 30, so differences here can easily be chance.</p>
   
   <div class="table-scroll">
   <table class="compare-table">
     <tr><th>Metric</th><th class="legend-x7">X7ML</th><th class="legend-x8">X8</th></tr>
-    <tr><td>Trades opened (in window)</td><td>0</td><td>0</td></tr><tr><td>Closed / open now</td><td>0 / 0</td><td>0 / 0</td></tr><tr><td>Win rate (closed)</td><td>—</td><td>—</td></tr><tr><td>Realized profit</td><td>+0.00 USDT</td><td>+0.00 USDT</td></tr><tr><td>Unrealized P/L (open)</td><td>+0.00 USDT</td><td>+0.00 USDT</td></tr><tr><td><b>True Total</b> (realized + unrealized)</td><td><b>+0.00 USDT</b></td><td><b>+0.00 USDT</b></td></tr><tr><td>True Total (% of dry-run wallet)</td><td>0.00%</td><td>0.00%</td></tr><tr><td>Return per capital-day (blended)</td><td>—</td><td>—</td></tr><tr><td>Avg profit / closed trade</td><td>—</td><td>—</td></tr><tr><td>Avg closed duration</td><td>—</td><td>—</td></tr><tr><td>Worst closed trade</td><td>—</td><td>—</td></tr><tr><td>Best closed trade</td><td>—</td><td>—</td></tr><tr><td>Open longer than 3d</td><td>0</td><td>0</td></tr><tr><td>Oldest open trade</td><td>—</td><td>—</td></tr><tr><td>Max drawdown (realized equity)</td><td>0.00 USDT</td><td>0.00 USDT</td></tr><tr><td>Avg DCA/rebuy fills per trade</td><td>—</td><td>—</td></tr>
+    <tr><td>Trades opened (in window)</td><td>1</td><td>1</td></tr><tr><td>Closed / open now</td><td>1 / 0</td><td>1 / 0</td></tr><tr><td>Win rate (closed)</td><td>100.00%</td><td>100.00%</td></tr><tr><td>Realized profit</td><td>+0.75 USDT</td><td class="edge">+0.79 USDT</td></tr><tr><td>Unrealized P/L (open)</td><td>+0.00 USDT</td><td>+0.00 USDT</td></tr><tr><td><b>True Total</b> (realized + unrealized)</td><td><b>+0.75 USDT</b></td><td class="edge"><b>+0.79 USDT</b></td></tr><tr><td>True Total (% of dry-run wallet)</td><td>+0.08%</td><td class="edge">+0.08%</td></tr><tr><td>Return per capital-day (blended)</td><td class="edge">31.6945%/day</td><td>26.1109%/day</td></tr><tr><td>Avg profit / closed trade</td><td>+2.42%</td><td class="edge">+2.54%</td></tr><tr><td>Avg closed duration</td><td>1.8h</td><td>2.4h</td></tr><tr><td>Worst closed trade</td><td>+2.42% <span class="muted">(NEAR/USDT)</span></td><td class="edge">+2.54% <span class="muted">(NEAR/USDT)</span></td></tr><tr><td>Best closed trade</td><td>+2.42% <span class="muted">(NEAR/USDT)</span></td><td>+2.54% <span class="muted">(NEAR/USDT)</span></td></tr><tr><td>Open longer than 3d</td><td>0</td><td>0</td></tr><tr><td>Oldest open trade</td><td>—</td><td>—</td></tr><tr><td>Max drawdown (realized equity)</td><td>0.00 USDT</td><td>0.00 USDT</td></tr><tr><td>Avg DCA/rebuy fills per trade</td><td>0.00</td><td>0.00</td></tr>
   </table>
   </div>
   <p class="muted" style="font-size:0.8rem;margin:10px 0 0 0;">
@@ -106,11 +106,56 @@
   <div class="chart-wrap"><canvas id="cmpEquity_spot"></canvas></div>
 </div>
 
-<div class="card"><h3>🔗 Signal Overlap — X7ML vs X8</h3><p class="muted">No entries in the window yet.</p></div>
+
+<div class="card">
+  <h3>🔗 Signal Overlap — X7ML vs X8 <span class="muted" style="font-weight:400;font-size:0.75rem;">— same pair + direction, opened within 15 min</span></h3>
+  <div class="grid" style="margin-bottom:0;">
+    <div class="stat-card"><div class="label">Matched entries</div>
+      <div class="value">1</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">100% of X7ML · 100% of X8</div></div>
+    <div class="stat-card"><div class="label">X7ML-only entries</div>
+      <div class="value">0</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">of 1 total</div></div>
+    <div class="stat-card"><div class="label">X8-only entries</div>
+      <div class="value">0</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">of 1 total</div></div>
+    <div class="stat-card"><div class="label">Same enter_tag too</div>
+      <div class="value">1 / 1</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">100% of matches</div></div>
+  </div>
+  
+    <p style="margin:12px 0 0 0;">On the <b>1</b> matched signals that both bots have already closed:
+      X7ML averaged <b>+2.42%</b>,
+      X8 averaged <b>+2.54%</b>
+      — same entry moment, different trade management.</p>
+  
+  <div class="table-scroll" style="margin-top:16px;"><table>
+    <tr><th>Pair</th><th>X7ML tag</th><th>X8 tag</th>
+        <th>X7ML opened</th><th>X8 opened</th><th>Gap</th>
+        <th>X7ML result</th><th>X8 result</th></tr>
+    <tr>
+              <td>NEAR/USDT</td>
+              <td>64  <span class="muted">(Rebuy)</span></td><td>64  <span class="muted">(Rebuy)</span></td>
+              <td>2026-09-22 06:50</td><td>2026-09-22 06:50</td>
+              <td>0.1m</td><td><span class="profit-pos">+2.42%</span></td><td><span class="profit-pos">+2.54%</span></td>
+            </tr>
+  </table></div>
+  <p class="muted" style="font-size:0.8rem;margin:12px 0 0 0;">A low match rate means the two strategies really do fire on different moments (or different pairs). 'Only' counts are entries with no counterpart on the other bot inside the window.</p>
+</div>
 
 <div class="two-col">
-  <div class="card"><h3>Entry tag families</h3><p class="muted">No trades in the window yet.</p></div>
-  <div class="card"><h3>Exit reasons (closed)</h3><p class="muted">No closed trades in the window yet.</p></div>
+  <div class="card"><h3>Entry tag families</h3>
+  <div class="table-scroll"><table class="compare-table">
+    <tr><th>Tag family</th><th class="legend-x7">X7ML opened</th><th class="legend-x7">avg closed</th>
+        <th class="legend-x8">X8 opened</th><th class="legend-x8">avg closed</th></tr>
+    <tr><td>Rebuy</td><td>1</td><td>+2.42%</td><td>1</td><td>+2.54%</td></tr>
+  </table></div>
+  <p class="muted" style="font-size:0.75rem;margin:8px 0 0 0;">Multi-condition tags (e.g. "41 61") are filed under their first tag.</p></div>
+  <div class="card"><h3>Exit reasons (closed)</h3>
+  <div class="table-scroll"><table class="compare-table">
+    <tr><th>Exit reason</th><th class="legend-x7">X7ML</th><th class="legend-x8">X8</th></tr>
+    <tr><td>exit_long_rebuy_d_2_42 ( 64 )</td><td>1</td><td>0</td></tr><tr><td>exit_profit_long_rebuy_t_2_1_m ( 64 )</td><td>0</td><td>1</td></tr>
+  </table></div></div>
 </div>
 
 
@@ -121,7 +166,7 @@
   <h3>Head to head <span class="muted" style="font-weight:400;font-size:0.75rem;">— trades opened since the X8 bot started, both strategies</span></h3>
   
   <p class="muted" style="font-size:0.8rem;margin:0 0 12px 0;">
-    Window = trades opened since <b>2026-09-21 19:40 UTC</b> (0.4 days ago; start taken from freqtrade bot_start_time).
+    Window = trades opened since <b>2026-09-21 19:40 UTC</b> (0.6 days ago; start taken from freqtrade bot_start_time).
     X7ML began this window with <b>1</b> older trade(s) still open, occupying slots X8 had free.
   </p>
   <p class="warn-note">⚠️ Small sample: 0 (X7ML) and 0 (X8) closed trades — below 30, so differences here can easily be chance.</p>
@@ -152,7 +197,27 @@
   <div class="card"><h3>Exit reasons (closed)</h3><p class="muted">No closed trades in the window yet.</p></div>
 </div>
 
-<div class="card"><h3>🔗 Signal Overlap — X8 Spot vs X8 Futures (long entries)</h3><p class="muted">No entries in the window yet.</p></div>
+
+<div class="card">
+  <h3>🔗 Signal Overlap — X8 Spot vs X8 Futures (long entries) <span class="muted" style="font-weight:400;font-size:0.75rem;">— same pair + direction, opened within 15 min</span></h3>
+  <div class="grid" style="margin-bottom:0;">
+    <div class="stat-card"><div class="label">Matched entries</div>
+      <div class="value">0</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of X8 spot · 0% of X8 futures</div></div>
+    <div class="stat-card"><div class="label">X8 spot-only entries</div>
+      <div class="value">1</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">of 1 total</div></div>
+    <div class="stat-card"><div class="label">X8 futures-only entries</div>
+      <div class="value">0</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">of 0 total</div></div>
+    <div class="stat-card"><div class="label">Same enter_tag too</div>
+      <div class="value">0 / 0</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of matches</div></div>
+  </div>
+  
+  
+  <p class="muted" style="font-size:0.8rem;margin:12px 0 0 0;">Futures-only short entries are excluded, since spot has no short side.</p>
+</div>
 
 <div id="x8-detail"></div>
 
@@ -161,10 +226,10 @@
 
 <div class="grid">
   <div class="stat-card"><div class="label">Open Trades</div><div class="value">0</div></div>
-  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">0</div></div>
-  <div class="stat-card"><div class="label">Win Rate</div><div class="value">0.0%</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">1</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
   <div class="stat-card"><div class="label">Total Profit (closed only)</div>
-    <div class="value profit-pos">+0.00 USDT</div>
+    <div class="value profit-pos">+0.79 USDT</div>
     <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
 </div>
 
@@ -174,7 +239,7 @@
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Realized Profit</div>
-          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="value profit-pos">+0.79 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
         </div>
         <div class="stat-card">
@@ -184,22 +249,22 @@
         </div>
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
-          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="value profit-pos">+0.79 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
         </div>
         <div class="stat-card">
           <div class="label">Stuck Trades</div>
           <div class="value ">0 / 0</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;2.0d</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;0.5d</div>
         </div>
       </div>
       <p style="margin-top:16px;margin-bottom:4px;">
-        Realized return per capital-day: <b>—</b>
-        
+        Realized return per capital-day: <b>26.1109%</b>
+        (≈ 9530.5%/yr if repeated — simple, non-compounded extrapolation)
       </p>
       <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>—</b>
-        
+        Blended return per capital-day (incl. unrealized): <b>26.1109%</b>
+        (≈ 9530.5%/yr equivalent)
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
@@ -245,7 +310,7 @@
 
         <div class="card">
           <h3>Statistical Significance</h3>
-          <p>⚠️ Only 0 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
+          <p>⚠️ Only 1 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
         </div>
 
 
@@ -263,7 +328,11 @@
 
     <div class="card">
       <h3>DCA / Rebuy Activity (open trades)</h3>
-      <p class="muted">Orders table not available/readable this run — skipped.</p>
+      <div class="table-scroll">
+      <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
+      <tr><td colspan="4" class="muted">No open trades</td></tr>
+      </table>
+      </div>
     </div>
 
 
@@ -283,7 +352,14 @@
   <div class="table-scroll">
   <table>
     <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
-    <tr><td colspan="5" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td>64  <span class="muted">(Rebuy)</span></td>
+          <td>1</td>
+          <td>100%</td>
+          <td class="profit-pos">+2.54%</td>
+          <td class="profit-pos">+2.54%</td>
+        </tr>
   </table>
   </div>
 </div>
@@ -293,17 +369,31 @@
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
-    <tr><td colspan="4" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td>NEAR/USDT</td>
+          <td>1</td>
+          <td>100%</td>
+          <td class="profit-pos">+2.54%</td>
+        </tr>
   </table>
   </div>
 </div>
 
 <div class="card">
-  <h3>Closed Trades (0)</h3>
+  <h3>Closed Trades (1)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
-    <tr><td colspan="6" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td>NEAR/USDT</td>
+          <td>64  <span class="muted">(Rebuy)</span></td>
+          <td>2026-09-22 06:50</td>
+          <td>2026-09-22 09:12</td>
+          <td class="profit-pos">+2.54%</td>
+          <td>exit_profit_long_rebuy_t_2_1_m ( 64 )</td>
+        </tr>
   </table>
   </div>
 </div>
@@ -474,9 +564,9 @@
 new Chart(document.getElementById('cmpEquity_spot'), {
   type: 'scatter',
   data: { datasets: [
-    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 10.04, "y": 0.0}], borderColor: '#d29922', backgroundColor: '#d29922',
+    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 13.05, "y": 0.75}, {"x": 15.02, "y": 0.75}], borderColor: '#d29922', backgroundColor: '#d29922',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 },
-    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 10.04, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
+    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 13.57, "y": 0.79}, {"x": 15.02, "y": 0.79}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 }
   ]},
   options: {
@@ -495,9 +585,9 @@ new Chart(document.getElementById('cmpEquity_spot'), {
 new Chart(document.getElementById('cmpEquity_futures'), {
   type: 'scatter',
   data: { datasets: [
-    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 10.0, "y": 0.0}], borderColor: '#d29922', backgroundColor: '#d29922',
+    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 14.98, "y": 0.0}], borderColor: '#d29922', backgroundColor: '#d29922',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 },
-    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 10.0, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
+    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 14.98, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 }
   ]},
   options: {
@@ -516,10 +606,10 @@ new Chart(document.getElementById('cmpEquity_futures'), {
 new Chart(document.getElementById('equityChart_spot_x8'), {
   type: 'line',
   data: {
-    labels: [],
+    labels: ["2026-09-22 09:12"],
     datasets: [{
       label: 'Cumulative profit %',
-      data: [],
+      data: [2.536],
       borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
       fill: true, tension: 0.2, pointRadius: 2
     }]
@@ -537,9 +627,9 @@ new Chart(document.getElementById('equityChart_spot_x8'), {
 new Chart(document.getElementById('reasonChart_spot_x8'), {
   type: 'doughnut',
   data: {
-    labels: [],
+    labels: ["exit_profit_long_rebuy_t_2_1_m ( 64 )"],
     datasets: [{
-      data: [],
+      data: [1],
       backgroundColor: ['#58a6ff','#3fb950','#f85149','#d29922','#a371f7','#39c5cf','#f778ba']
     }]
   },
@@ -553,17 +643,17 @@ new Chart(document.getElementById('reasonChart_spot_x8'), {
 new Chart(document.getElementById('trendChart_spot_x8'), {
   type: 'bar',
   data: {
-    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40"],
+    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0],
+        data: [0.0, 0.0, 0.0, 0.0, 0.79],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
@@ -623,17 +713,17 @@ new Chart(document.getElementById('reasonChart_futures_x8'), {
 new Chart(document.getElementById('trendChart_futures_x8'), {
   type: 'bar',
   data: {
-    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40"],
+    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0],
+        data: [0.0, 0.0, 0.0, 0.0, 0.0],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
