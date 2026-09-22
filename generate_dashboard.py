@@ -48,6 +48,20 @@ old (pair, enter_tag) key never matched across the two bots even when a
 trade was a perfect overlap. Every pair used in overlap matching now
 goes through normalize_pair() first, which strips that suffix.
 
+FIX (2026-09-21): unrealized P/L on open trades was computed as
+stake_amount * price-change%. In FUTURES mode stake_amount is the margin
+posted, not the position's notional value, so this understated
+unrealized P/L by the leverage factor (e.g. off by ~3x at the default 3x
+leverage) — and it ignored trade direction entirely, so open SHORTS had
+their P/L sign backwards (a falling price looked like a loss instead of
+a gain). Spot is unaffected (leverage 1x, no shorts), but futures'
+"Unrealized P/L", "True Total", and per-trade unrealized figures were
+wrong. Now computed as direction * (live_price - open_rate) * amount,
+where direction is -1 for shorts and +1 for longs — this is leverage-
+and direction-correct for both markets. Also added tag 68 (a valid
+Rebuy tag in upstream) to TAG_FAMILIES, and linked the new compare.html
+page (X7ML vs X8) from the header here.
+
 Usage:
     python generate_dashboard.py <spot_sqlite_path> <futures_sqlite_path> <history_sqlite_path> <output_html_path>
 """
@@ -748,7 +762,7 @@ def to_float(x, default=0.0):
 
 
 TAG_FAMILIES = [
-    (1, 13, "Normal"), (21, 26, "Pump"), (41, 53, "Quick"), (61, 65, "Rebuy"),
+    (1, 13, "Normal"), (21, 26, "Pump"), (41, 53, "Quick"), (61, 68, "Rebuy"),
     (81, 82, "High Profit"), (101, 110, "Rapid"), (120, 120, "Grind"), (121, 121, "BTC"),
     (141, 145, "Top Coins"), (161, 173, "Scalp"),
     (501, 513, "Short Normal"), (521, 526, "Short Pump"), (541, 553, "Short Quick"),
@@ -962,10 +976,17 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
 
         live = live_prices.get(t["pair"])
         if live and t["open_rate"]:
-            unreal_pct = (live - t["open_rate"]) / t["open_rate"]
-            unreal_abs = stake * unreal_pct
+            # FIX (2026-09-21): leverage- and direction-correct unrealized
+            # P/L. stake_amount is MARGIN in futures mode, not position
+            # notional, and it carries no sign for shorts — so this must
+            # be computed off amount (the actual position size) with an
+            # explicit direction flip for shorts, not stake * price-change%.
+            direction = -1.0 if t["is_short"] else 1.0
+            amount = to_float(t["amount"])
+            unreal_abs = direction * (live - t["open_rate"]) * amount
+            unreal_pct = (unreal_abs / stake) if stake else 0.0
             open_unrealized_abs_total += unreal_abs
-            unreal_cls = "profit-pos" if unreal_pct > 0 else "profit-neg"
+            unreal_cls = "profit-pos" if unreal_abs > 0 else "profit-neg"
             unreal_str = f'<span class="{unreal_cls}">{fmt_pct(unreal_pct)} ({unreal_abs:+.2f} USDT)</span>'
             live_str = f"{live:.6g}"
         else:
@@ -1378,6 +1399,7 @@ def build_combined_html(spot_bundle, futures_bundle, generated_at, signal_overla
 
 <h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
 <div class="subtitle">Generated {generated_at} UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
+<div class="subtitle"><a href="compare.html" style="color:var(--accent);">⚔️ X7ML vs X8 comparison page →</a></div>
 
 {comparison_html}
 
