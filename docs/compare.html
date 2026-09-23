@@ -66,7 +66,7 @@
 <body>
 
 <h1>⚔️ NostalgiaForInfinity — X7ML vs X8</h1>
-<div class="subtitle">Generated 2026-09-22 22:34:40 UTC · dry-run (simulated) — no real funds involved · all four bots on OKX</div>
+<div class="subtitle">Generated 2026-09-23 01:06:13 UTC · dry-run (simulated) — no real funds involved · all four bots on OKX</div>
 <div class="nav">
   <a href="index.html">← Main dashboard (X7ML)</a>
   <a href="#cmp-spot">Spot comparison</a>
@@ -82,7 +82,7 @@
   <h3>Head to head <span class="muted" style="font-weight:400;font-size:0.75rem;">— trades opened since the X8 bot started, both strategies</span></h3>
   
   <p class="muted" style="font-size:0.8rem;margin:0 0 12px 0;">
-    Window = trades opened since <b>2026-09-21 19:37 UTC</b> (1.1 days ago; start taken from freqtrade bot_start_time).
+    Window = trades opened since <b>2026-09-21 19:37 UTC</b> (1.2 days ago; start taken from freqtrade bot_start_time).
     X7ML began this window with <b>2</b> older trade(s) still open, occupying slots X8 had free.
   </p>
   <p class="warn-note">⚠️ Small sample: 1 (X7ML) and 1 (X8) closed trades — below 30, so differences here can easily be chance.</p>
@@ -166,7 +166,7 @@
   <h3>Head to head <span class="muted" style="font-weight:400;font-size:0.75rem;">— trades opened since the X8 bot started, both strategies</span></h3>
   
   <p class="muted" style="font-size:0.8rem;margin:0 0 12px 0;">
-    Window = trades opened since <b>2026-09-21 19:40 UTC</b> (1.1 days ago; start taken from freqtrade bot_start_time).
+    Window = trades opened since <b>2026-09-21 19:40 UTC</b> (1.2 days ago; start taken from freqtrade bot_start_time).
     X7ML began this window with <b>1</b> older trade(s) still open, occupying slots X8 had free.
   </p>
   <p class="warn-note">⚠️ Small sample: 0 (X7ML) and 0 (X8) closed trades — below 30, so differences here can easily be chance.</p>
@@ -564,9 +564,9 @@
 new Chart(document.getElementById('cmpEquity_spot'), {
   type: 'scatter',
   data: { datasets: [
-    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 13.05, "y": 0.75}, {"x": 26.95, "y": 0.75}], borderColor: '#d29922', backgroundColor: '#d29922',
+    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 13.05, "y": 0.75}, {"x": 29.47, "y": 0.75}], borderColor: '#d29922', backgroundColor: '#d29922',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 },
-    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 13.57, "y": 0.79}, {"x": 26.95, "y": 0.79}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
+    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 13.57, "y": 0.79}, {"x": 29.47, "y": 0.79}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 }
   ]},
   options: {
@@ -585,9 +585,9 @@ new Chart(document.getElementById('cmpEquity_spot'), {
 new Chart(document.getElementById('cmpEquity_futures'), {
   type: 'scatter',
   data: { datasets: [
-    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 26.91, "y": 0.0}], borderColor: '#d29922', backgroundColor: '#d29922',
+    { label: 'X7ML', data: [{"x": 0.0, "y": 0.0}, {"x": 29.44, "y": 0.0}], borderColor: '#d29922', backgroundColor: '#d29922',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 },
-    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 26.91, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
+    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 29.44, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 }
   ]},
   options: {
@@ -643,17 +643,17 @@ new Chart(document.getElementById('reasonChart_spot_x8'), {
 new Chart(document.getElementById('trendChart_spot_x8'), {
   type: 'bar',
   data: {
-    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:26", "09-22 22:34"],
+    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:26", "09-22 22:34", "09-23 01:06"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0, 0.79, 0.79, 0.79, 0.79],
+        data: [0.0, 0.0, 0.0, 0.0, 0.79, 0.79, 0.79, 0.79, 0.79],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
@@ -713,17 +713,17 @@ new Chart(document.getElementById('reasonChart_futures_x8'), {
 new Chart(document.getElementById('trendChart_futures_x8'), {
   type: 'bar',
   data: {
-    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:26", "09-22 22:34"],
+    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:26", "09-22 22:34", "09-23 01:06"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(248,81,73,0.35)', order: 2
       }
     ]
