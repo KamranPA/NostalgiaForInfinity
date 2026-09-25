@@ -363,14 +363,14 @@ def build_ml_readiness_html(readiness: dict):
     health_rows = ""
     for key, pct in readiness["feature_health"].items():
         if pct is None:
-            health_rows += f'<tr><td>{key}</td><td class="profit-neg">MISSING COLUMN</td></tr>'
+            health_rows += f'<tr><td data-label="Feature">{key}</td><td data-label="Coverage" class="profit-neg">MISSING COLUMN</td></tr>'
         else:
             cls = "profit-pos" if pct >= 95 else ("profit-neg" if pct < 50 else "")
-            health_rows += f'<tr><td>{key}</td><td class="{cls}">{pct:.0f}%</td></tr>'
+            health_rows += f'<tr><td data-label="Feature">{key}</td><td data-label="Coverage" class="{cls}">{pct:.0f}%</td></tr>'
 
     tag_rows = ""
     for tag, n_closed_tag, n_total in readiness["per_tag"][:12]:
-        tag_rows += f'<tr><td>{esc(str(tag))}</td><td>{n_closed_tag}/{n_total}</td></tr>'
+        tag_rows += f'<tr><td data-label="Tag">{esc(str(tag))}</td><td data-label="Closed/Total">{n_closed_tag}/{n_total}</td></tr>'
 
     return f"""
     <div class="card">
@@ -499,9 +499,9 @@ def build_signal_overlap_html(overlap: dict):
     rows = ""
     for pair, tag, s_date, f_date, gap in overlap["matched_pairs"][:15]:
         rows += f"""<tr>
-          <td>{esc(pair)}</td><td>{fmt_tag(tag)}</td>
-          <td>{fmt_dt(s_date)}</td><td>{fmt_dt(f_date)}</td>
-          <td>{gap/60:.1f}m</td>
+          <td data-label="Pair">{esc(pair)}</td><td data-label="Tag">{fmt_tag(tag)}</td>
+          <td data-label="Spot Opened">{fmt_dt(s_date)}</td><td data-label="Futures Opened">{fmt_dt(f_date)}</td>
+          <td data-label="Gap">{gap/60:.1f}m</td>
         </tr>"""
 
     return f"""
@@ -587,7 +587,7 @@ def build_time_clustering_html(open_trades):
     ]
     tight = [g for g in gaps_hours if g < 6]
 
-    rows = "".join(f"<tr><td>{esc(pair)}</td><td>{fmt_dt(d)}</td></tr>" for pair, d in dated)
+    rows = "".join(f'<tr><td data-label="Pair">{esc(pair)}</td><td data-label="Opened">{fmt_dt(d)}</td></tr>' for pair, d in dated)
 
     if tight:
         note = (f"{len(tight)} gap(s) under 6h — suggests a cluster of entries fired off the same "
@@ -620,7 +620,7 @@ def build_dca_activity_html(open_trades, fills_by_trade):
             "still on original entry; rebuy logic hasn't triggered yet"
             if n_extra == 0 else ""
         )
-        rows += f"<tr><td>{esc(t['pair'])}</td><td>{len(fills)}</td><td>{n_extra}</td><td class=\"muted\">{note}</td></tr>"
+        rows += f"<tr><td data-label=\"Pair\">{esc(t['pair'])}</td><td data-label=\"Entry Fills\">{len(fills)}</td><td data-label=\"Extra DCA/Rebuy\">{n_extra}</td><td class=\"muted\">{note}</td></tr>"
 
     return f"""
     <div class="card">
@@ -904,6 +904,38 @@ PAGE_STYLES = """
   .chart-wrap { position: relative; height: 280px; }
   .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
   @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } .topbar nav { display: none; } }
+  @media (max-width: 600px) {
+    .topbar { padding: 0 14px; gap: 10px; }
+    .topbar .gen-time { display: none; }
+    .topbar .brand { font-size: 0.95rem; }
+    .topbar .compare-link { flex-shrink: 0; padding: 6px 10px; font-size: 0.78rem; }
+    main { padding: 16px 14px 40px; }
+
+    /* Stacked "card" tables instead of horizontal scrolling: each row
+       becomes a small block, each cell a label:value line using the
+       data-label attribute set on every <td> above. */
+    .table-scroll { overflow-x: visible; }
+    table { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    table thead { display: none; }
+    table, tbody, tr, td { display: block; width: 100%; }
+    tr { border-bottom: 1px solid var(--border); padding: 10px 12px; }
+    tr:last-child { border-bottom: none; }
+    td {
+      border: none; padding: 4px 0; display: flex;
+      justify-content: space-between; align-items: baseline; gap: 14px;
+      text-align: right;
+    }
+    td::before {
+      content: attr(data-label); color: var(--muted); font-size: 0.7rem;
+      flex-shrink: 0; text-align: left;
+    }
+    /* the comparison table's first column is the row's own heading, not
+       a labeled value — render it full-width and bold instead */
+    table.compare-table td:first-child {
+      display: block; text-align: left; font-weight: 600; color: var(--text);
+      padding-bottom: 6px; font-size: 0.82rem;
+    }
+  }
   .table-scroll { overflow-x: auto; }
   .compare-table td:not(:first-child), .compare-table th:not(:first-child) { text-align: right; }
 """
@@ -1046,15 +1078,15 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
 
         open_rows_html += f"""
         <tr>
-          <td>{esc(t['pair'])}</td>
-          <td>{fmt_tag(t['enter_tag'])}</td>
-          <td>{fmt_dt(t['open_date'])}</td>
-          <td>{age_str}{stuck_badge}</td>
-          <td>{rebuy_str}</td>
-          <td>{stake:.2f} USDT</td>
-          <td>{t['open_rate']:.6g}</td>
-          <td>{live_str}</td>
-          <td>{unreal_str}</td>
+          <td data-label="Pair">{esc(t['pair'])}</td>
+          <td data-label="Enter Tag">{fmt_tag(t['enter_tag'])}</td>
+          <td data-label="Opened">{fmt_dt(t['open_date'])}</td>
+          <td data-label="Age">{age_str}{stuck_badge}</td>
+          <td data-label="Rebuys">{rebuy_str}</td>
+          <td data-label="Capital Locked">{stake:.2f} USDT</td>
+          <td data-label="Open Rate">{t['open_rate']:.6g}</td>
+          <td data-label="Live Price">{live_str}</td>
+          <td data-label="Unrealized P/L">{unreal_str}</td>
         </tr>"""
 
     true_total_abs = realized_abs + open_unrealized_abs_total
@@ -1158,12 +1190,12 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
         cls = "profit-pos" if (profit or 0) > 0 else "profit-neg"
         closed_rows_html += f"""
         <tr>
-          <td>{esc(t['pair'])}</td>
-          <td>{fmt_tag(t['enter_tag'])}</td>
-          <td>{fmt_dt(t['open_date'])}</td>
-          <td>{fmt_dt(t['close_date'])}</td>
-          <td class="{cls}">{fmt_pct(profit)}</td>
-          <td>{esc(t['exit_reason'])}</td>
+          <td data-label="Pair">{esc(t['pair'])}</td>
+          <td data-label="Enter Tag">{fmt_tag(t['enter_tag'])}</td>
+          <td data-label="Opened">{fmt_dt(t['open_date'])}</td>
+          <td data-label="Closed">{fmt_dt(t['close_date'])}</td>
+          <td data-label="Profit" class="{cls}">{fmt_pct(profit)}</td>
+          <td data-label="Exit Reason">{esc(t['exit_reason'])}</td>
         </tr>"""
 
     pair_rows_html = ""
@@ -1171,10 +1203,10 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
         cls = "profit-pos" if avg > 0 else "profit-neg"
         pair_rows_html += f"""
         <tr>
-          <td>{esc(pair)}</td>
-          <td>{cnt}</td>
-          <td>{wr*100:.0f}%</td>
-          <td class="{cls}">{fmt_pct(avg)}</td>
+          <td data-label="Pair">{esc(pair)}</td>
+          <td data-label="Trades">{cnt}</td>
+          <td data-label="Win Rate">{wr*100:.0f}%</td>
+          <td data-label="Avg Profit" class="{cls}">{fmt_pct(avg)}</td>
         </tr>"""
 
     tag_rows_html = ""
@@ -1183,11 +1215,11 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
         in_use_badge = ' <span class="stuck-badge" style="background:rgba(209,163,80,0.15);color:var(--accent);border-color:rgba(209,163,80,0.35);">open now</span>' if in_use else ""
         tag_rows_html += f"""
         <tr>
-          <td>{fmt_tag(tag)}{in_use_badge}</td>
-          <td>{cnt}</td>
-          <td>{wr*100:.0f}%</td>
-          <td class="{cls}">{fmt_pct(avg)}</td>
-          <td class="{cls}">{fmt_pct(total, signed=True)}</td>
+          <td data-label="Enter Tag">{fmt_tag(tag)}{in_use_badge}</td>
+          <td data-label="Trades">{cnt}</td>
+          <td data-label="Win Rate">{wr*100:.0f}%</td>
+          <td data-label="Avg Profit" class="{cls}">{fmt_pct(avg)}</td>
+          <td data-label="Total Profit" class="{cls}">{fmt_pct(total, signed=True)}</td>
         </tr>"""
 
     total_profit_abs = sum(float(t["close_profit_abs"] or 0) for t in closed_with_profit)
@@ -1380,8 +1412,11 @@ new Chart(document.getElementById('{trend_id}'), {{
 
 
 def build_comparison_bar_html(spot_compare, futures_compare):
+    spot_label = esc(spot_compare["mode_title"])
+    fut_label = esc(futures_compare["mode_title"])
+
     def row(label, spot_val, fut_val):
-        return f"<tr><td>{label}</td><td>{spot_val}</td><td>{fut_val}</td></tr>"
+        return f'<tr><td>{label}</td><td data-label="{spot_label}">{spot_val}</td><td data-label="{fut_label}">{fut_val}</td></tr>'
 
     def blended_str(c):
         r = c["blended_rate_per_capital_day"]
