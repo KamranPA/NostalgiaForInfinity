@@ -62,6 +62,12 @@ and direction-correct for both markets. Also added tag 68 (a valid
 Rebuy tag in upstream) to TAG_FAMILIES, and linked the new compare.html
 page (X7ML vs X8) from the header here.
 
+VISUAL REFRESH (2026-09-24): restyled as a trading-terminal look
+(condensed ticker strip for headline stats, tabular-figure numerals for
+all numeric columns, sticky table headers, a real top nav instead of a
+plain subtitle line) instead of the generic dark-SaaS/GitHub-clone look
+the page started with. Purely CSS/markup — no computation logic changed.
+
 Usage:
     python generate_dashboard.py <spot_sqlite_path> <futures_sqlite_path> <history_sqlite_path> <output_html_path>
 """
@@ -339,7 +345,7 @@ def build_ml_readiness_html(readiness: dict):
     if not readiness["available"]:
         return """
     <div class="card">
-      <h3>🧠 ML Data Readiness</h3>
+      <h3>ML Data Readiness</h3>
       <p class="muted">No entry_context rows yet — this means no trade has opened since the
       strategy's ml_snapshot logging was deployed. Data starts accumulating from the next
       new trade onward; existing trades from before the change won't have it retroactively.</p>
@@ -368,7 +374,7 @@ def build_ml_readiness_html(readiness: dict):
 
     return f"""
     <div class="card">
-      <h3>🧠 ML Data Readiness <span class="muted" style="font-weight:400;font-size:0.75rem;">— labeled feature data logged via entry_context/ml_snapshot custom_data</span></h3>
+      <h3>ML Data Readiness <span class="muted" style="font-weight:400;font-size:0.75rem;">— labeled feature data logged via entry_context/ml_snapshot custom_data</span></h3>
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Trades With Logged Features</div>
@@ -483,7 +489,7 @@ def build_signal_overlap_html(overlap: dict):
     if n_spot == 0 and n_fut == 0:
         return """
 <div class="card">
-  <h3>🔗 Signal Overlap — Spot vs Futures (long entries)</h3>
+  <h3>Signal Overlap — Spot vs Futures (long entries)</h3>
   <p class="muted">No long entries on either bot yet — nothing to compare.</p>
 </div>"""
 
@@ -500,7 +506,7 @@ def build_signal_overlap_html(overlap: dict):
 
     return f"""
 <div class="card">
-  <h3>🔗 Signal Overlap — Spot vs Futures (long entries) <span class="muted" style="font-weight:400;font-size:0.75rem;">— same pair + enter_tag, opened within {overlap['window_minutes']} min of each other</span></h3>
+  <h3>Signal Overlap — Spot vs Futures (long entries) <span class="muted" style="font-weight:400;font-size:0.75rem;">— same pair + enter_tag, opened within {overlap['window_minutes']} min of each other</span></h3>
   <div class="grid" style="margin-bottom:0;">
     <div class="stat-card">
       <div class="label">Spot Long Entries Matched</div>
@@ -820,46 +826,84 @@ def annualized(rate_per_day):
 
 PAGE_STYLES = """
   :root {
-    --bg: #0d1117; --card: #161b22; --border: #30363d;
-    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
-    --pos: #3fb950; --neg: #f85149;
+    --bg: #0b0c10; --bg-raised: #131620; --card: #131620; --border: #232838;
+    --text: #dfe2ea; --muted: #838aa0; --accent: #d1a350; --accent-dim: #8a7040;
+    --pos: #4fae7a; --neg: #d9645a; --pos-soft: rgba(79,174,122,0.12); --neg-soft: rgba(217,100,90,0.12);
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 64px; }
   body {
     background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    margin: 0; padding: 24px; line-height: 1.5;
+    font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 0; line-height: 1.5; font-size: 15px;
   }
-  h1 { font-size: 1.5rem; margin-bottom: 4px; }
-  h2.market-heading { font-size: 1.25rem; margin: 40px 0 4px 0; padding-top: 24px; border-top: 1px solid var(--border); }
-  .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 24px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
-  .stat-card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-    padding: 16px;
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 48px; }
+
+  /* ---- top bar ------------------------------------------------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 20px;
+    background: rgba(11,12,16,0.92); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px; height: 56px;
   }
-  .stat-card .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
-  .stat-card .value { font-size: 1.6rem; font-weight: 600; margin-top: 4px; }
+  .topbar .brand { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; white-space: nowrap; }
+  .topbar .brand span { color: var(--accent); }
+  .topbar nav { display: flex; gap: 4px; flex: 1; }
+  .topbar nav a {
+    color: var(--muted); text-decoration: none; font-size: 0.85rem;
+    padding: 6px 12px; border-radius: 6px; transition: color .15s, background .15s;
+  }
+  .topbar nav a:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .topbar .gen-time { color: var(--muted); font-size: 0.75rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .topbar .compare-link {
+    color: var(--bg); background: var(--accent); font-weight: 600;
+    padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .topbar .compare-link:hover { background: #e0b566; }
+
+  .disclaimer {
+    color: var(--muted); font-size: 0.78rem; padding: 10px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 28px;
+  }
+
+  h2.market-heading {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 600;
+    font-size: 1.3rem; margin: 0 0 2px 0; padding-top: 40px; letter-spacing: -0.01em;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2.market-heading .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  h2.market-heading.mode-spot .dot { background: #4fae7a; }
+  h2.market-heading.mode-futures .dot { background: #7c8fd6; }
+  .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+
+  /* ---- ticker strip (headline stats) ---------------------------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; margin-bottom: 24px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .stat-card { background: var(--bg-raised); padding: 14px 16px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .grid .stat-card:last-child { border-right: none; }
+  .stat-card .label { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.02em; }
+  .stat-card .value { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
   .card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-    padding: 20px; margin-bottom: 24px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; margin-bottom: 20px;
   }
-  .card h3 { margin-top: 0; font-size: 1.05rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.03em; }
-  tr:hover { background: rgba(255,255,255,0.02); }
+  .card h3 { margin-top: 0; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 0.72rem; letter-spacing: 0.02em; position: sticky; top: 56px; background: var(--card); }
+  tr:hover td { background: rgba(255,255,255,0.025); }
   .profit-pos { color: var(--pos); font-weight: 600; }
   .profit-neg { color: var(--neg); font-weight: 600; }
   .muted { color: var(--muted); }
   .stuck-badge {
-    display: inline-block; background: rgba(248,81,73,0.15); color: var(--neg);
-    border: 1px solid rgba(248,81,73,0.35); border-radius: 4px;
-    font-size: 0.7rem; padding: 1px 6px; margin-left: 4px; white-space: nowrap;
+    display: inline-block; background: var(--neg-soft); color: var(--neg);
+    border: 1px solid rgba(217,100,90,0.3); border-radius: 4px;
+    font-size: 0.68rem; padding: 1px 6px; margin-left: 4px; white-space: nowrap;
   }
-  .chart-wrap { position: relative; height: 300px; }
-  .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
-  @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+  .chart-wrap { position: relative; height: 280px; }
+  .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+  @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } .topbar nav { display: none; } }
   .table-scroll { overflow-x: auto; }
   .compare-table td:not(:first-child), .compare-table th:not(:first-child) { text-align: right; }
 """
@@ -926,7 +970,7 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
         sig_html = f"""
         <div class="card">
           <h3>Statistical Significance</h3>
-          <p>⚠️ Only {n} closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
+          <p>Only {n} closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
         </div>"""
 
     closed_capital_days = 0.0
@@ -994,7 +1038,7 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
             live_str = '<span class="muted">—</span>'
 
         age_str = f"{age_days:.1f}d"
-        stuck_badge = ' <span class="stuck-badge" title="Open far longer than this strategy\'s typical hold time">🐌 stuck</span>' if is_stuck else ""
+        stuck_badge = ' <span class="stuck-badge" title="Open far longer than this strategy\'s typical hold time">stuck</span>' if is_stuck else ""
 
         n_entry_fills = len(fills) if fills else 1
         n_rebuys = max(n_entry_fills - 1, 0)
@@ -1136,7 +1180,7 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
     tag_rows_html = ""
     for tag, cnt, wr, avg, total, in_use in tag_rows:
         cls = "profit-pos" if avg > 0 else "profit-neg"
-        in_use_badge = ' <span class="stuck-badge" style="background:rgba(88,166,255,0.15);color:#58a6ff;border-color:rgba(88,166,255,0.35);">● open now</span>' if in_use else ""
+        in_use_badge = ' <span class="stuck-badge" style="background:rgba(209,163,80,0.15);color:var(--accent);border-color:rgba(209,163,80,0.35);">open now</span>' if in_use else ""
         tag_rows_html += f"""
         <tr>
           <td>{fmt_tag(tag)}{in_use_badge}</td>
@@ -1157,8 +1201,10 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
     dca_activity_html = build_dca_activity_html(open_trades, fills_by_trade)
     ml_readiness_html = build_ml_readiness_html(ml_readiness)
 
+    heading_cls = "mode-spot" if mode_id == "spot" else "mode-futures"
+
     section_html = f"""
-<h2 class="market-heading">{mode_title}</h2>
+<h2 class="market-heading {heading_cls}" id="{mode_id}"><span class="dot"></span>{mode_title}</h2>
 <div class="subtitle">{market_note}</div>
 
 <div class="grid">
@@ -1211,7 +1257,7 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
 </div>
 
 <div class="card">
-  <h3>Tag Family Performance (closed trades) <span class="muted" style="font-weight:400;font-size:0.75rem;">— ● open now marks a tag currently held by an open trade</span></h3>
+  <h3>Tag Family Performance (closed trades) <span class="muted" style="font-weight:400;font-size:0.75rem;">— "open now" marks a tag currently held by an open trade</span></h3>
   <div class="table-scroll">
   <table>
     <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
@@ -1242,6 +1288,7 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
 """
 
     section_js = f"""
+Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
 new Chart(document.getElementById('{eq_id}'), {{
   type: 'line',
   data: {{
@@ -1249,17 +1296,17 @@ new Chart(document.getElementById('{eq_id}'), {{
     datasets: [{{
       label: 'Cumulative profit %',
       data: {json.dumps(equity_values)},
-      borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
+      borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
       fill: true, tension: 0.2, pointRadius: 2
     }}]
   }},
   options: {{
     responsive: true, maintainAspectRatio: false,
     scales: {{
-      x: {{ ticks: {{ color: '#8b949e', maxTicksLimit: 8 }}, grid: {{ color: '#30363d' }} }},
-      y: {{ ticks: {{ color: '#8b949e' }}, grid: {{ color: '#30363d' }} }}
+      x: {{ ticks: {{ color: '#838aa0', maxTicksLimit: 8 }}, grid: {{ color: '#232838' }} }},
+      y: {{ ticks: {{ color: '#838aa0' }}, grid: {{ color: '#232838' }} }}
     }},
-    plugins: {{ legend: {{ labels: {{ color: '#c9d1d9' }} }} }}
+    plugins: {{ legend: {{ labels: {{ color: '#dfe2ea' }} }} }}
   }}
 }});
 
@@ -1269,12 +1316,12 @@ new Chart(document.getElementById('{reason_id}'), {{
     labels: {json.dumps(reason_labels)},
     datasets: [{{
       data: {json.dumps(reason_values)},
-      backgroundColor: ['#58a6ff','#3fb950','#f85149','#d29922','#a371f7','#39c5cf','#f778ba']
+      backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
     }}]
   }},
   options: {{
     responsive: true, maintainAspectRatio: false,
-    plugins: {{ legend: {{ position: 'bottom', labels: {{ color: '#c9d1d9', font: {{ size: 10 }} }} }} }}
+    plugins: {{ legend: {{ position: 'bottom', labels: {{ color: '#dfe2ea', font: {{ size: 10 }} }} }} }}
   }}
 }});
 
@@ -1287,26 +1334,26 @@ new Chart(document.getElementById('{trend_id}'), {{
       {{
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
         data: {json.dumps(trend_true_total)},
-        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)',
+        borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       }},
       {{
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
         data: {json.dumps(trend_stuck)},
-        backgroundColor: 'rgba(248,81,73,0.35)', order: 2
+        backgroundColor: 'rgba(217,100,90,0.35)', order: 2
       }}
     ]
   }},
   options: {{
     responsive: true, maintainAspectRatio: false,
     scales: {{
-      x: {{ ticks: {{ color: '#8b949e', maxTicksLimit: 8 }}, grid: {{ color: '#30363d' }} }},
-      y: {{ position: 'left', ticks: {{ color: '#8b949e' }}, grid: {{ color: '#30363d' }},
-           title: {{ display: true, text: 'USDT', color: '#8b949e' }} }},
-      y1: {{ position: 'right', ticks: {{ color: '#8b949e', stepSize: 1 }}, grid: {{ display: false }},
-            title: {{ display: true, text: 'Stuck Trades', color: '#8b949e' }} }}
+      x: {{ ticks: {{ color: '#838aa0', maxTicksLimit: 8 }}, grid: {{ color: '#232838' }} }},
+      y: {{ position: 'left', ticks: {{ color: '#838aa0' }}, grid: {{ color: '#232838' }},
+           title: {{ display: true, text: 'USDT', color: '#838aa0' }} }},
+      y1: {{ position: 'right', ticks: {{ color: '#838aa0', stepSize: 1 }}, grid: {{ display: false }},
+            title: {{ display: true, text: 'Stuck Trades', color: '#838aa0' }} }}
     }},
-    plugins: {{ legend: {{ labels: {{ color: '#c9d1d9' }} }} }}
+    plugins: {{ legend: {{ labels: {{ color: '#dfe2ea' }} }} }}
   }}
 }});
 ''' if has_trend_history else ''}
@@ -1366,7 +1413,7 @@ def build_comparison_bar_html(spot_compare, futures_compare):
 
     return f"""
 <div class="card">
-  <h3>⚖️ Spot vs Futures — Quick Comparison</h3>
+  <h3>Spot vs Futures — Quick Comparison</h3>
   <div class="table-scroll">
   <table class="compare-table">
     <tr><th>Metric</th><th>{esc(spot_compare['mode_title'])}</th><th>{esc(futures_compare['mode_title'])}</th></tr>
@@ -1390,6 +1437,9 @@ def build_combined_html(spot_bundle, futures_bundle, generated_at, signal_overla
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NFI Dry-Run Dashboard — Spot vs Futures</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 {PAGE_STYLES}
@@ -1397,9 +1447,18 @@ def build_combined_html(spot_bundle, futures_bundle, generated_at, signal_overla
 </head>
 <body>
 
-<h1>🤖 NostalgiaForInfinity — Dry-Run Dashboard</h1>
-<div class="subtitle">Generated {generated_at} UTC · dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
-<div class="subtitle"><a href="compare.html" style="color:var(--accent);">⚔️ X7ML vs X8 comparison page →</a></div>
+<div class="topbar">
+  <div class="brand">NFI <span>dry-run</span></div>
+  <nav>
+    <a href="#spot">Spot</a>
+    <a href="#futures">Futures</a>
+  </nav>
+  <span class="gen-time">generated {generated_at} UTC</span>
+  <a class="compare-link" href="compare.html">X7ML vs X8 →</a>
+</div>
+
+<main>
+<div class="disclaimer">Dry-run (simulated) — no real funds involved · Spot: KuCoin market data · Futures: OKX market data</div>
 
 {comparison_html}
 
@@ -1410,8 +1469,9 @@ def build_combined_html(spot_bundle, futures_bundle, generated_at, signal_overla
 {futures_bundle['section_html']}
 
 <div class="subtitle">
-  ⚠️ Small sample sizes can look great or terrible by chance. Entries cancelled before filling (limit-order timeouts) aren't counted here — only trades that actually opened.
+  Small sample sizes can look great or terrible by chance. Entries cancelled before filling (limit-order timeouts) aren't counted here — only trades that actually opened.
 </div>
+</main>
 
 <script>
 {spot_bundle['section_js']}
@@ -1464,13 +1524,13 @@ def build_one_mode(sqlite_path, history_db_path, mode_id, mode_title, market_not
 
 def main(spot_sqlite_path: str, futures_sqlite_path: str, history_db_path: str, output_path: str):
     spot_bundle = build_one_mode(
-        spot_sqlite_path, history_db_path, "spot", "🟢 SPOT — OKX",
+        spot_sqlite_path, history_db_path, "spot", "SPOT — OKX",
         "OKX spot market · no leverage",
         "config_dryrun_telegram.json",
         live_price_exchange_id="okx", live_price_ccxt_options=None,
     )
     futures_bundle = build_one_mode(
-        futures_sqlite_path, history_db_path, "futures", "🟣 FUTURES — OKX",
+        futures_sqlite_path, history_db_path, "futures", "FUTURES — OKX",
         "OKX perpetual swaps · isolated margin · 3x leverage (default)",
         "config_dryrun_futures.json",
         live_price_exchange_id="okx", live_price_ccxt_options={"defaultType": "swap"},
