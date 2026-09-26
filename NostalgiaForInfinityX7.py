@@ -71,7 +71,7 @@ class NostalgiaForInfinityX7(IStrategy):
   INTERFACE_VERSION = 3
 
   def version(self) -> str:
-    return "v17.5.116"
+    return "v17.5.118"
 
   stoploss = -0.99
 
@@ -23004,6 +23004,8 @@ class NostalgiaForInfinityX7(IStrategy):
             & ((rsi_3_1d_gt_40) | (aroonu_14_15m_lt_100) | (aroonu_14_1d_lt_100))
             # 1d down move, 15m & 1h & 4h high
             & ((rsi_3_1d_gt_45) | (aroonu_14_15m_lt_90) | (aroonu_14_1h_lt_100) | (aroonu_14_4h_lt_100))
+            # 1d down move, 1h high, 1d high & overbought
+            & ((rsi_3_1d_gt_50) | (aroonu_14_1h_lt_80) | (aroonu_14_1d_lt_80) | (roc_9_1d_lt_40))
             # 1d down move, 15m high, 1d high & overbought
             & ((rsi_3_1d_gt_60) | (aroonu_14_15m_lt_100) | (aroonu_14_1d_lt_100) | (roc_9_1d_lt_40))
             # 1d down move, 15m high, 1h overbought
@@ -24674,6 +24676,8 @@ class NostalgiaForInfinityX7(IStrategy):
             & ((rsi_3_1h_gt_5) | (rsi_3_4h_gt_10) | (roc_9_4h_gt_neg_10))
             # 1h & 4h down move, 15m high
             & ((rsi_3_1h_gt_5) | (rsi_3_4h_gt_25) | (stochrsi_k_15m_lt_60))
+            # 1h & 4h & 1d down move, 4h still not low enough, 1d still high
+            & ((rsi_3_1h_gt_5) | (rsi_3_4h_gt_45) | (rsi_3_1d_gt_50) | (aroonu_14_4h_lt_30) | (aroonu_14_1d_lt_40))
             # 1h & 4h down move, 1d still high
             & ((rsi_3_1h_gt_10) | (rsi_3_4h_gt_10) | (aroonu_14_1d_lt_50))
             # 1h & 4h down move, 15m still high
@@ -25163,6 +25167,8 @@ class NostalgiaForInfinityX7(IStrategy):
             & ((rsi_3_1h_gt_5) | (rsi_3_4h_gt_20) | (rsi_3_1d_gt_25))
             # 1h & 4h down move, 15m high
             & ((rsi_3_1h_gt_5) | (rsi_3_4h_gt_25) | (stochrsi_k_15m_lt_60))
+            # 1h & 4h & 1d down move, 4h still not low enough, 1d still high
+            & ((rsi_3_1h_gt_5) | (rsi_3_4h_gt_45) | (rsi_3_1d_gt_50) | (aroonu_14_4h_lt_30) | (aroonu_14_1d_lt_40))
             # 1h & 4h & 1d down move
             & ((rsi_3_1h_gt_10) | (rsi_3_4h_gt_10) | (rsi_3_1d_gt_15))
             # 1h & 4h down move, 1d still not low enough
