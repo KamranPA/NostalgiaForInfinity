@@ -26,6 +26,16 @@ name: Sync Repo from Upstream (auto)
 # still under active development upstream, so its behavior can shift
 # mid-comparison — note the sync dates when comparing X8 against X7ML.
 #
+# STRATEGY-FILE ALERT (added): NostalgiaForInfinityX7.py and
+# NostalgiaForInfinityX8.py are exactly the two files that actually drive
+# live trade logic (entry/exit conditions, DCA/rebuy, stops, position
+# sizing) — everything else the sync touches (docs, CI templates, etc.)
+# doesn't change what the bots do. So whenever either of these two is
+# among today's changed files, a SEPARATE, more insistent Telegram
+# message is sent (in addition to the normal "synced N files" notice)
+# specifically calling them out, so they don't get lost in a routine
+# multi-file sync notice and actually get reviewed.
+#
 # WHEN YOU ADD A NEW CUSTOM FILE: it must be added in TWO places below —
 # the rsync exclude list (so it isn't overwritten) AND the `git add`
 # pathspec in the commit step (so it isn't staged/committed by the sync).
@@ -106,6 +116,22 @@ jobs:
             echo "$CHANGED_FILES"
           fi
 
+          # Which of the two live-logic strategy files (if any) changed —
+          # feeds the dedicated alert step below. Exact-match against the
+          # bare filename since both live at the repo root.
+          STRATEGY_HIT=""
+          if echo "$CHANGED_FILES" | grep -qx "NostalgiaForInfinityX7.py"; then
+            STRATEGY_HIT="${STRATEGY_HIT}NostalgiaForInfinityX7.py "
+          fi
+          if echo "$CHANGED_FILES" | grep -qx "NostalgiaForInfinityX8.py"; then
+            STRATEGY_HIT="${STRATEGY_HIT}NostalgiaForInfinityX8.py "
+          fi
+          {
+            echo "strategy_files_changed<<EOF_STRAT"
+            echo "$STRATEGY_HIT"
+            echo "EOF_STRAT"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Sanity-check syntax of every changed Python file
         if: steps.sync.outputs.has_changes == 'true'
         run: |
@@ -151,6 +177,18 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
             -d text="🔄 Synced ${FILE_COUNT} file(s) from upstream (${UPSTREAM_REPO}) directly to main. Bots will pick this up on their next self-queued restart. Check the commit before assuming everything still behaves the same: ${{ github.server_url }}/${{ github.repository }}/commits/main" \
+            > /dev/null || true
+
+      - name: Notify Telegram — strategy file(s) changed, review needed
+        if: steps.sync.outputs.has_changes == 'true' && steps.sync.outputs.strategy_files_changed != ''
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          FILES="${{ steps.sync.outputs.strategy_files_changed }}"
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🚨 REVIEW NEEDED: today's sync changed the live-logic strategy file(s): ${FILES}— these directly drive entry/exit conditions, DCA/rebuy, stops and position sizing for the running bots. Diff it before assuming today's trades still mean what yesterday's did: ${{ github.server_url }}/${{ github.repository }}/commits/main" \
             > /dev/null || true
 
       - name: Notify Telegram — sync failed
