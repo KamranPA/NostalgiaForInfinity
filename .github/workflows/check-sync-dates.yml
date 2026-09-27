@@ -1,0 +1,50 @@
+# SAVE THIS FILE AS: .github/workflows/check-sync-dates.yml
+#
+# One-off diagnostic: shows the raw committer-date timestamp (with its
+# real UTC offset) for every commit that touched NostalgiaForInfinityX7.py
+# or NostalgiaForInfinityX8.py. Needed fetch-depth: 0 to see full history.
+#
+# HOW TO RUN FROM MOBILE/WEB (no terminal needed):
+#   1. On github.com (or the GitHub mobile app), open this repo -> Actions tab.
+#   2. Find "Check strategy-file sync dates" in the left list.
+#   3. Tap "Run workflow" (top right) -> Run workflow (branch: main).
+#   4. Wait ~10-20s, then tap into the run. Tap the "show-dates" job, then
+#      the "Show timestamps" step -- the output is also written to the
+#      run's Summary tab (scroll to the bottom of the run page), which
+#      renders as a readable table on both mobile and desktop.
+
+name: Check strategy-file sync dates
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  show-dates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required -- shallow checkout would show only the latest commit
+
+      - name: Show timestamps
+        run: |
+          {
+            echo "## Commit timestamps -- NostalgiaForInfinityX7.py"
+            echo ""
+            echo '```'
+            git log --follow --format="%h  %cI  %s" -- NostalgiaForInfinityX7.py
+            echo '```'
+            echo ""
+            echo "## Commit timestamps -- NostalgiaForInfinityX8.py"
+            echo ""
+            echo '```'
+            git log --follow --format="%h  %cI  %s" -- NostalgiaForInfinityX8.py
+            echo '```'
+            echo ""
+            echo "## Runner's own clock (for comparison)"
+            echo ""
+            echo '```'
+            date -u +"%Y-%m-%dT%H:%M:%S%z (UTC)"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
