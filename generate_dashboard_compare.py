@@ -40,6 +40,22 @@ which in futures mode (stake_amount = margin, not position size)
 understates unrealized P/L by the leverage factor and ignores the sign of
 shorts — so futures "True Total" here can differ from index.html.
 
+SYNC-ERA SEGMENTATION
+----------------------
+Both strategy files get overwritten in place by the daily upstream sync
+(sync-upstream-strategy.yml), so "X8" or "X7" is not one fixed piece of
+code over the life of this comparison — it is a sequence of versions.
+This script reads each file's own git history (every commit that touched
+NostalgiaForInfinityX7.py / NostalgiaForInfinityX8.py) and uses those
+commit timestamps as era boundaries, then reports win rate / avg profit
+per era in addition to the all-window numbers above. A trade is filed
+under the era that was live at its OPEN time (the code version that
+generated the entry signal), regardless of when it later closed. This
+needs the repo checked out with full history (fetch-depth: 0) in the
+workflow that runs this script; if git isn't available or has no history
+for a file, the era table for that file silently doesn't render — nothing
+else on the page is affected.
+
 Usage:
     python generate_dashboard_compare.py \\
         <spot_x7ml.sqlite> <futures_x7ml.sqlite> \\
@@ -51,6 +67,7 @@ import os
 import sys
 import json
 import sqlite3
+import subprocess
 from datetime import datetime, timezone
 from collections import defaultdict
 
@@ -73,6 +90,7 @@ EXTRA_CSS = """
   .nav a { margin-right: 14px; }
   .legend-x7 { color: #d29922; font-weight: 600; }
   .legend-x8 { color: #58a6ff; font-weight: 600; }
+  .era-marker { color: #8b949e; font-size: 0.75rem; }
 """
 
 
@@ -170,6 +188,106 @@ def count_carry_over(trades, start):
         elif t["close_date"] is not None and gd.to_aware_utc(t["close_date"]) >= start:
             n += 1
     return n
+
+
+# ----------------------------------------------------------------------
+# Strategy-file sync history (git) -> era boundaries
+# ----------------------------------------------------------------------
+
+def fetch_strategy_sync_times(strategy_path, repo_dir="."):
+    """Every commit timestamp (aware UTC) that touched `strategy_path` --
+    i.e. every daily upstream sync that actually changed the file. Newest
+    last. Returns [] (feature no-ops) if git isn't available, the path
+    has no history, or the repo was checked out shallow."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "--follow", "--format=%aI", "--", strategy_path],
+            cwd=repo_dir, capture_output=True, text=True, timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if result.returncode != 0:
+        return []
+    times = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            times.append(gd.to_aware_utc(datetime.fromisoformat(line)))
+        except ValueError:
+            continue
+    return sorted(times)
+
+
+def build_era_boundaries(start, now, sync_times):
+    """Sync timestamps strictly inside (start, now) become slice points.
+    Always returns >= 2 items: [start, ..., now]. len(result) == 2 means
+    no sync happened during the window -> caller should skip the table."""
+    inside = sorted(t for t in sync_times if start < t < now)
+    return [start] + inside + [now]
+
+
+def compute_era_metrics(trades, era_start, era_end):
+    """Attributes a trade to the era that was live when it OPENED
+    (regardless of when it later closed) -- that's the code version that
+    actually produced the entry signal."""
+    sel = [t for t in trades if t["open_date"]
+           and era_start <= gd.to_aware_utc(t["open_date"]) < era_end]
+    closed = [t for t in sel if not t["is_open"] and t["close_profit"] is not None]
+    profits = [float(t["close_profit"]) for t in closed]
+    wins = sum(1 for p in profits if p > 0)
+    return {
+        "n_opened": len(sel),
+        "n_closed": len(closed),
+        "win_rate": (wins / len(closed)) if closed else None,
+        "avg_profit": (float(np.mean(profits)) if profits else None),
+        "realized": sum(gd.to_float(t["close_profit_abs"]) for t in closed),
+    }
+
+
+def era_table_html(trades7, trades8, boundaries):
+    if len(boundaries) <= 2:
+        return ""  # nothing synced inside this window -> one era, nothing to segment
+    rows = ""
+    for i in range(len(boundaries) - 1):
+        era_start, era_end = boundaries[i], boundaries[i + 1]
+        m7 = compute_era_metrics(trades7, era_start, era_end)
+        m8 = compute_era_metrics(trades8, era_start, era_end)
+        end_label = "now" if i == len(boundaries) - 2 else gd.fmt_dt(era_end)
+        rows += f"""<tr>
+          <td>{gd.fmt_dt(era_start)} → {end_label}</td>
+          <td>{m7['n_opened']}</td><td>{pct_s(m7['win_rate'])}</td><td>{pct_s(m7['avg_profit'])}</td>
+          <td>{m8['n_opened']}</td><td>{pct_s(m8['win_rate'])}</td><td>{pct_s(m8['avg_profit'])}</td>
+        </tr>"""
+    return f"""
+<div class="card">
+  <h3>Performance by sync era <span class="muted" style="font-weight:400;font-size:0.75rem;">— trades bucketed by which strategy-file version was live when they opened</span></h3>
+  <div class="table-scroll"><table class="compare-table">
+    <tr><th rowspan="2">Era</th>
+        <th class="legend-x7" colspan="3">X7ML</th>
+        <th class="legend-x8" colspan="3">X8</th></tr>
+    <tr><th>opened</th><th>win%</th><th>avg%</th><th>opened</th><th>win%</th><th>avg%</th></tr>
+    {rows}
+  </table></div>
+  <p class="muted" style="font-size:0.75rem;margin:8px 0 0 0;">
+    Era boundaries = git commits that changed NostalgiaForInfinityX7.py or NostalgiaForInfinityX8.py
+    (i.e. any daily upstream sync that actually touched either strategy file). A trade is filed under
+    the era live at its <i>open</i> time. Small per-era samples are normal early on — read directionally,
+    not conclusively.
+  </p>
+</div>"""
+
+
+def era_markers_html(boundaries):
+    """Small muted line under the equity chart listing the sync points
+    that fall inside the window, so the chart and the era table above
+    can be cross-referenced by eye."""
+    inside = boundaries[1:-1]
+    if not inside:
+        return ""
+    marks = ", ".join(gd.fmt_dt(t) for t in inside)
+    return f'<p class="era-marker" style="margin:6px 0 0 0;">Sync points inside this window: {marks} UTC</p>'
 
 
 # ----------------------------------------------------------------------
@@ -564,7 +682,7 @@ new Chart(document.getElementById('__ID__'), {
 
 
 def build_market_block(key, title, subtitle_extra, start, source, trades7, trades8,
-                       m7, m8, overlap, eq7, eq8):
+                       m7, m8, overlap, eq7, eq8, era_boundaries=None):
     if start is None:
         return f"""
 <h2 class="market-heading" id="cmp-{key}">{title}</h2>
@@ -586,6 +704,8 @@ def build_market_block(key, title, subtitle_extra, start, source, trades7, trade
   {f'<p class="warn-note">⚠️ Small sample: {m7["n_closed"]} (X7ML) and {m8["n_closed"]} (X8) closed trades — below {SMALL_SAMPLE_CLOSED}, so differences here can easily be chance.</p>' if small else ''}"""
 
     chart_id = f"cmpEquity_{key}"
+    era_html = era_table_html(trades7, trades8, era_boundaries) if era_boundaries else ""
+    era_marks = era_markers_html(era_boundaries) if era_boundaries else ""
     html = f"""
 <h2 class="market-heading" id="cmp-{key}">{title}</h2>
 <div class="subtitle">{subtitle_extra}</div>
@@ -599,7 +719,10 @@ def build_market_block(key, title, subtitle_extra, start, source, trades7, trade
 <div class="card">
   <h3>Realized equity since X8 start <span class="muted" style="font-weight:400;font-size:0.75rem;">— cumulative closed-trade profit, USDT</span></h3>
   <div class="chart-wrap"><canvas id="{chart_id}"></canvas></div>
+  {era_marks}
 </div>
+
+{era_html}
 
 {overlap_html(overlap, "X7ML", "X8", "🔗 Signal Overlap — X7ML vs X8",
               note="A low match rate means the two strategies really do fire on different moments (or different pairs). "
@@ -640,6 +763,13 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
     raw_start_spot = fetch_bot_start_time(spot_x8)
     raw_start_fut = fetch_bot_start_time(fut_x8)
 
+    # Sync-era boundaries: any commit that touched either strategy file is
+    # a potential behavior change for whichever bot(s) run that file.
+    sync_times = sorted(set(
+        fetch_strategy_sync_times("NostalgiaForInfinityX7.py")
+        + fetch_strategy_sync_times("NostalgiaForInfinityX8.py")
+    ))
+
     b7s = gd.build_one_mode(spot_x7, history_db_path, "spot", "🟢 X7ML SPOT — OKX",
                             "OKX spot market · no leverage", "config_dryrun_telegram.json",
                             live_price_exchange_id="okx", live_price_ccxt_options=None)
@@ -667,9 +797,11 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
         m7 = compute_window_metrics(bx7["trades"], start, prices_for(bx7["trades"], options), f7, wallet, now)
         m8 = compute_window_metrics(bx8["trades"], start, prices_for(bx8["trades"], options), f8, wallet, now)
         ov = compute_entry_overlap(bx7["trades"], bx8["trades"], start)
+        era_boundaries = build_era_boundaries(start, now, sync_times)
         html, js = build_market_block(
             key, title, sub, start, source, bx7["trades"], bx8["trades"], m7, m8, ov,
-            equity_series(bx7["trades"], start, now), equity_series(bx8["trades"], start, now))
+            equity_series(bx7["trades"], start, now), equity_series(bx8["trades"], start, now),
+            era_boundaries=era_boundaries)
         return html, js, start
 
     spot_html, spot_js, spot_start = market(
