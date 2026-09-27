@@ -195,10 +195,11 @@ def count_carry_over(trades, start):
 # ----------------------------------------------------------------------
 
 def fetch_strategy_sync_times(strategy_path, repo_dir=".", now=None):
-    """Every commit timestamp (aware UTC) that touched `strategy_path` --
-    i.e. every daily upstream sync that actually changed the file. Newest
-    last. Returns [] (feature no-ops) if git isn't available, the path
-    has no history, or the repo was checked out shallow.
+    """Every commit timestamp (aware, converted to true UTC) that touched
+    `strategy_path` -- i.e. every daily upstream sync that actually
+    changed the file. Newest last. Returns [] (feature no-ops) if git
+    isn't available, the path has no history, or the repo was checked
+    out shallow.
 
     Uses COMMITTER date (%cI), not author date (%aI): the author date can
     carry metadata inherited from wherever the change originated and is
@@ -206,10 +207,21 @@ def fetch_strategy_sync_times(strategy_path, repo_dir=".", now=None):
     when the commit was actually created here, which is what era
     boundaries need.
 
-    As a defensive second layer, any timestamp that is still in the
-    future relative to `now` is dropped rather than shown -- this can
-    only mask a real timestamp/clock problem, never cause one, and it
-    keeps a single bad entry from producing a confusing era label."""
+    IMPORTANT: git's %cI includes the committer's real UTC offset (e.g.
+    "...+03:00"), which is often NOT +00:00. This must be converted to
+    true UTC with astimezone() -- gd.to_aware_utc() is the wrong tool
+    here: it only attaches UTC to naive datetimes and passes already-
+    aware ones through unchanged (correct for this script's trade data,
+    which is always naive-UTC from SQLite, but wrong for git's offset-
+    aware timestamps). Skipping this conversion doesn't corrupt any
+    comparison (Python compares aware datetimes correctly regardless of
+    offset), but every displayed label would be off by the offset amount
+    while still being captioned "UTC" elsewhere on the page.
+
+    As a defensive second layer, any timestamp still in the future
+    relative to `now` (after proper UTC conversion) is dropped rather
+    than shown -- this can only mask a real timestamp/clock problem,
+    never cause one."""
     try:
         result = subprocess.run(
             ["git", "log", "--follow", "--format=%cI", "--", strategy_path],
@@ -226,9 +238,10 @@ def fetch_strategy_sync_times(strategy_path, repo_dir=".", now=None):
         if not line:
             continue
         try:
-            t = gd.to_aware_utc(datetime.fromisoformat(line))
+            t = datetime.fromisoformat(line)
         except ValueError:
             continue
+        t = t.astimezone(timezone.utc) if t.tzinfo is not None else t.replace(tzinfo=timezone.utc)
         if t > now:
             continue  # clock-skew / bad metadata guard -- see docstring
         times.append(t)
