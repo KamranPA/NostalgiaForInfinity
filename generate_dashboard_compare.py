@@ -194,29 +194,44 @@ def count_carry_over(trades, start):
 # Strategy-file sync history (git) -> era boundaries
 # ----------------------------------------------------------------------
 
-def fetch_strategy_sync_times(strategy_path, repo_dir="."):
+def fetch_strategy_sync_times(strategy_path, repo_dir=".", now=None):
     """Every commit timestamp (aware UTC) that touched `strategy_path` --
     i.e. every daily upstream sync that actually changed the file. Newest
     last. Returns [] (feature no-ops) if git isn't available, the path
-    has no history, or the repo was checked out shallow."""
+    has no history, or the repo was checked out shallow.
+
+    Uses COMMITTER date (%cI), not author date (%aI): the author date can
+    carry metadata inherited from wherever the change originated and is
+    not reliably "when this landed in our repo". Committer date is always
+    when the commit was actually created here, which is what era
+    boundaries need.
+
+    As a defensive second layer, any timestamp that is still in the
+    future relative to `now` is dropped rather than shown -- this can
+    only mask a real timestamp/clock problem, never cause one, and it
+    keeps a single bad entry from producing a confusing era label."""
     try:
         result = subprocess.run(
-            ["git", "log", "--follow", "--format=%aI", "--", strategy_path],
+            ["git", "log", "--follow", "--format=%cI", "--", strategy_path],
             cwd=repo_dir, capture_output=True, text=True, timeout=15,
         )
     except (OSError, subprocess.SubprocessError):
         return []
     if result.returncode != 0:
         return []
+    now = now or datetime.now(timezone.utc)
     times = []
     for line in result.stdout.splitlines():
         line = line.strip()
         if not line:
             continue
         try:
-            times.append(gd.to_aware_utc(datetime.fromisoformat(line)))
+            t = gd.to_aware_utc(datetime.fromisoformat(line))
         except ValueError:
             continue
+        if t > now:
+            continue  # clock-skew / bad metadata guard -- see docstring
+        times.append(t)
     return sorted(times)
 
 
@@ -766,8 +781,8 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
     # Sync-era boundaries: any commit that touched either strategy file is
     # a potential behavior change for whichever bot(s) run that file.
     sync_times = sorted(set(
-        fetch_strategy_sync_times("NostalgiaForInfinityX7.py")
-        + fetch_strategy_sync_times("NostalgiaForInfinityX8.py")
+        fetch_strategy_sync_times("NostalgiaForInfinityX7.py", now=now)
+        + fetch_strategy_sync_times("NostalgiaForInfinityX8.py", now=now)
     ))
 
     b7s = gd.build_one_mode(spot_x7, history_db_path, "spot", "🟢 X7ML SPOT — OKX",
