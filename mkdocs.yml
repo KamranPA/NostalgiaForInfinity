@@ -44,7 +44,7 @@ nav:
 
   - Project Overview:
       - Overview: project-overview.md
-      - Installation (Advanced): installation-and-setup.md
+      # - Installation (Advanced): installation-and-setup.md
       - Best Practices: best-practices.md
       - API Reference: api-reference.md
 
@@ -146,4 +146,4 @@ nav:
           - Scalp: trading-modes/short-trading-modes/short-scalp-mode.md
 
   - Nostalgia Strategy:
-      - Architecture: nostalgia-for-infinity-x6-architecture.md
+      - Architecture: nostalgia-for-infinity-x8-architecture.md
