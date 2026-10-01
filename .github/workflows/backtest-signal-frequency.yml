@@ -111,14 +111,37 @@ jobs:
       - name: Install TA-Lib system library
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential wget
-          wget -q http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
-          tar -xzf ta-lib-0.4.0-src.tar.gz
-          cd ta-lib
-          ./configure --prefix=/usr
-          make
-          sudo make install
-          cd ..
+          sudo apt-get install -y build-essential curl
+
+          # SourceForge is flaky (wget exit code 8 = server error), so: several
+          # URLs, retries, and the tarball is validated before use.
+          OK=0
+          for URL in \
+            "https://downloads.sourceforge.net/project/ta-lib/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz" \
+            "http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz" \
+            "https://sourceforge.net/projects/ta-lib/files/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz/download"; do
+            echo "Trying $URL"
+            rm -f ta-lib-0.4.0-src.tar.gz
+            if curl -fL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 \
+                 -o ta-lib-0.4.0-src.tar.gz "$URL" \
+               && tar -tzf ta-lib-0.4.0-src.tar.gz > /dev/null 2>&1; then
+              OK=1
+              break
+            fi
+          done
+
+          if [ "$OK" = "1" ]; then
+            tar -xzf ta-lib-0.4.0-src.tar.gz
+            cd ta-lib
+            ./configure --prefix=/usr
+            make
+            sudo make install
+            cd ..
+          else
+            # Not fatal: recent TA-Lib Python wheels bundle the C library, so
+            # `pip install` in the next step may still work without it.
+            echo "::warning::Could not download the TA-Lib C source; continuing -- relying on the pip wheel."
+          fi
 
       - name: Install Freqtrade + dependencies
         run: |
