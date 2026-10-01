@@ -91,17 +91,44 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-nfi-spot-x8-
 
-      - name: Install TA-Lib system library
+      - name: Install TA-Lib (pip wheel first, C source only if needed)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential wget
-          wget -q http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
-          tar -xzf ta-lib-0.4.0-src.tar.gz
-          cd ta-lib
-          ./configure --prefix=/usr
-          make
-          sudo make install
-          cd ..
+          python -m pip install --upgrade pip
+          # Recent TA-Lib wheels bundle the C library -> no SourceForge needed
+          # (the old wget from prdownloads.sourceforge.net started failing with
+          # "Process completed with exit code 8").
+          if python -m pip install --only-binary=:all: TA-Lib \
+             && python -c "import talib; print('TA-Lib wheel OK, version', talib.__version__)"; then
+            echo "Using the TA-Lib wheel; skipping the C build."
+          else
+            echo "::warning::No usable TA-Lib wheel -- building the C library from source."
+            sudo apt-get update
+            sudo apt-get install -y build-essential curl
+            OK=0
+            for URL in \
+              "https://github.com/ta-lib/ta-lib/releases/download/v0.6.4/ta-lib-0.6.4-src.tar.gz" \
+              "https://downloads.sourceforge.net/project/ta-lib/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz"; do
+              echo "Trying $URL"
+              rm -f ta-lib-src.tar.gz
+              if curl -fL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 \
+                   -o ta-lib-src.tar.gz "$URL" \
+                 && tar -tzf ta-lib-src.tar.gz > /dev/null 2>&1; then
+                OK=1
+                break
+              fi
+            done
+            if [ "$OK" != "1" ]; then
+              echo "::error::Could not get TA-Lib from any source."
+              exit 1
+            fi
+            tar -xzf ta-lib-src.tar.gz
+            cd ta-lib*/
+            ./configure --prefix=/usr
+            make
+            sudo make install
+            cd ..
+            python -m pip install TA-Lib
+          fi
 
       - name: Install Freqtrade + dependencies
         run: |
