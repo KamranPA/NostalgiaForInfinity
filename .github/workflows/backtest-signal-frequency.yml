@@ -1,112 +1,108 @@
-# SAVE THIS FILE AS: .github/workflows/backtest-signal-frequency.yml
-# (in .github/workflows/, in the ROOT of your NostalgiaForInfinity repo)
-name: Backtest Signal Frequency (spot or futures, selectable window)
+name: Backtest Signal Frequency
 
-# Manual-only, read-only diagnostic. Answers ONE question: "is the low
-# entry frequency caused by a bug in code WE wrote (ML subclass,
-# btc_info_timeframes override, pairlist config), or is it inherent to
-# the strategy+market itself?" — by backtesting either the PURE UPSTREAM
-# NostalgiaForInfinityX7 strategy, our NostalgiaForInfinityX7ML
-# subclass, or the newer upstream NostalgiaForInfinityX8 strategy
-# (selectable via the `strategy` input below — default is the ML
-# subclass, since that's what's actually deployed live) over the
-# requested window.
+# Manual backtest of the NFI strategies on OKX data.
 #
-# WHY THIS DOESN'T (CAN'T) USE THE LIVE CONFIG'S PAIRLIST AS-IS:
-# freqtrade's own docs are unconditional here — VolumePairList, AgeFilter,
-# SpreadFilter, and RangeStabilityFilter "do not support backtesting mode",
-# full stop. No flag enables them (--enable-dynamic-pairlist only helps
-# handlers that DO support backtesting but need per-candle refresh, e.g.
-# ShuffleFilter — it does not unlock these four). This was tried and
-# confirmed to hard-error, twice, before landing on the approach below.
+# Reproducible A/B runs:
+#   * ref          -> take the strategy files (.py) from this commit/branch/tag,
+#                     everything else (configs, this workflow) stays from main.
+#   * end_date     -> fix the window end (YYYYMMDD). Same end_date + test_days
+#                     = same window on every run.
+#   * pairs_run_id -> reuse the pairlist snapshot of an earlier run (run id from
+#                     the run URL .../actions/runs/<ID>) so pairs are identical.
+#   * direction    -> both | long_only (long_only = subclass with can_short=False).
 #
-# APPROACH: freqtrade's own documented workaround for this exact situation
-# is to snapshot the dynamic pairlist once (via `freqtrade test-pairlist`,
-# which runs the SAME filter chain as the live config) into a plain pair
-# list, then backtest against that list using StaticPairList. This is
-# openly a simplification, not a perfect reconstruction — see the one
-# unavoidable limitation below — but it's the only approach freqtrade
-# actually supports, and it fully answers the question this workflow
-# exists for.
-#
-# ONE UNAVOIDABLE LIMITATION (not a bug, inherent to how freqtrade works):
-# the snapshotted pairlist reflects TODAY's top-100-by-volume pairs,
-# applied across the entire historical test window — not what was
-# actually in the top 100 on each individual day of that window. A coin
-# that pumped into high volume 3 weeks ago and has since cooled off won't
-# be in today's snapshot; a coin that's hot today but was quiet 3 weeks
-# ago will be, for the whole window. Official freqtrade docs confirm
-# reproducibility "cannot be guaranteed" for anything other than
-# StaticPairList for exactly this reason. There is no freqtrade-supported
-# way around this — it's a property of backtesting dynamic pairlists.
-#
-# WARMUP: informative_1d_indicators() needs a 200-period daily EMA, so
-# the download window includes a 400-day buffer before the requested
-# test window regardless of how long that window is (widened from 250
-# to 400 to absorb an edge-of-warmup effect observed near the start of
-# the test window — see git history / project notes for details).
-#
-# TEST WINDOW LENGTH: defaults to 30 days; pass a smaller value (the
-# workflow accepts a minimum of 20) via workflow_dispatch input if 30
-# days of historical OKX data + backtest runtime proves too slow.
-#
-# SPOT vs FUTURES: the market is selected purely by which live config is
-# copied to user_data/live_config.json (trading_mode / margin_mode live
-# inside that file). No --trading-mode / --margin-mode CLI flags are
-# passed to any freqtrade command: test-pairlist rejects them, download-data
-# only accepts --trading-mode (not --margin-mode), and they are not needed
-# anyway since every command is given --config. In futures mode,
-# download-data automatically fetches the mark + funding_rate candles too.
-#
-# X8 CAVEAT: NostalgiaForInfinityX8 is a newer, independent upstream
-# strategy file (not a subclass of X7) that iterativv has not yet
-# declared stable. It has not been checked here for the same
-# btc_info_switcher-style pitfalls that broke the ML subclass on X7 —
-# if X8 backtesting fails with a RuntimeError or similar, check its
-# source for an equivalent hardcoded/limited dispatch before assuming
-# it's a workflow bug.
+# Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
+# applied to the whole window (freqtrade can't rebuild historical pairlists).
 
 on:
   workflow_dispatch:
     inputs:
-      test_window_days:
-        description: "How many days back to report entries for (min 20, default 30)"
-        required: false
-        default: "30"
       strategy:
-        description: "Which strategy to backtest"
-        required: false
-        default: "NostalgiaForInfinityX7ML"
+        description: 'Strategy'
         type: choice
         options:
-          - "NostalgiaForInfinityX7ML"
-          - "NostalgiaForInfinityX7"
-          - "NostalgiaForInfinityX8"
+          - NostalgiaForInfinityX8
+          - NostalgiaForInfinityX7ML
+          - NostalgiaForInfinityX7
+        default: NostalgiaForInfinityX8
       market:
-        description: "Which bot's config/market to backtest"
-        required: false
-        default: "spot"
+        description: 'Market'
         type: choice
         options:
-          - "spot"
-          - "futures"
+          - futures
+          - spot
+        default: futures
+      test_days:
+        description: 'Test window length in days (min 20)'
+        type: string
+        default: '90'
+      end_date:
+        description: 'Window end YYYYMMDD (empty = today UTC)'
+        type: string
+        default: ''
+      ref:
+        description: 'Git ref/commit to take strategy files from (empty = main)'
+        type: string
+        default: ''
+      direction:
+        description: 'Trade direction'
+        type: choice
+        options:
+          - both
+          - long_only
+        default: both
+      pairs_run_id:
+        description: 'Reuse pairlist snapshot of this earlier run id (empty = new snapshot)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
+  actions: read
+
+defaults:
+  run:
+    shell: bash   # -e -o pipefail: a failing freqtrade stops the job even behind `| tee`
 
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-
+    timeout-minutes: 240
+    env:
+      STRATEGY_IN: ${{ inputs.strategy }}
+      MARKET_IN: ${{ inputs.market }}
+      DAYS_IN: ${{ inputs.test_days }}
+      END_IN: ${{ inputs.end_date }}
+      REF_IN: ${{ inputs.ref }}
+      DIRECTION_IN: ${{ inputs.direction }}
+      PAIRS_RUN_IN: ${{ inputs.pairs_run_id }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Take strategy files from ref (optional)
+        if: ${{ inputs.ref != '' }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$REF_IN"
+          for f in \
+            NostalgiaForInfinityX7.py NostalgiaForInfinityX7ML.py NostalgiaForInfinityX8.py \
+            user_data/strategies/NostalgiaForInfinityX7.py \
+            user_data/strategies/NostalgiaForInfinityX7ML.py \
+            user_data/strategies/NostalgiaForInfinityX8.py; do
+            if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
+              git checkout FETCH_HEAD -- "$f"
+              echo "taken from $REF_IN: $f"
+            fi
+          done
+          echo "strategy_ref=$(git rev-parse FETCH_HEAD)" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install TA-Lib system library
         run: |
@@ -129,51 +125,33 @@ jobs:
       - name: Prepare backtest user_data
         run: |
           mkdir -p user_data/strategies user_data/logs user_data/data/okx user_data/backtest_results
-          STRATEGY="${{ github.event.inputs.strategy }}"
-          STRATEGY="${STRATEGY:-NostalgiaForInfinityX7ML}"
+          STRATEGY="${STRATEGY_IN:-NostalgiaForInfinityX8}"
 
-          # X7 base file: needed whenever the selected strategy is X7 itself,
-          # or the ML subclass (which imports the class directly from it).
-          # Not needed for X8 (independent file), but copying it anyway is
-          # harmless — it just sits unused in that case.
+          # X7 base file: needed for X7 itself and for the ML subclass.
           if [ -e user_data/strategies/NostalgiaForInfinityX7.py ]; then
-            echo "Strategy file already present at destination (symlink from repo layout) — skipping copy."
+            echo "X7 file already present at destination -- skipping copy."
           else
             cp NostalgiaForInfinityX7.py user_data/strategies/
           fi
 
-          # ML subclass: only copy when it's actually the selected strategy —
-          # keeping it out for the pure-upstream runs makes those runs
-          # provably independent of anything in our subclass.
           if [ "$STRATEGY" = "NostalgiaForInfinityX7ML" ]; then
             if [ -e user_data/strategies/NostalgiaForInfinityX7ML.py ]; then
-              echo "ML strategy file already present at destination — skipping copy."
+              echo "ML file already present at destination -- skipping copy."
             else
               cp NostalgiaForInfinityX7ML.py user_data/strategies/
             fi
           fi
 
-          # X8: independent upstream file, only needed when selected.
           if [ "$STRATEGY" = "NostalgiaForInfinityX8" ]; then
             if [ -e user_data/strategies/NostalgiaForInfinityX8.py ]; then
-              echo "X8 strategy file already present at destination — skipping copy."
+              echo "X8 file already present at destination -- skipping copy."
             else
               cp NostalgiaForInfinityX8.py user_data/strategies/
             fi
           fi
 
-          # Base config to snapshot the pairlist from, and to derive the
-          # backtest config from — byte-for-byte the real live config for
-          # whichever market was selected. Futures genuinely needs
-          # lookback_days on its VolumePairList (OKX's swap ticker doesn't
-          # expose quoteVolume directly, unlike spot) — that's a live-mode
-          # concern for refresh_period only and doesn't affect this
-          # workflow, since test-pairlist runs the filter chain once
-          # regardless, and VolumePairList/AgeFilter/etc. still can't run
-          # in backtesting either way (see header notes) — the static
-          # snapshot approach below sidesteps this identically for both.
-          MARKET="${{ github.event.inputs.market }}"
-          MARKET="${MARKET:-spot}"
+          # Base config for the selected market.
+          MARKET="${MARKET_IN:-futures}"
           if [ "$MARKET" = "futures" ]; then
             cp config_dryrun_futures.json user_data/live_config.json
           else
@@ -181,51 +159,90 @@ jobs:
           fi
           echo "market=$MARKET" >> "$GITHUB_ENV"
 
+          # Long-only variant: thin subclass, shorts disabled two ways
+          # (can_short=False AND enter_short forced to 0).
+          BT_STRATEGY="$STRATEGY"
+          if [ "$DIRECTION_IN" = "long_only" ]; then
+            BT_STRATEGY="${STRATEGY}LongOnly"
+            cat > "user_data/strategies/${BT_STRATEGY}.py" <<EOF
+          from ${STRATEGY} import ${STRATEGY}
+
+
+          class ${BT_STRATEGY}(${STRATEGY}):
+              can_short = False
+
+              def populate_entry_trend(self, df, metadata):
+                  df = super().populate_entry_trend(df, metadata)
+                  if "enter_short" in df.columns:
+                      df["enter_short"] = 0
+                  return df
+          EOF
+          fi
+          echo "bt_strategy=$BT_STRATEGY" >> "$GITHUB_ENV"
+          echo "base_strategy=$STRATEGY" >> "$GITHUB_ENV"
+
+      - name: Strategy diagnostics (version, commit, bad-trade flags)
+        run: |
+          F="user_data/strategies/${base_strategy}.py"
+          {
+            echo "repo HEAD:      $(git rev-parse HEAD)"
+            echo "strategy ref:   ${strategy_ref:-<same as HEAD>}"
+            echo "strategy file:  $F"
+            echo "file sha256:    $(sha256sum "$F" | cut -d' ' -f1)"
+            echo "version():"
+            grep -n -A2 "def version" "$F" | head -5 || true
+            echo "bad_trade_controller mentions: $(grep -c 'bad_trade_controller' "$F" || true)"
+            echo "structure_break mentions:      $(grep -c 'structure_break' "$F" || true)"
+            echo "derisk mentions:               $(grep -c -i 'derisk' "$F" || true)"
+            echo "--- bad_trade / derisk flag lines (first 25) ---"
+            grep -n -i -E "(bad_trade|derisk|structure_break).*(enable|enabled|= *(True|False))" "$F" | head -25 || true
+          } | tee user_data/logs/diagnostics.txt
+
       - name: Compute date range
         id: dates
         run: |
-          RAW_DAYS="${{ github.event.inputs.test_window_days }}"
-          TEST_DAYS="${RAW_DAYS:-30}"
+          TEST_DAYS="${DAYS_IN:-90}"
+          if ! [[ "$TEST_DAYS" =~ ^[0-9]+$ ]]; then echo "::error::test_days must be a number"; exit 1; fi
           if [ "$TEST_DAYS" -lt 20 ]; then
-            echo "::warning::Requested $TEST_DAYS days is below the 20-day minimum — using 20."
+            echo "::warning::Requested $TEST_DAYS days is below the 20-day minimum -- using 20."
             TEST_DAYS=20
           fi
-          TEST_END=$(date -u +%Y%m%d)
-          TEST_START=$(date -u -d "${TEST_DAYS} days ago" +%Y%m%d)
-          # 400 days: widened from 250 to test a hypothesis — the ML
-          # subclass's extra BTC 1h/1d informative merges appeared to cost
-          # a few entries specifically in the first ~4 days of a
-          # 250-day-buffered window (edge-of-warmup effect), while every
-          # week further from the buffer edge matched the pure-upstream
-          # backtest exactly. A wider buffer absorbs that edge.
-          DOWNLOAD_START=$(date -u -d '400 days ago' +%Y%m%d)
-          # 5m/15m are ~90% of the download time (400 days of 5m = ~115k
-          # candles per pair, and the futures run timed out at 150 min
-          # during download). They only need a short warmup (~2 days for
-          # the strategy's startup candles), so they get test window + 60
-          # days. Only 1h/4h/1d — the timeframes with the long EMA200
-          # lookbacks, plus mark/funding_rate — keep the full 400 days.
-          SHORT_DOWNLOAD_START=$(date -u -d "$((TEST_DAYS + 60)) days ago" +%Y%m%d)
-          echo "short_download_start=$SHORT_DOWNLOAD_START" >> "$GITHUB_OUTPUT"
-          echo "test_days=$TEST_DAYS" >> "$GITHUB_OUTPUT"
-          echo "test_start=$TEST_START" >> "$GITHUB_OUTPUT"
-          echo "test_end=$TEST_END" >> "$GITHUB_OUTPUT"
-          echo "download_start=$DOWNLOAD_START" >> "$GITHUB_OUTPUT"
-          echo "Test window (reported results): $TEST_START - $TEST_END ($TEST_DAYS days)"
-          echo "Download window (incl. 200-day-EMA warmup buffer): $DOWNLOAD_START - $TEST_END"
+          if [ -n "$END_IN" ]; then
+            if ! [[ "$END_IN" =~ ^[0-9]{8}$ ]]; then echo "::error::end_date must be YYYYMMDD"; exit 1; fi
+            TEST_END="$END_IN"
+          else
+            TEST_END=$(date -u +%Y%m%d)
+          fi
+          TEST_START=$(date -u -d "${TEST_END} - ${TEST_DAYS} days" +%Y%m%d)
+          # Long indicators (EMA200 on 1h/4h/1d) need 400 days of history;
+          # 5m/15m only need window + 60 days.
+          DOWNLOAD_START=$(date -u -d "${TEST_END} - 400 days" +%Y%m%d)
+          SHORT_DOWNLOAD_START=$(date -u -d "${TEST_END} - $((TEST_DAYS + 60)) days" +%Y%m%d)
+          {
+            echo "test_days=$TEST_DAYS"
+            echo "test_start=$TEST_START"
+            echo "test_end=$TEST_END"
+            echo "download_start=$DOWNLOAD_START"
+            echo "short_download_start=$SHORT_DOWNLOAD_START"
+          } >> "$GITHUB_OUTPUT"
+          echo "Test window: $TEST_START - $TEST_END ($TEST_DAYS days)"
+          echo "Download window: $DOWNLOAD_START - $TEST_END (5m/15m from $SHORT_DOWNLOAD_START)"
 
-      - name: Snapshot today's dynamic pairlist (test-pairlist, same filter chain as live)
+      - name: Pairlist snapshot (new, or reused from an earlier run)
         run: |
-          # NOTE: test-pairlist does NOT accept --trading-mode/--margin-mode
-          # (confirmed the hard way: "unrecognized arguments"). It doesn't
-          # need them anyway, since trading_mode/margin_mode are already
-          # set inside live_config.json itself for whichever market was
-          # selected.
-          freqtrade test-pairlist \
-            --config user_data/live_config.json \
-            --quote USDT \
-            --print-json > user_data/pairlist_snapshot.json
-          echo "Snapshotted pairlist:"
+          if [ -n "$PAIRS_RUN_IN" ]; then
+            echo "Reusing pairlist snapshot from run $PAIRS_RUN_IN"
+            gh run download "$PAIRS_RUN_IN" --name "pairlist-$PAIRS_RUN_IN" --dir user_data/_pl
+            cp user_data/_pl/pairlist_snapshot.json user_data/pairlist_snapshot.json
+          else
+            # test-pairlist does NOT accept --trading-mode/--margin-mode;
+            # they already come from live_config.json.
+            freqtrade test-pairlist \
+              --config user_data/live_config.json \
+              --quote USDT \
+              --print-json > user_data/pairlist_snapshot.json
+          fi
+          echo "Pairlist snapshot:"
           cat user_data/pairlist_snapshot.json
 
       - name: Build backtest config (live config + StaticPairList from snapshot)
@@ -239,17 +256,11 @@ jobs:
               pairs = json.load(f)
 
           if not isinstance(pairs, list) or not pairs:
-              raise SystemExit(f"test-pairlist returned no usable pair list: {pairs!r}")
+              raise SystemExit(f"pairlist snapshot has no usable pair list: {pairs!r}")
 
-          # Replace the dynamic filter chain with a plain static list of
-          # today's snapshot — the only pairlist handler freqtrade actually
-          # supports in backtesting. Everything else in the config (strategy
-          # params, exchange, stake sizing, etc.) is left exactly as-is.
+          # Backtesting only supports StaticPairList.
           cfg["exchange"]["pair_whitelist"] = pairs
           cfg["pairlists"] = [{"method": "StaticPairList"}]
-          # Backtesting ignores telegram/dry_run/db_url, but strip the
-          # placeholder telegram block anyway so nothing about it can
-          # confuse the run.
           cfg["telegram"] = {"enabled": False, "token": "", "chat_id": ""}
 
           with open("user_data/config.json", "w") as f:
@@ -258,25 +269,27 @@ jobs:
           print(f"Backtest config built with {len(pairs)} statically-pinned pairs.")
           PYEOF
 
-      - name: Download OKX historical data (1h/4h/1d long window, 5m/15m short window)
+      - name: Restore OKX data cache
+        id: datacache
+        uses: actions/cache@v4
+        with:
+          path: user_data/data
+          key: okx-data-${{ env.market }}-${{ steps.dates.outputs.test_end }}-${{ steps.dates.outputs.test_days }}-${{ hashFiles('user_data/pairlist_snapshot.json') }}
+
+      - name: Download OKX historical data
+        if: steps.datacache.outputs.cache-hit != 'true'
         run: |
-          # trading_mode (spot/futures) is read from user_data/config.json —
-          # no extra CLI flags needed. In futures mode, each download-data
-          # call also fetches the mark + funding_rate candles.
-          #
-          # Call 1 (long window, runs FIRST): 1h/4h/1d over the full 400
-          # days, plus mark/funding_rate for that same full window.
+          # trading_mode comes from user_data/config.json. In futures mode each
+          # call also fetches mark + funding_rate candles.
+          # Call 1 (runs first): long window for 1h/4h/1d, with --erase.
           freqtrade download-data \
             --config user_data/config.json \
             --exchange okx \
             --timerange "${{ steps.dates.outputs.download_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframes 1h 4h 1d \
             --erase
-          # Call 2 (short window): the heavy 5m/15m timeframes only need
-          # test window + 60 days. No --erase here on purpose: it would
-          # also wipe the mark/funding_rate data call 1 just downloaded and
-          # replace it with this shorter window. Without it, mark/funding
-          # are already present and only topped up.
+          # Call 2: heavy 5m/15m only for window + 60 days. No --erase on purpose
+          # (it would wipe the mark/funding data call 1 just fetched).
           freqtrade download-data \
             --config user_data/config.json \
             --exchange okx \
@@ -285,83 +298,110 @@ jobs:
 
       - name: Run backtest (results restricted to test window)
         run: |
-          STRATEGY="${{ github.event.inputs.strategy }}"
-          STRATEGY="${STRATEGY:-NostalgiaForInfinityX7ML}"
-          echo "Backtesting strategy: $STRATEGY on market: $market"
-          # trading_mode / margin_mode / leverage come from the config and
-          # the strategy itself — no extra CLI flags needed.
+          echo "Backtesting strategy: $bt_strategy on market: $market (direction: $DIRECTION_IN)"
           freqtrade backtesting \
             --config user_data/config.json \
-            --strategy "$STRATEGY" \
+            --strategy "$bt_strategy" \
+            --strategy-path user_data/strategies \
             --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframe 5m \
             --export trades \
             --export-directory user_data/backtest_results \
             | tee user_data/logs/backtest.log
 
-      - name: Summarize entries by week and by tag
-        if: always()
+      - name: Summarize trades (weeks, tags, exits, long/short, worst trades)
         run: |
           python3 << 'PYEOF'
           import json, glob, zipfile
           from collections import defaultdict
           from datetime import datetime
 
-          # --export-filename is deprecated/ignored, so don't assume a fixed
-          # name — freqtrade writes its own auto-named file(s) under
-          # --export-directory. Results may be a plain .json or a .zip
-          # containing one; handle both rather than guessing.
           candidates = sorted(
               glob.glob("user_data/backtest_results/*.json")
               + glob.glob("user_data/backtest_results/*.zip")
           )
+          candidates = [c for c in candidates if "meta" not in c and "config" not in c]
           if not candidates:
-              print("No result file found under user_data/backtest_results/ — "
-                    "backtest likely failed before producing output, or wrote "
-                    "somewhere unexpected. Check the full log below.")
+              print("No result file found under user_data/backtest_results/.")
               raise SystemExit(0)
 
           latest = candidates[-1]
           print(f"Reading backtest result from: {latest}")
-
           if latest.endswith(".zip"):
               with zipfile.ZipFile(latest) as zf:
-                  json_names = [n for n in zf.namelist() if n.endswith(".json")]
-                  if not json_names:
-                      print(f"No .json file found inside {latest}.")
+                  names = [n for n in zf.namelist()
+                           if n.endswith(".json") and "_config" not in n and "_meta" not in n]
+                  if not names:
+                      print(f"No result .json inside {latest}.")
                       raise SystemExit(0)
-                  with zf.open(json_names[0]) as f:
+                  with zf.open(names[0]) as f:
                       data = json.load(f)
           else:
               with open(latest) as f:
                   data = json.load(f)
 
-          # freqtrade export format: {"strategy": {"<name>": {"trades": [...]}}}
           strat_key = next(iter(data.get("strategy", {})), None)
           trades = data.get("strategy", {}).get(strat_key, {}).get("trades", []) if strat_key else []
 
-          print(f"Total entries in test window: {len(trades)}\n")
+          out = []
+          w = out.append
+          w(f"Strategy: {strat_key}")
+          w(f"Total entries in test window: {len(trades)}")
+          tot = sum(t.get("profit_abs", 0) for t in trades)
+          w(f"Total profit: {tot:.3f} USDT")
 
-          by_week = defaultdict(int)
-          by_tag = defaultdict(int)
+          longs = [t for t in trades if not t.get("is_short")]
+          shorts = [t for t in trades if t.get("is_short")]
+          w(f"Long / Short trades: {len(longs)} / {len(shorts)}")
+          w(f"Long / Short profit USDT: {sum(t['profit_abs'] for t in longs):.3f} / "
+            f"{sum(t['profit_abs'] for t in shorts):.3f}")
+
+          losers = [t for t in trades if t.get("profit_abs", 0) < 0]
+          w(f"Losing trades: {len(losers)}  (sum {sum(t['profit_abs'] for t in losers):.3f} USDT)")
+
+          w("\nBy exit_reason (only non-profit exits, i.e. force_exit/stop_loss/bad_trade/...):")
+          by_exit = defaultdict(lambda: [0, 0.0])
           for t in trades:
-              open_date = t.get("open_date", "")[:10]
-              try:
-                  dt = datetime.strptime(open_date, "%Y-%m-%d")
-                  week_label = dt.strftime("Week of %Y-%m-%d")
-              except ValueError:
-                  week_label = "unknown"
-              by_week[week_label] += 1
-              by_tag[str(t.get("enter_tag"))] += 1
+              r = t.get("exit_reason", "?")
+              by_exit[r][0] += 1
+              by_exit[r][1] += t.get("profit_abs", 0)
+          for r, (n, p) in sorted(by_exit.items(), key=lambda x: x[1][1]):
+              if p < 0 or r in ("force_exit", "stop_loss") or "bad_trade" in r or "derisk" in r \
+                      or "structure" in r or "abandon" in r:
+                  w(f"  {r:50s} n={n:3d}  profit={p:10.3f}")
 
-          with open("user_data/logs/summary.txt", "w") as out:
-              out.write(f"Total entries in test window: {len(trades)}\n\n")
-              out.write("By week:\n")
-              for wk in sorted(by_week):
-                  out.write(f"  {wk}: {by_week[wk]}\n")
-              out.write("\nBy enter_tag:\n")
-              for tag, n in sorted(by_tag.items(), key=lambda x: -x[1]):
-                  out.write(f"  tag {tag}: {n}\n")
+          w("\nBy enter_tag (count, profit USDT, losses) -- worst 15:")
+          by_tag = defaultdict(lambda: [0, 0.0, 0])
+          for t in trades:
+              k = str(t.get("enter_tag"))
+              by_tag[k][0] += 1
+              by_tag[k][1] += t.get("profit_abs", 0)
+              if t.get("profit_abs", 0) < 0:
+                  by_tag[k][2] += 1
+          for k, (n, p, l) in sorted(by_tag.items(), key=lambda x: x[1][1])[:15]:
+              w(f"  tag {k:14s} n={n:3d}  profit={p:10.3f}  losses={l}")
+
+          w("\nWorst 10 trades:")
+          for t in sorted(trades, key=lambda t: t.get("profit_abs", 0))[:10]:
+              dur = t.get("trade_duration", 0)
+              w(f"  {t.get('pair','?'):18s} tag={str(t.get('enter_tag')):10s} "
+                f"open={str(t.get('open_date',''))[:16]} dur={dur/60:7.1f}h "
+                f"{t.get('profit_ratio',0)*100:7.2f}%  {t.get('profit_abs',0):9.3f} USDT  "
+                f"exit={t.get('exit_reason')}")
+
+          w("\nBy week (entries):")
+          by_week = defaultdict(int)
+          for t in trades:
+              try:
+                  d = datetime.strptime(t.get("open_date", "")[:10], "%Y-%m-%d")
+                  by_week[d.strftime("Week of %Y-%m-%d")] += 1
+              except ValueError:
+                  by_week["unknown"] += 1
+          for wk in sorted(by_week):
+              w(f"  {wk}: {by_week[wk]}")
+
+          with open("user_data/logs/summary.txt", "w") as f:
+              f.write("\n".join(out) + "\n")
           PYEOF
           cat user_data/logs/summary.txt 2>/dev/null || echo "No summary produced."
 
@@ -371,30 +411,54 @@ jobs:
           {
             echo "## Backtest Signal Frequency"
             echo ""
-            echo "Market: \`$market\` &nbsp; Strategy: \`${{ github.event.inputs.strategy }}\`"
-            echo "Test window: ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }} (${{ steps.dates.outputs.test_days }} days)"
-            echo "(downloaded from ${{ steps.dates.outputs.download_start }} for warmup)"
-            echo ""
-            echo "**Purpose:** compare this count against the same run with the other strategy"
-            echo "choices (NostalgiaForInfinityX7 / NostalgiaForInfinityX7ML / NostalgiaForInfinityX8)"
-            echo "— a similar count across them means the frequency is inherent to the"
-            echo "strategy/market/pairlist snapshot, not something in our ML subclass or specific"
-            echo "to one strategy generation."
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Market | \`$market\` |"
+            echo "| Strategy | \`$bt_strategy\` (direction: \`$DIRECTION_IN\`) |"
+            echo "| Strategy ref | \`${strategy_ref:-main (HEAD $(git rev-parse --short HEAD))}\` |"
+            echo "| Test window | ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }} (${{ steps.dates.outputs.test_days }} days) |"
+            echo "| Pairlist | $( [ -n "$PAIRS_RUN_IN" ] && echo "reused from run $PAIRS_RUN_IN" || echo "new snapshot -- reuse with pairs_run_id=${{ github.run_id }}" ) |"
+            echo "| Data cache | ${{ steps.datacache.outputs.cache-hit == 'true' && 'hit' || 'miss (downloaded)' }} |"
             echo ""
             echo "**Known limitation:** the pairlist is a snapshot of TODAY's top pairs by volume,"
-            echo "applied across the whole historical window (freqtrade doesn't support reconstructing"
-            echo "the historical pairlist day-by-day in backtesting) — see the workflow file header."
+            echo "applied to the whole historical window."
             echo ""
+            if [ -f user_data/logs/diagnostics.txt ]; then
+              echo "### Strategy diagnostics"
+              echo '```'
+              cat user_data/logs/diagnostics.txt
+              echo '```'
+            fi
             if [ -f user_data/logs/summary.txt ]; then
+              echo "### Trade summary"
               echo '```'
               cat user_data/logs/summary.txt
               echo '```'
             fi
-            echo ""
             echo "<details><summary>Full freqtrade backtest report</summary>"
             echo ""
             echo '```'
-            cat user_data/logs/backtest.log 2>/dev/null | tail -150
+            tail -150 user_data/logs/backtest.log 2>/dev/null
             echo '```'
             echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pairlist snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pairlist-${{ github.run_id }}
+          path: user_data/pairlist_snapshot.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload backtest results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-${{ github.run_id }}
+          path: |
+            user_data/backtest_results
+            user_data/logs
+          if-no-files-found: ignore
+          retention-days: 30
