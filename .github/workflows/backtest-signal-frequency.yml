@@ -86,7 +86,11 @@ jobs:
       - name: Take strategy files from ref (optional)
         if: ${{ inputs.ref != '' }}
         run: |
-          git fetch --no-tags --depth=1 origin "$REF_IN"
+          # Resolve short SHAs / branches / tags to a full 40-char SHA first:
+          # `git fetch origin <short-sha>` does not work.
+          FULL_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${REF_IN}" --jq .sha)
+          echo "ref '$REF_IN' resolved to $FULL_SHA"
+          git fetch --no-tags --depth=1 origin "$FULL_SHA"
           for f in \
             NostalgiaForInfinityX7.py NostalgiaForInfinityX7ML.py NostalgiaForInfinityX8.py \
             user_data/strategies/NostalgiaForInfinityX7.py \
@@ -407,6 +411,7 @@ jobs:
 
       - name: Post result to Job Summary
         if: always()
+        continue-on-error: true
         run: |
           {
             echo "## Backtest Signal Frequency"
@@ -415,7 +420,7 @@ jobs:
             echo "|---|---|"
             echo "| Market | \`$market\` |"
             echo "| Strategy | \`$bt_strategy\` (direction: \`$DIRECTION_IN\`) |"
-            echo "| Strategy ref | \`${strategy_ref:-main (HEAD $(git rev-parse --short HEAD))}\` |"
+            echo "| Strategy ref | \`${strategy_ref:-main (HEAD $(git rev-parse --short HEAD 2>/dev/null || echo n/a))}\` |"
             echo "| Test window | ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }} (${{ steps.dates.outputs.test_days }} days) |"
             echo "| Pairlist | $( [ -n "$PAIRS_RUN_IN" ] && echo "reused from run $PAIRS_RUN_IN" || echo "new snapshot -- reuse with pairs_run_id=${{ github.run_id }}" ) |"
             echo "| Data cache | ${{ steps.datacache.outputs.cache-hit == 'true' && 'hit' || 'miss (downloaded)' }} |"
@@ -438,7 +443,7 @@ jobs:
             echo "<details><summary>Full freqtrade backtest report</summary>"
             echo ""
             echo '```'
-            tail -150 user_data/logs/backtest.log 2>/dev/null
+            tail -150 user_data/logs/backtest.log 2>/dev/null || echo "(no backtest.log -- an earlier step failed)"
             echo '```'
             echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
