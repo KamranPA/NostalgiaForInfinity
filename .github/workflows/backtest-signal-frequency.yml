@@ -1,5 +1,9 @@
 name: Backtest Signal Frequency
 
+run-name: >-
+  Backtest ${{ inputs.strategy }} ${{ inputs.market }} ${{ inputs.direction }}
+  end=${{ inputs.end_date || 'today' }} ref=${{ inputs.ref || 'main' }}${{ inputs.derisk_hold_short != 'default' && format(' derisk_short={0}', inputs.derisk_hold_short) || '' }}${{ inputs.stale_max_daily_range_pct != '' && format(' stale_range={0}', inputs.stale_max_daily_range_pct) || '' }}${{ inputs.nfi_overrides != '' && ' +overrides' || '' }}
+
 # Manual backtest of the NFI strategies on OKX data.
 #
 # Reproducible A/B runs:
@@ -10,6 +14,16 @@ name: Backtest Signal Frequency
 #   * pairs_run_id -> reuse the pairlist snapshot of an earlier run (run id from
 #                     the run URL .../actions/runs/<ID>) so pairs are identical.
 #   * direction    -> both | long_only (long_only = subclass with can_short=False).
+#
+# NFI parameter overrides (no strategy file edits):
+#   * derisk_hold_short         -> default | true | false
+#                                  (bad_trade_controller_derisk_hold_short_enable)
+#   * stale_max_daily_range_pct -> number, empty = strategy default
+#                                  (bad_trade_controller_stale_max_daily_range_pct)
+#   * nfi_overrides             -> free JSON object, e.g. {"grind_mode_max_slots": 2}
+#                                  Keys must be in the strategy's NFI_SAFE_PARAMETERS.
+#   All three are written into the "nfi_parameters" block of the backtest config.
+#   Values from nfi_overrides win over the two dedicated inputs.
 #
 # Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
 # applied to the whole window (freqtrade can't rebuild historical pairlists).
@@ -55,6 +69,22 @@ on:
         description: 'Reuse pairlist snapshot of this earlier run id (empty = new snapshot)'
         type: string
         default: ''
+      derisk_hold_short:
+        description: 'NFI override: bad_trade_controller_derisk_hold_short_enable'
+        type: choice
+        options:
+          - default
+          - 'true'
+          - 'false'
+        default: default
+      stale_max_daily_range_pct:
+        description: 'NFI override: bad_trade_controller_stale_max_daily_range_pct (empty = default 7)'
+        type: string
+        default: ''
+      nfi_overrides:
+        description: 'NFI override: extra JSON object of safe parameters (empty = none)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -76,6 +106,9 @@ jobs:
       REF_IN: ${{ inputs.ref }}
       DIRECTION_IN: ${{ inputs.direction }}
       PAIRS_RUN_IN: ${{ inputs.pairs_run_id }}
+      DERISK_SHORT_IN: ${{ inputs.derisk_hold_short }}
+      STALE_RANGE_IN: ${{ inputs.stale_max_daily_range_pct }}
+      OVERRIDES_IN: ${{ inputs.nfi_overrides }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repository
@@ -221,7 +254,7 @@ jobs:
             echo "bad_trade_controller mentions: $(grep -c 'bad_trade_controller' "$F" || true)"
             echo "structure_break mentions:      $(grep -c 'structure_break' "$F" || true)"
             echo "derisk mentions:               $(grep -c -i 'derisk' "$F" || true)"
-            echo "--- bad_trade / derisk flag lines (first 25) ---"
+            echo "--- bad_trade / derisk flag lines IN THE FILE (defaults, before overrides; first 25) ---"
             grep -n -i -E "(bad_trade|derisk|structure_break).*(enable|enabled|= *(True|False))" "$F" | head -25 || true
           } | tee user_data/logs/diagnostics.txt
 
@@ -272,10 +305,10 @@ jobs:
           echo "Pairlist snapshot:"
           cat user_data/pairlist_snapshot.json
 
-      - name: Build backtest config (live config + StaticPairList from snapshot)
+      - name: Build backtest config (live config + StaticPairList + NFI overrides)
         run: |
           python3 << 'PYEOF'
-          import json
+          import json, os, re
 
           with open("user_data/live_config.json") as f:
               cfg = json.load(f)
@@ -289,6 +322,64 @@ jobs:
           cfg["exchange"]["pair_whitelist"] = pairs
           cfg["pairlists"] = [{"method": "StaticPairList"}]
           cfg["telegram"] = {"enabled": False, "token": "", "chat_id": ""}
+
+          # ---- NFI parameter overrides (nfi_parameters block) ----
+          requested = {}
+
+          derisk = os.environ.get("DERISK_SHORT_IN", "default").strip().lower()
+          if derisk in ("true", "false"):
+              requested["bad_trade_controller_derisk_hold_short_enable"] = (derisk == "true")
+
+          stale = os.environ.get("STALE_RANGE_IN", "").strip()
+          if stale:
+              try:
+                  requested["bad_trade_controller_stale_max_daily_range_pct"] = float(stale)
+              except ValueError:
+                  raise SystemExit(f"stale_max_daily_range_pct must be a number, got {stale!r}")
+
+          raw = os.environ.get("OVERRIDES_IN", "").strip()
+          if raw:
+              try:
+                  extra = json.loads(raw)
+              except json.JSONDecodeError as e:
+                  raise SystemExit(f"nfi_overrides is not valid JSON: {e}")
+              if not isinstance(extra, dict):
+                  raise SystemExit("nfi_overrides must be a JSON object, e.g. {\"grind_mode_max_slots\": 2}")
+              requested.update(extra)   # wins over the dedicated inputs
+
+          if requested:
+              # Validate keys against the strategy's own NFI_SAFE_PARAMETERS list.
+              base = os.environ.get("base_strategy", "NostalgiaForInfinityX8")
+              family_file = ("NostalgiaForInfinityX8.py" if base == "NostalgiaForInfinityX8"
+                             else "NostalgiaForInfinityX7.py")
+              src_path = os.path.join("user_data", "strategies", family_file)
+              safe = set()
+              try:
+                  with open(src_path, encoding="utf-8") as f:
+                      src = f.read()
+                  m = re.search(r"NFI_SAFE_PARAMETERS\s*=\s*\[(.*?)\n\s*\]", src, re.S)
+                  if m:
+                      safe = set(re.findall(r"[\"']([A-Za-z0-9_]+)[\"']", m.group(1)))
+              except OSError:
+                  pass
+              if safe:
+                  bad = sorted(k for k in requested if k not in safe)
+                  if bad:
+                      raise SystemExit(
+                          "These keys are not in NFI_SAFE_PARAMETERS of "
+                          f"{family_file} and would be ignored: {bad}"
+                      )
+              else:
+                  print("::warning::Could not parse NFI_SAFE_PARAMETERS; key validation skipped "
+                        "(the post-backtest check will still report ignored keys).")
+
+              params = dict(cfg.get("nfi_parameters") or {})
+              params.update(requested)
+              cfg["nfi_parameters"] = params
+
+          with open("user_data/logs/overrides_requested.json", "w") as f:
+              json.dump(requested, f, indent=2)
+          print("NFI overrides requested:", json.dumps(requested) if requested else "(none)")
 
           with open("user_data/config.json", "w") as f:
               json.dump(cfg, f, indent=2)
@@ -326,6 +417,8 @@ jobs:
       - name: Run backtest (results restricted to test window)
         run: |
           echo "Backtesting strategy: $bt_strategy on market: $market (direction: $DIRECTION_IN)"
+          # stdout (the report) -> backtest.log ; stderr (freqtrade/strategy log lines,
+          # incl. "Parameter X changed from ...") -> backtest_stderr.log + console.
           freqtrade backtesting \
             --config user_data/config.json \
             --strategy "$bt_strategy" \
@@ -334,7 +427,50 @@ jobs:
             --timeframe 5m \
             --export trades \
             --export-directory user_data/backtest_results \
+            2> >(tee user_data/logs/backtest_stderr.log >&2) \
             | tee user_data/logs/backtest.log
+
+      - name: Verify NFI overrides were applied
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 << 'PYEOF'
+          import json, os
+
+          req_path = "user_data/logs/overrides_requested.json"
+          out_path = "user_data/logs/overrides_applied.txt"
+          if not os.path.exists(req_path):
+              raise SystemExit(0)
+          with open(req_path) as f:
+              requested = json.load(f)
+          if not requested:
+              with open(out_path, "w") as f:
+                  f.write("No NFI overrides requested (strategy defaults).\n")
+              raise SystemExit(0)
+
+          log = ""
+          for p in ("user_data/logs/backtest_stderr.log", "user_data/logs/backtest.log"):
+              if os.path.exists(p):
+                  with open(p, errors="replace") as f:
+                      log += f.read() + "\n"
+
+          lines = []
+          for k, v in requested.items():
+              applied = [l.strip() for l in log.splitlines() if f"Parameter {k} changed from" in l]
+              invalid = [l.strip() for l in log.splitlines() if f"Invalid or unsafe parameter: {k}" in l]
+              if applied:
+                  lines.append(f"OK       {applied[-1]}")
+              elif invalid:
+                  lines.append(f"IGNORED  {k} = {v!r}  -> {invalid[-1]}")
+                  print(f"::error::Override {k} was IGNORED by the strategy")
+              else:
+                  lines.append(f"UNKNOWN  {k} = {v!r}  (no 'changed from' line found in the log)")
+                  print(f"::warning::Could not confirm override {k} in the log")
+          text = "\n".join(lines) + "\n"
+          with open(out_path, "w") as f:
+              f.write(text)
+          print(text)
+          PYEOF
 
       - name: Summarize trades (weeks, tags, exits, long/short, worst trades)
         run: |
@@ -451,6 +587,20 @@ jobs:
             echo "**Known limitation:** the pairlist is a snapshot of TODAY's top pairs by volume,"
             echo "applied to the whole historical window."
             echo ""
+            if [ -f user_data/logs/overrides_requested.json ]; then
+              echo "### NFI parameter overrides"
+              echo "Requested:"
+              echo '```json'
+              cat user_data/logs/overrides_requested.json
+              echo ""
+              echo '```'
+              if [ -f user_data/logs/overrides_applied.txt ]; then
+                echo "Applied (from freqtrade log):"
+                echo '```'
+                cat user_data/logs/overrides_applied.txt
+                echo '```'
+              fi
+            fi
             if [ -f user_data/logs/diagnostics.txt ]; then
               echo "### Strategy diagnostics"
               echo '```'
