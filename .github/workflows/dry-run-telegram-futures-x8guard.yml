@@ -1,0 +1,291 @@
+# SAVE THIS FILE AS: .github/workflows/dry-run-telegram-futures-x8guard.yml
+# (in .github/workflows/, alongside dry-run-telegram-futures-x8.yml)
+name: NFI X8 Guard Futures Dry-Run Telegram Signals (OKX)
+
+# X8-GUARD FUTURES bot — a parallel, completely separate twin of
+# dry-run-telegram-futures-x8.yml. Everything functional is identical
+# (same self-queueing restart chain, same 5h15m session length, same
+# hourly WAL-checkpoint push, same config values via
+# config_dryrun_futures_x8guard.json). Only the strategy class differs, and
+# every piece of state is separate so the bots can never interfere:
+#
+#   - strategy:            NostalgiaForInfinityX8Guard (subclass of X8, own file;
+#                          never edits the upstream X8 file)
+#   - config:              config_dryrun_futures_x8guard.json
+#   - SQLite file:         tradesv3.dryrun_futures_x8guard.sqlite
+#   - state branch:        state-futures-x8guard
+#   - concurrency group:   nfi-dryrun-futures-x8guard
+#   - Telegram bot token:  TELEGRAM_TOKEN_FUTURES_X8GUARD secret (its OWN bot — a
+#                          token shared between two running freqtrade
+#                          instances causes telegram.error.Conflict).
+#                          TELEGRAM_CHAT_ID is shared (same chat).
+#   - next-run dispatch:   dry-run-telegram-futures-x8guard.yml (itself)
+#
+# TO START: Actions tab -> "NFI X8 Guard Futures Dry-Run Telegram Signals (OKX)"
+# -> Run workflow (once). From then on it re-queues itself.
+#
+# Needs in the repo ROOT: NostalgiaForInfinityX8.py (synced from upstream) and
+# NostalgiaForInfinityX8Guard.py (ours; make sure the sync does not delete it).
+#
+# SQLite runs in WAL mode; both the periodic push and the final "Save
+# SQLite state" step force a WAL checkpoint before copying, so fresh
+# trade rows can't be stranded in the "-wal" side file.
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: nfi-dryrun-futures-x8guard
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # read for checkout; write so this run can push the state-futures-x8guard branch
+  actions: write    # so this run's own GITHUB_TOKEN can queue the next run
+
+jobs:
+  dryrun-futures-x8guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Notify Telegram — X8 Guard futures workflow started
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN_FUTURES_X8GUARD }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🟣 NFI X8 GUARD FUTURES (OKX) started — run #${{ github.run_number }} | dry-run | NostalgiaForInfinityX8Guard | 5m")
+          echo "Telegram API response: $RESPONSE"
+          if ! echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "::warning::Telegram did not accept the message — check TELEGRAM_TOKEN_FUTURES_X8GUARD/TELEGRAM_CHAT_ID secrets."
+          fi
+
+      - name: Verify required secrets are set
+        run: |
+          MISSING=""
+          [ -z "${{ secrets.TELEGRAM_TOKEN_FUTURES_X8GUARD }}" ] && MISSING="$MISSING TELEGRAM_TOKEN_FUTURES_X8GUARD"
+          [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ] && MISSING="$MISSING TELEGRAM_CHAT_ID"
+          if [ -n "$MISSING" ]; then
+            echo "::error::These GitHub Secrets are empty or not set:$MISSING — go to Settings > Secrets and variables > Actions and add them."
+            exit 1
+          fi
+          echo "All required secrets are present (values not shown here for security)."
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed so later steps can fetch/create the state-futures-x8guard branch
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-nfi-futures-x8guard-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-nfi-futures-x8guard-
+
+      - name: Install TA-Lib (pip wheel first, C source only if needed)
+        run: |
+          python -m pip install --upgrade pip
+          # Recent TA-Lib wheels bundle the C library -> no SourceForge needed
+          # (the old wget from prdownloads.sourceforge.net started failing with
+          # "Process completed with exit code 8").
+          if python -m pip install --only-binary=:all: TA-Lib \
+             && python -c "import talib; print('TA-Lib wheel OK, version', talib.__version__)"; then
+            echo "Using the TA-Lib wheel; skipping the C build."
+          else
+            echo "::warning::No usable TA-Lib wheel -- building the C library from source."
+            sudo apt-get update
+            sudo apt-get install -y build-essential curl
+            OK=0
+            for URL in \
+              "https://github.com/ta-lib/ta-lib/releases/download/v0.6.4/ta-lib-0.6.4-src.tar.gz" \
+              "https://downloads.sourceforge.net/project/ta-lib/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz"; do
+              echo "Trying $URL"
+              rm -f ta-lib-src.tar.gz
+              if curl -fL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 \
+                   -o ta-lib-src.tar.gz "$URL" \
+                 && tar -tzf ta-lib-src.tar.gz > /dev/null 2>&1; then
+                OK=1
+                break
+              fi
+            done
+            if [ "$OK" != "1" ]; then
+              echo "::error::Could not get TA-Lib from any source."
+              exit 1
+            fi
+            tar -xzf ta-lib-src.tar.gz
+            cd ta-lib*/
+            ./configure --prefix=/usr
+            make
+            sudo make install
+            cd ..
+            python -m pip install TA-Lib
+          fi
+
+      - name: Install Freqtrade + dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install freqtrade
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Prepare Freqtrade user_data layout
+        run: |
+          mkdir -p user_data/strategies
+          mkdir -p user_data/logs
+          # The Guard is a thin subclass of X8 (imports it by module name), so
+          # BOTH files must sit in user_data/strategies/.
+          if [ -e user_data/strategies/NostalgiaForInfinityX8.py ]; then
+            echo "X8 strategy file already present at destination (symlink from repo layout) — skipping copy."
+          else
+            cp NostalgiaForInfinityX8.py user_data/strategies/
+          fi
+          if [ -e user_data/strategies/NostalgiaForInfinityX8Guard.py ]; then
+            echo "Guard strategy file already present at destination — skipping copy."
+          else
+            cp NostalgiaForInfinityX8Guard.py user_data/strategies/
+          fi
+          cp config_dryrun_futures_x8guard.json user_data/config.json
+
+      - name: Restore previous SQLite state (if any)
+        run: |
+          git fetch origin state-futures-x8guard 2>/dev/null && \
+            git show origin/state-futures-x8guard:tradesv3.dryrun_futures_x8guard.sqlite > user_data/tradesv3.dryrun_futures_x8guard.sqlite 2>/dev/null && \
+            echo "Restored previous state ($(du -h user_data/tradesv3.dryrun_futures_x8guard.sqlite | cut -f1))." || \
+            echo "No previous state found (first run, or state-futures-x8guard branch doesn't exist yet) — starting fresh."
+
+      - name: Run Freqtrade (dry-run, background) and tail logs
+        env:
+          FREQTRADE__TELEGRAM__TOKEN: ${{ secrets.TELEGRAM_TOKEN_FUTURES_X8GUARD }}
+          FREQTRADE__TELEGRAM__CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN_FUTURES_X8GUARD }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_URL: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+        run: |
+          cd user_data/..
+
+          SELF_TIMEOUT_SECONDS=$((5*3600 + 15*60))
+          CHECKPOINT_INTERVAL_SECONDS=3600   # hourly
+
+          timeout --signal=TERM "${SELF_TIMEOUT_SECONDS}s" freqtrade trade \
+            --config user_data/config.json \
+            --strategy NostalgiaForInfinityX8Guard \
+            --strategy-path user_data/strategies \
+            --logfile user_data/logs/freqtrade.log &
+          FREQTRADE_PID=$!
+
+          QUEUE_LEAD_SECONDS=120
+          (
+            sleep $((SELF_TIMEOUT_SECONDS - QUEUE_LEAD_SECONDS))
+            echo "Queueing the next run now (this run stops in ~${QUEUE_LEAD_SECONDS}s)..."
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/dry-run-telegram-futures-x8guard.yml/dispatches" \
+              -d "{\"ref\": \"${{ github.ref_name }}\"}"
+          ) &
+          QUEUE_PID=$!
+
+          # Periodic mid-session state push: keeps state-futures-x8guard (and
+          # thus the dashboard) reasonably fresh instead of only updating
+          # once every ~5h45m. Uses its OWN throwaway git clone in /tmp so
+          # it never touches this job's main checkout/working tree.
+          (
+            SQLITE_FILE="user_data/tradesv3.dryrun_futures_x8guard.sqlite"
+            while true; do
+              sleep "$CHECKPOINT_INTERVAL_SECONDS"
+              if [ ! -f "$SQLITE_FILE" ]; then continue; fi
+              sqlite3 "$SQLITE_FILE" "PRAGMA wal_checkpoint(TRUNCATE);" || true
+              TMP_DIR=$(mktemp -d)
+              cp "$SQLITE_FILE" "$TMP_DIR/tradesv3.dryrun_futures_x8guard.sqlite"
+              (
+                cd "$TMP_DIR"
+                git init -q
+                git config user.name "github-actions[bot]"
+                git config user.email "github-actions[bot]@users.noreply.github.com"
+                git checkout -q -b state-futures-x8guard
+                git add tradesv3.dryrun_futures_x8guard.sqlite
+                git commit -q -m "periodic checkpoint sync $(date -u +%Y-%m-%dT%H:%M:%SZ) run #${{ github.run_number }}"
+                git remote add origin "$REPO_URL"
+                git push -q origin state-futures-x8guard --force
+              ) && echo "Periodic checkpoint pushed to state-futures-x8guard at $(date -u)." \
+                || echo "::warning::Periodic checkpoint push failed (will retry next interval)."
+              rm -rf "$TMP_DIR"
+            done
+          ) &
+          CHECKPOINT_PID=$!
+
+          external_cancel_handler() {
+            echo "Received external termination signal — forwarding to freqtrade (PID $FREQTRADE_PID) for graceful shutdown..."
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              -d chat_id="${CHAT_ID}" \
+              -d text="⚠️ NFI X8 GUARD FUTURES (OKX) dry-run (run #${{ github.run_number }}) was cancelled externally — shutting down gracefully. State will still be saved." \
+              > /dev/null || true
+            kill -TERM "$FREQTRADE_PID" 2>/dev/null || true
+            wait "$FREQTRADE_PID" 2>/dev/null || true
+            exit 0
+          }
+          trap external_cancel_handler SIGTERM SIGINT
+
+          sleep 20
+          tail -f user_data/logs/freqtrade.log &
+          TAIL_PID=$!
+
+          wait $FREQTRADE_PID || true
+          kill $TAIL_PID 2>/dev/null || true
+          kill $QUEUE_PID 2>/dev/null || true
+          kill $CHECKPOINT_PID 2>/dev/null || true
+
+          echo "Planned self-restart: freqtrade ran for its allotted ${SELF_TIMEOUT_SECONDS}s and stopped on its own — this is expected, not a failure."
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="🔁 NFI X8 GUARD FUTURES (OKX) dry-run (run #${{ github.run_number }}) completed its planned ${SELF_TIMEOUT_SECONDS}s session and is stopping on schedule. State is being saved; the next run was already queued and should start immediately." \
+            > /dev/null || true
+
+          exit 0
+
+      - name: Save SQLite state (persist across restarts)
+        if: always()
+        run: |
+          SQLITE_FILE="user_data/tradesv3.dryrun_futures_x8guard.sqlite"
+          if [ ! -f "$SQLITE_FILE" ]; then
+            echo "No SQLite file found — freqtrade may have failed before creating it. Skipping state save."
+            exit 0
+          fi
+
+          echo "Forcing a full WAL checkpoint so all committed trade data is flushed into the main file..."
+          sqlite3 "$SQLITE_FILE" "PRAGMA wal_checkpoint(TRUNCATE);"
+
+          echo "Post-checkpoint sanity check — closed trade count in file about to be saved:"
+          sqlite3 "$SQLITE_FILE" "SELECT count(*) FROM trades WHERE is_open=0;"
+
+          cp "$SQLITE_FILE" /tmp/state_backup_futures_x8guard.sqlite
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout --orphan state-futures-x8guard-tmp
+          git rm -rf . > /dev/null 2>&1 || true
+          cp /tmp/state_backup_futures_x8guard.sqlite tradesv3.dryrun_futures_x8guard.sqlite
+          git add tradesv3.dryrun_futures_x8guard.sqlite
+          git commit -m "state sync $(date -u +%Y-%m-%dT%H:%M:%SZ) run #${{ github.run_number }}" --quiet
+          git push origin state-futures-x8guard-tmp:state-futures-x8guard --force
+          echo "State saved to state-futures-x8guard branch ($(du -h /tmp/state_backup_futures_x8guard.sqlite | cut -f1))."
+
+      - name: Notify Telegram — X8 Guard futures workflow failed
+        if: failure()
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN_FUTURES_X8GUARD }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="❌ NFI X8 GUARD FUTURES (OKX) dry-run workflow (run #${{ github.run_number }}) FAILED. Check GitHub Actions logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            > /dev/null
