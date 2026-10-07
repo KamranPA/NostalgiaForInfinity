@@ -870,6 +870,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
   <a href="#cmp-spot">Spot comparison</a>
   <a href="#cmp-futures">Futures comparison</a>
   <a href="#x8-detail">X8 detail</a>
+  <a href="guard.html">X8 vs X8 Guard →</a>
 </div>
 
 {spot_html}
