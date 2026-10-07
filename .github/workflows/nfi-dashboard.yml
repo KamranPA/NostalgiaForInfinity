@@ -2,12 +2,13 @@
 # (in .github/workflows/, alongside the other workflow files)
 name: NFI Dashboard
 
-# Reads ALL FOUR bots' live trading state directly from their SQLite state
+# Reads ALL FIVE bots' live trading state directly from their SQLite state
 # branches:
-#   X7ML spot     -> state-spot         (tradesv3.dryrun.sqlite)
-#   X7ML futures  -> state-futures      (tradesv3.dryrun_futures.sqlite)
-#   X8 spot       -> state-spot-x8      (tradesv3.dryrun_x8.sqlite)
-#   X8 futures    -> state-futures-x8   (tradesv3.dryrun_futures_x8.sqlite)
+#   X7ML spot      -> state-spot            (tradesv3.dryrun.sqlite)
+#   X7ML futures   -> state-futures         (tradesv3.dryrun_futures.sqlite)
+#   X8 spot        -> state-spot-x8         (tradesv3.dryrun_x8.sqlite)
+#   X8 futures     -> state-futures-x8      (tradesv3.dryrun_futures_x8.sqlite)
+#   X8 Guard fut.  -> state-futures-x8guard (tradesv3.dryrun_futures_x8guard.sqlite)
 # (the same files the dry-run-*.yml workflows persist across restarts)
 # instead of a Postgres database. This never touches Postgres at all
 # anymore — that whole layer (Supabase, schemas, the futures_bot role)
@@ -15,7 +16,7 @@ name: NFI Dashboard
 # (freqtrade's own internal polling loop was generating millions of tiny
 # queries per session).
 #
-# TWO PAGES are produced:
+# THREE PAGES are produced:
 #   docs/index.html    — main dashboard, X7ML spot + futures
 #                        (generate_dashboard.py, unchanged)
 #   docs/compare.html  — X7ML vs X8 head-to-head per market + full X8
@@ -23,6 +24,9 @@ name: NFI Dashboard
 #                        which imports generate_dashboard.py). Built with
 #                        continue-on-error so a problem in the comparison
 #                        page can never stop the main dashboard updating.
+#   docs/guard.html    — X8 futures vs X8 Guard futures head-to-head
+#                        (generate_dashboard_guard.py, imports both scripts
+#                        above). Also continue-on-error.
 #
 # This workflow's OWN read/write is to a separate branch
 # (dashboard-history) that holds nothing but the trend-chart history —
@@ -58,7 +62,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install numpy ccxt
 
-      - name: Fetch SQLite state of all four bots
+      - name: Fetch SQLite state of all five bots
         run: |
           mkdir -p /tmp/dashboard_data
 
@@ -81,6 +85,11 @@ jobs:
             git show origin/state-futures-x8:tradesv3.dryrun_futures_x8.sqlite > /tmp/dashboard_data/futures_x8.sqlite 2>/dev/null && \
             echo "Futures (X8) state found ($(du -h /tmp/dashboard_data/futures_x8.sqlite | cut -f1))." || \
             echo "No futures (X8) state yet (first hourly checkpoint not pushed yet) — comparison page will show it as empty."
+
+          git fetch origin state-futures-x8guard 2>/dev/null && \
+            git show origin/state-futures-x8guard:tradesv3.dryrun_futures_x8guard.sqlite > /tmp/dashboard_data/futures_x8guard.sqlite 2>/dev/null && \
+            echo "Futures (X8 Guard) state found ($(du -h /tmp/dashboard_data/futures_x8guard.sqlite | cut -f1))." || \
+            echo "No futures (X8 Guard) state yet (first hourly checkpoint not pushed yet) — Guard page will show a placeholder."
 
       - name: Fetch (or initialize) dashboard history
         run: |
@@ -111,12 +120,23 @@ jobs:
             /tmp/dashboard_data/history.sqlite \
             docs/compare.html
 
+      - name: Generate X8 vs X8 Guard page
+        # Same safety rule: a problem here must never block the other pages.
+        continue-on-error: true
+        run: |
+          python generate_dashboard_guard.py \
+            /tmp/dashboard_data/futures_x8.sqlite \
+            /tmp/dashboard_data/futures_x8guard.sqlite \
+            /tmp/dashboard_data/history.sqlite \
+            docs/guard.html
+
       - name: Commit and push docs pages
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/index.html
           [ -f docs/compare.html ] && git add docs/compare.html || true
+          [ -f docs/guard.html ] && git add docs/guard.html || true
           git diff --cached --quiet && echo "No dashboard changes to commit." || \
             (git commit -m "Update dashboard $(date -u +%Y-%m-%dT%H:%M:%SZ)" --quiet && git push origin HEAD:${{ github.ref_name }})
 
