@@ -4,10 +4,11 @@ name: Dry-Run Watchdog (safety net, internal cron)
 
 # WHY THIS EXISTS
 # ------------------------------------------------------------
-# All four dry-run workflows — dry-run-telegram-signals.yml (X7ML spot),
-# dry-run-telegram-futures.yml (X7ML futures), and their X8 twins
+# All five dry-run workflows — dry-run-telegram-signals.yml (X7ML spot),
+# dry-run-telegram-futures.yml (X7ML futures), their X8 twins
 # dry-run-telegram-signals-x8.yml (X8 spot) / dry-run-telegram-futures-x8.yml
-# (X8 futures) — keep themselves alive by dispatching their own next run
+# (X8 futures), and dry-run-telegram-futures-x8guard.yml (X8 Guard futures)
+# — keep themselves alive by dispatching their own next run
 # a couple minutes before each ~5h15m session ends. That self-queueing
 # chain works well, but has one gap: if a run ever crashes BEFORE it
 # reaches the point where it queues its successor (an unexpected error,
@@ -33,10 +34,10 @@ name: Dry-Run Watchdog (safety net, internal cron)
 # waiting / requested / pending). If a session (or its own queued
 # successor) is already active, it does nothing this cycle.
 #
-# X8 NOTE: the watchdog also STARTS an X8 workflow that has never been
-# run (or that has stopped) — it can't tell "never started" from
-# "crashed". So the X8 secrets (TELEGRAM_TOKEN_SPOT_X8 /
-# TELEGRAM_TOKEN_FUTURES_X8) should exist BEFORE this file is committed;
+# X8 / GUARD NOTE: the watchdog also STARTS an X8 or Guard workflow that has
+# never been run (or that has stopped) — it can't tell "never started" from
+# "crashed". So the secrets (TELEGRAM_TOKEN_SPOT_X8 / TELEGRAM_TOKEN_FUTURES_X8 /
+# TELEGRAM_TOKEN_FUTURES_X8GUARD) should exist BEFORE this file is committed;
 # otherwise each hourly cycle would dispatch a run that fails at its
 # "Verify required secrets" step.
 
@@ -101,6 +102,16 @@ jobs:
         run: |
           bash .github/workflows/scripts/watchdog_check.sh \
             "dry-run-telegram-futures-x8.yml" \
+            "${{ github.repository }}" \
+            "${{ github.ref_name }}"
+
+      - name: Check and restart X8 Guard futures dry-run if it has stopped
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .github/workflows/scripts/watchdog_check.sh \
+            "dry-run-telegram-futures-x8guard.yml" \
             "${{ github.repository }}" \
             "${{ github.ref_name }}"
 
