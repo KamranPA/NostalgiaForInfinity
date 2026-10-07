@@ -10,28 +10,27 @@ name: NFI Dashboard
 #   X8 futures     -> state-futures-x8      (tradesv3.dryrun_futures_x8.sqlite)
 #   X8 Guard fut.  -> state-futures-x8guard (tradesv3.dryrun_futures_x8guard.sqlite)
 # (the same files the dry-run-*.yml workflows persist across restarts)
-# instead of a Postgres database. This never touches Postgres at all
-# anymore — that whole layer (Supabase, schemas, the futures_bot role)
-# was retired after it caused repeated free-tier egress quota problems
-# (freqtrade's own internal polling loop was generating millions of tiny
-# queries per session).
+# instead of a Postgres database.
 #
-# THREE PAGES are produced:
-#   docs/index.html    — main dashboard, X7ML spot + futures
+# FOUR PAGES are produced:
+#   docs/index.html    — classic main dashboard, X7ML spot + futures
 #                        (generate_dashboard.py, unchanged)
-#   docs/compare.html  — X7ML vs X8 head-to-head per market + full X8
-#                        detail sections (generate_dashboard_compare.py,
-#                        which imports generate_dashboard.py). Built with
-#                        continue-on-error so a problem in the comparison
-#                        page can never stop the main dashboard updating.
-#   docs/guard.html    — X8 futures vs X8 Guard futures head-to-head
-#                        (generate_dashboard_guard.py, imports both scripts
-#                        above). Also continue-on-error.
+#   docs/compare.html  — X7ML vs X8 head-to-head (generate_dashboard_compare.py)
+#   docs/guard.html    — X8 vs X8 Guard head-to-head (generate_dashboard_guard.py)
+#   docs/overview.html — NEW reordered page: spot + futures summaries for
+#                        X7ML / X8 / Guard on top, trade details and ML data
+#                        lower (generate_dashboard_overview.py).
+# Every page except index.html is built with continue-on-error so a problem
+# in one can never stop the others from updating.
+#
+# TO MAKE THE OVERVIEW THE HOME PAGE once you're happy with it:
+#   1. in "Generate combined dashboard" change the last argument
+#      docs/index.html -> docs/classic.html
+#   2. in "Generate overview page" change docs/overview.html -> docs/index.html
+#   3. in "Commit and push docs pages" add: git add docs/classic.html
 #
 # This workflow's OWN read/write is to a separate branch
-# (dashboard-history) that holds nothing but the trend-chart history —
-# kept apart from all bots' live state files so there's never a write
-# race between independent things updating git branches.
+# (dashboard-history) that holds nothing but the trend-chart history.
 
 on:
   workflow_dispatch: {}
@@ -108,8 +107,6 @@ jobs:
             docs/index.html
 
       - name: Generate X7ML vs X8 comparison page
-        # Never let a problem in the new comparison page block the main
-        # dashboard from updating and being committed.
         continue-on-error: true
         run: |
           python generate_dashboard_compare.py \
@@ -121,7 +118,6 @@ jobs:
             docs/compare.html
 
       - name: Generate X8 vs X8 Guard page
-        # Same safety rule: a problem here must never block the other pages.
         continue-on-error: true
         run: |
           python generate_dashboard_guard.py \
@@ -130,6 +126,20 @@ jobs:
             /tmp/dashboard_data/history.sqlite \
             docs/guard.html
 
+      - name: Generate overview page (summaries on top, ML data lower)
+        # Runs AFTER the other pages: it only reads the history file and
+        # never records snapshots, so nothing is double-counted.
+        continue-on-error: true
+        run: |
+          python generate_dashboard_overview.py \
+            /tmp/dashboard_data/spot.sqlite \
+            /tmp/dashboard_data/futures.sqlite \
+            /tmp/dashboard_data/spot_x8.sqlite \
+            /tmp/dashboard_data/futures_x8.sqlite \
+            /tmp/dashboard_data/futures_x8guard.sqlite \
+            /tmp/dashboard_data/history.sqlite \
+            docs/overview.html
+
       - name: Commit and push docs pages
         run: |
           git config user.name "github-actions[bot]"
@@ -137,6 +147,7 @@ jobs:
           git add docs/index.html
           [ -f docs/compare.html ] && git add docs/compare.html || true
           [ -f docs/guard.html ] && git add docs/guard.html || true
+          [ -f docs/overview.html ] && git add docs/overview.html || true
           git diff --cached --quiet && echo "No dashboard changes to commit." || \
             (git commit -m "Update dashboard $(date -u +%Y-%m-%dT%H:%M:%SZ)" --quiet && git push origin HEAD:${{ github.ref_name }})
 
@@ -147,9 +158,7 @@ jobs:
             echo "No history file produced — skipping history save."
             exit 0
           fi
-          # Unlike the bots' own state branches (force-pushed, single
-          # commit each time, since only the LATEST live state matters),
-          # this branch keeps a normal, incrementally-growing commit
+          # This branch keeps a normal, incrementally-growing commit
           # history — that's what lets the trend chart accumulate points
           # over time instead of only ever showing one snapshot.
           git fetch origin dashboard-history 2>/dev/null || true
