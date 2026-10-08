@@ -140,7 +140,7 @@
 <body>
 
 <h1>🛡️ NostalgiaForInfinity — X8 vs X8 Guard</h1>
-<div class="subtitle">Generated 2026-10-08 14:16:06 UTC · dry-run (simulated) — no real funds involved · both bots on OKX futures</div>
+<div class="subtitle">Generated 2026-10-08 20:24:46 UTC · dry-run (simulated) — no real funds involved · both bots on OKX futures</div>
 <div class="nav">
   <a href="index.html">← Main dashboard</a>
   <a href="compare.html">X7ML vs X8</a>
@@ -154,14 +154,14 @@
 <div class="card">
   <h3>Head to head <span class="muted" style="font-weight:400;font-size:0.75rem;">— trades opened since the Guard bot started, both bots</span></h3>
   <p class="muted" style="font-size:0.8rem;margin:0 0 12px 0;">
-    Window = trades opened since <b>2026-10-07 10:20 UTC</b> (1.2 days ago; start taken from freqtrade bot_start_time).
+    Window = trades opened since <b>2026-10-07 10:20 UTC</b> (1.4 days ago; start taken from freqtrade bot_start_time).
     X8 began this window with <b>1</b> older trade(s) still open, occupying slots the Guard had free.
   </p>
-  <p class="warn-note">⚠️ Small sample: 0 (X8) and 0 (X8 Guard) closed trades — below 30, so differences here can easily be chance.</p>
+  <p class="warn-note">⚠️ Small sample: 3 (X8) and 4 (X8 Guard) closed trades — below 30, so differences here can easily be chance.</p>
   
   <div class="table-scroll"><table class="compare-table">
     <tr><th>Metric</th><th class="legend-x8">X8</th><th class="legend-xg">X8 Guard</th></tr>
-    <tr><td>Trades opened (in window)</td><td>2</td><td>2</td></tr><tr><td>Closed / open now</td><td>0 / 2</td><td>0 / 2</td></tr><tr><td>Win rate (closed)</td><td>—</td><td>—</td></tr><tr><td>Realized profit</td><td>+0.00 USDT</td><td>+0.00 USDT</td></tr><tr><td>Unrealized P/L (open)</td><td>-21.29 USDT</td><td class="edge">-16.48 USDT</td></tr><tr><td><b>True Total</b> (realized + unrealized)</td><td><b>-21.29 USDT</b></td><td class="edge"><b>-16.48 USDT</b></td></tr><tr><td>True Total (% of dry-run wallet)</td><td>-2.13%</td><td class="edge">-1.65%</td></tr><tr><td>Avg profit / closed trade</td><td>—</td><td>—</td></tr><tr><td>Avg closed duration</td><td>—</td><td>—</td></tr><tr><td>Worst closed trade</td><td>—</td><td>—</td></tr><tr><td>Open longer than 3d</td><td>0</td><td>0</td></tr><tr><td>Oldest open trade</td><td>1.1d</td><td class="edge">1.1d</td></tr><tr><td>Max drawdown (realized equity)</td><td>0.00 USDT</td><td>0.00 USDT</td></tr>
+    <tr><td>Trades opened (in window)</td><td>9</td><td>12</td></tr><tr><td>Closed / open now</td><td>3 / 6</td><td>4 / 8</td></tr><tr><td>Win rate (closed)</td><td>100.00%</td><td>100.00%</td></tr><tr><td>Realized profit</td><td class="edge">+7.63 USDT</td><td>+6.02 USDT</td></tr><tr><td>Unrealized P/L (open)</td><td>-18.23 USDT</td><td class="edge">+6.85 USDT</td></tr><tr><td><b>True Total</b> (realized + unrealized)</td><td><b>-10.60 USDT</b></td><td class="edge"><b>+12.87 USDT</b></td></tr><tr><td>True Total (% of dry-run wallet)</td><td>-1.06%</td><td class="edge">+1.29%</td></tr><tr><td>Avg profit / closed trade</td><td class="edge">+5.48%</td><td>+1.22%</td></tr><tr><td>Avg closed duration</td><td>10.3h</td><td>0.1h</td></tr><tr><td>Worst closed trade</td><td class="edge">+0.82% <span class="muted">(ARB/USDT:USDT)</span></td><td>+0.32% <span class="muted">(ROBO/USDT:USDT)</span></td></tr><tr><td>Open longer than 3d</td><td>0</td><td>0</td></tr><tr><td>Oldest open trade</td><td class="edge">7.3h</td><td>1.4d</td></tr><tr><td>Max drawdown (realized equity)</td><td>0.00 USDT</td><td>0.00 USDT</td></tr>
   </table></div>
   <p class="muted" style="font-size:0.8rem;margin:10px 0 0 0;">
     Highlighted cell = the better value where "better" is unambiguous.
@@ -178,7 +178,23 @@
 
 <div class="card">
   <h3>🔀 Same entry, different exit <span class="muted" style="font-weight:400;font-size:0.75rem;">— where the Guard's higher abandon threshold actually changed the outcome</span></h3>
-  <p class="muted">No matched entry has closed differently yet — the two bots behaved identically so far.</p>
+  
+  <div class="table-scroll"><table>
+    <tr><th>Pair</th><th>Opened (X8)</th>
+        <th class="legend-x8">X8 result / exit</th><th class="legend-xg">X8 Guard result / exit</th></tr>
+    <tr>
+          <td>AVAX/USDT:USDT</td>
+          <td>2026-10-08 15:28</td>
+          <td><span class="muted">open</span> <span class="muted">open</span></td>
+          <td><span class="profit-pos">+3.50%</span> <span class="muted">exit_long_normal_u_1 ( 6 141 )</span></td>
+        </tr><tr>
+          <td>H/USDT:USDT <span class="muted">(short)</span></td>
+          <td>2026-10-07 11:35</td>
+          <td><span class="profit-pos">+14.21%</span> <span class="muted">exit_profit_short_rebuy_t_4_1_m ( 562 )</span></td>
+          <td><span class="muted">open</span> <span class="muted">open</span></td>
+        </tr>
+  </table></div>
+  <p class="muted" style="font-size:0.75rem;margin:8px 0 0 0;">2 matched entries closed differently (newest 15 shown). "open" = still open on that bot.</p>
 </div>
 
 
@@ -186,25 +202,64 @@
   <h3>🔗 Signal Overlap — X8 vs X8 Guard <span class="muted" style="font-weight:400;font-size:0.75rem;">— same pair + direction, opened within 15 min</span></h3>
   <div class="grid" style="margin-bottom:0;">
     <div class="stat-card"><div class="label">Matched entries</div>
-      <div class="value">2</div>
-      <div class="muted" style="font-size:0.75rem;margin-top:4px;">100% of X8 · 100% of X8 Guard</div></div>
+      <div class="value">9</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">100% of X8 · 75% of X8 Guard</div></div>
     <div class="stat-card"><div class="label">X8-only entries</div>
       <div class="value">0</div>
-      <div class="muted" style="font-size:0.75rem;margin-top:4px;">of 2 total</div></div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">of 9 total</div></div>
     <div class="stat-card"><div class="label">X8 Guard-only entries</div>
-      <div class="value">0</div>
-      <div class="muted" style="font-size:0.75rem;margin-top:4px;">of 2 total</div></div>
+      <div class="value">3</div>
+      <div class="muted" style="font-size:0.75rem;margin-top:4px;">of 12 total</div></div>
     <div class="stat-card"><div class="label">Same enter_tag too</div>
-      <div class="value">2 / 2</div>
+      <div class="value">9 / 9</div>
       <div class="muted" style="font-size:0.75rem;margin-top:4px;">100% of matches</div></div>
   </div>
   
+    <p style="margin:12px 0 0 0;">On the <b>2</b> matched signals that both bots have already closed:
+      X8 averaged <b>+1.11%</b>,
+      X8 Guard averaged <b>+0.32%</b>
+      — same entry moment, different trade management.</p>
   
   <div class="table-scroll" style="margin-top:16px;"><table>
     <tr><th>Pair</th><th>X8 tag</th><th>X8 Guard tag</th>
         <th>X8 opened</th><th>X8 Guard opened</th><th>Gap</th>
         <th>X8 result</th><th>X8 Guard result</th></tr>
     <tr>
+              <td>TRIA/USDT:USDT</td>
+              <td>2 6 </td><td>2 6 </td>
+              <td>2026-10-08 15:33</td><td>2026-10-08 15:30</td>
+              <td>3.5m</td><td><span class="muted">open</span></td><td><span class="muted">open</span></td>
+            </tr><tr>
+              <td>AVAX/USDT:USDT</td>
+              <td>6 141 </td><td>6 141 </td>
+              <td>2026-10-08 15:28</td><td>2026-10-08 15:25</td>
+              <td>2.9m</td><td><span class="muted">open</span></td><td><span class="profit-pos">+3.50%</span></td>
+            </tr><tr>
+              <td>ROBO/USDT:USDT</td>
+              <td>2  <span class="muted">(Normal)</span></td><td>2  <span class="muted">(Normal)</span></td>
+              <td>2026-10-08 15:25</td><td>2026-10-08 15:26</td>
+              <td>0.9m</td><td><span class="profit-pos">+1.40%</span></td><td><span class="profit-pos">+0.32%</span></td>
+            </tr><tr>
+              <td>WLD/USDT:USDT</td>
+              <td>141  <span class="muted">(Top Coins)</span></td><td>141  <span class="muted">(Top Coins)</span></td>
+              <td>2026-10-08 15:25</td><td>2026-10-08 15:25</td>
+              <td>0.0m</td><td><span class="muted">open</span></td><td><span class="muted">open</span></td>
+            </tr><tr>
+              <td>SUI/USDT:USDT</td>
+              <td>141  <span class="muted">(Top Coins)</span></td><td>141  <span class="muted">(Top Coins)</span></td>
+              <td>2026-10-08 15:25</td><td>2026-10-08 15:25</td>
+              <td>0.0m</td><td><span class="muted">open</span></td><td><span class="muted">open</span></td>
+            </tr><tr>
+              <td>ARB/USDT:USDT</td>
+              <td>2 141 </td><td>2 141 </td>
+              <td>2026-10-08 15:25</td><td>2026-10-08 15:25</td>
+              <td>0.0m</td><td><span class="profit-pos">+0.82%</span></td><td><span class="profit-pos">+0.32%</span></td>
+            </tr><tr>
+              <td>PENGU/USDT:USDT</td>
+              <td>6  <span class="muted">(Normal)</span></td><td>6  <span class="muted">(Normal)</span></td>
+              <td>2026-10-08 15:25</td><td>2026-10-08 15:25</td>
+              <td>0.0m</td><td><span class="muted">open</span></td><td><span class="muted">open</span></td>
+            </tr><tr>
               <td>ALGO/USDT:USDT</td>
               <td>145  <span class="muted">(Top Coins)</span></td><td>145  <span class="muted">(Top Coins)</span></td>
               <td>2026-10-08 13:05</td><td>2026-10-08 13:09</td>
@@ -213,13 +268,17 @@
               <td>H/USDT:USDT <span class="muted">(short)</span></td>
               <td>562  <span class="muted">(Short Rebuy)</span></td><td>562  <span class="muted">(Short Rebuy)</span></td>
               <td>2026-10-07 11:35</td><td>2026-10-07 11:35</td>
-              <td>0.2m</td><td><span class="muted">open</span></td><td><span class="muted">open</span></td>
+              <td>0.2m</td><td><span class="profit-pos">+14.21%</span></td><td><span class="muted">open</span></td>
             </tr>
   </table></div>
   <p class="muted" style="font-size:0.8rem;margin:12px 0 0 0;">Both bots run the same entry logic, so a high match rate is expected; 'only' counts come from different open slots or timing after earlier exits diverged.</p>
 </div>
 
-<div class="card"><h3>Exit reasons (closed)</h3><p class="muted">No closed trades in the window yet.</p></div>
+<div class="card"><h3>Exit reasons (closed)</h3>
+  <div class="table-scroll"><table class="compare-table">
+    <tr><th>Exit reason</th><th class="legend-x8">X8</th><th class="legend-xg">X8 Guard</th></tr>
+    <tr><td>exit_long_normal_u_0 ( 2 )</td><td>1</td><td>2</td></tr><tr><td>exit_long_normal_u_0 ( 2 141 )</td><td>1</td><td>1</td></tr><tr><td>exit_profit_short_rebuy_t_4_1_m ( 562 )</td><td>1</td><td>0</td></tr><tr><td>exit_long_normal_u_1 ( 6 141 )</td><td>0</td><td>1</td></tr>
+  </table></div></div>
 
 <div id="guard-detail"></div>
 
@@ -227,11 +286,11 @@
 <div class="subtitle">OKX perpetual swaps · isolated margin · 3x leverage · stale_range 15</div>
 
 <div class="grid">
-  <div class="stat-card"><div class="label">Open Trades</div><div class="value">2</div></div>
-  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">0</div></div>
-  <div class="stat-card"><div class="label">Win Rate</div><div class="value">0.0%</div></div>
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">8</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">4</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
   <div class="stat-card"><div class="label">Total Profit (closed only)</div>
-    <div class="value profit-pos">+0.00 USDT</div>
+    <div class="value profit-pos">+6.02 USDT</div>
     <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
 </div>
 
@@ -241,32 +300,32 @@
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Realized Profit</div>
-          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="value profit-pos">+6.02 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
         </div>
         <div class="stat-card">
           <div class="label">Unrealized P/L (open)</div>
-          <div class="value profit-neg">-16.48 USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">154.39 USDT currently locked in open trades</div>
+          <div class="value profit-pos">+6.85 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">903.60 USDT currently locked in open trades</div>
         </div>
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
-          <div class="value profit-neg">-16.48 USDT</div>
+          <div class="value profit-pos">+12.87 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
         </div>
         <div class="stat-card">
           <div class="label">Stuck Trades</div>
-          <div class="value ">0 / 2</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;2.0d</div>
+          <div class="value profit-neg">1 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">3% of open capital, open &gt;0.5d</div>
         </div>
       </div>
       <p style="margin-top:16px;margin-bottom:4px;">
-        Realized return per capital-day: <b>—</b>
-        
+        Realized return per capital-day: <b>269.5342%</b>
+        (≈ 98380.0%/yr if repeated — simple, non-compounded extrapolation)
       </p>
       <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>-13.8253%</b>
-        (≈ -5046.2%/yr equivalent)
+        Blended return per capital-day (incl. unrealized): <b>1.8387%</b>
+        (≈ 671.1%/yr equivalent)
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
@@ -282,13 +341,13 @@
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Slots Used</div>
-          <div class="value">2 / 8</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">6 free — 25% deployed</div>
+          <div class="value">8 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0 free — 100% deployed</div>
         </div>
         <div class="stat-card">
           <div class="label">Capital Deployed</div>
-          <div class="value">154.39 / 1000 USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">15% of dry-run wallet</div>
+          <div class="value">903.60 / 1000 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">90% of dry-run wallet</div>
         </div>
       </div>
     </div>
@@ -312,20 +371,22 @@
 
         <div class="card">
           <h3>Statistical Significance</h3>
-          <p>Only 0 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
+          <p>Only 4 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
         </div>
 
 
     <div class="card">
-      <h3>Duration vs Outcome</h3>
-      <p class="muted">Not enough closed trades with duration data yet.</p>
+      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across 4 closed trades</span></h3>
+      <p>Correlation(duration, profit): <b>+0.018</b></p>
+      <p class="muted" style="font-size:0.85rem;">No strong linear relationship between duration and outcome — duration alone isn't a reliable signal here.</p>
+      <p style="font-size:0.85rem;">Fastest closes: 0.0h, 0.0h, 0.0h &nbsp;|&nbsp; Slowest closes: 0.0h, 0.0h, 0.1h</p>
     </div>
 
 
     <div class="card">
       <h3>Time-Clustering of Open Trades</h3>
-      <div class="table-scroll"><table><tr><th>Pair</th><th>Opened</th></tr><tr><td data-label="Pair">H/USDT:USDT</td><td data-label="Opened">2026-10-07 11:35</td></tr><tr><td data-label="Pair">ALGO/USDT:USDT</td><td data-label="Opened">2026-10-08 13:09</td></tr></table></div>
-      <p class="muted" style="font-size:0.85rem;margin-top:8px;">Opens are spread out — no clustered entry burst; each trade was an independent signal.</p>
+      <div class="table-scroll"><table><tr><th>Pair</th><th>Opened</th></tr><tr><td data-label="Pair">H/USDT:USDT</td><td data-label="Opened">2026-10-07 11:35</td></tr><tr><td data-label="Pair">ALGO/USDT:USDT</td><td data-label="Opened">2026-10-08 13:09</td></tr><tr><td data-label="Pair">PENGU/USDT:USDT</td><td data-label="Opened">2026-10-08 15:25</td></tr><tr><td data-label="Pair">SUI/USDT:USDT</td><td data-label="Opened">2026-10-08 15:25</td></tr><tr><td data-label="Pair">WLD/USDT:USDT</td><td data-label="Opened">2026-10-08 15:25</td></tr><tr><td data-label="Pair">GALA/USDT:USDT</td><td data-label="Opened">2026-10-08 15:25</td></tr><tr><td data-label="Pair">TRIA/USDT:USDT</td><td data-label="Opened">2026-10-08 15:30</td></tr><tr><td data-label="Pair">ARB/USDT:USDT</td><td data-label="Opened">2026-10-08 15:39</td></tr></table></div>
+      <p class="muted" style="font-size:0.85rem;margin-top:8px;">6 gap(s) under 6h — suggests a cluster of entries fired off the same short-lived market condition. If those clustered trades are underwater together, that's more likely one correlated market move than 6 independent failures.</p>
     </div>
 
 
@@ -333,7 +394,7 @@
       <h3>DCA / Rebuy Activity (open trades)</h3>
       <div class="table-scroll">
       <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
-      <tr><td data-label="Pair">H/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr><tr><td data-label="Pair">ALGO/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr>
+      <tr><td data-label="Pair">H/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr><tr><td data-label="Pair">ALGO/USDT:USDT</td><td data-label="Entry Fills">2</td><td data-label="Extra DCA/Rebuy">1</td><td class="muted"></td></tr><tr><td data-label="Pair">PENGU/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr><tr><td data-label="Pair">SUI/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr><tr><td data-label="Pair">WLD/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr><tr><td data-label="Pair">GALA/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr><tr><td data-label="Pair">TRIA/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr><tr><td data-label="Pair">ARB/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr>
       </table>
       </div>
     </div>
@@ -341,7 +402,7 @@
 
 
 <div class="card">
-  <h3>Open Trades (2)</h3>
+  <h3>Open Trades (8)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
@@ -350,23 +411,89 @@
           <td data-label="Pair">H/USDT:USDT</td>
           <td data-label="Enter Tag">562  <span class="muted">(Short Rebuy)</span></td>
           <td data-label="Opened">2026-10-07 11:35</td>
-          <td data-label="Age">1.1d</td>
+          <td data-label="Age">1.4d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">stuck</span></td>
           <td data-label="Rebuys">0</td>
           <td data-label="Capital Locked">30.76 USDT</td>
           <td data-label="Open Rate">0.06736</td>
-          <td data-label="Live Price">0.06843</td>
-          <td data-label="Unrealized P/L"><span class="profit-neg">-4.77% (-1.47 USDT)</span></td>
+          <td data-label="Live Price">0.06451</td>
+          <td data-label="Unrealized P/L"><span class="profit-pos">+12.69% (+3.90 USDT)</span></td>
         </tr>
         <tr>
           <td data-label="Pair">ALGO/USDT:USDT</td>
           <td data-label="Enter Tag">145  <span class="muted">(Top Coins)</span></td>
           <td data-label="Opened">2026-10-08 13:09</td>
-          <td data-label="Age">0.0d</td>
+          <td data-label="Age">0.3d</td>
+          <td data-label="Rebuys">1</td>
+          <td data-label="Capital Locked">129.52 USDT</td>
+          <td data-label="Open Rate">0.12535</td>
+          <td data-label="Live Price">0.12023</td>
+          <td data-label="Unrealized P/L"><span class="profit-neg">-12.25% (-15.87 USDT)</span></td>
+        </tr>
+        <tr>
+          <td data-label="Pair">PENGU/USDT:USDT</td>
+          <td data-label="Enter Tag">6  <span class="muted">(Normal)</span></td>
+          <td data-label="Opened">2026-10-08 15:25</td>
+          <td data-label="Age">0.2d</td>
           <td data-label="Rebuys">0</td>
-          <td data-label="Capital Locked">123.62 USDT</td>
-          <td data-label="Open Rate">0.12572</td>
-          <td data-label="Live Price">0.12063</td>
-          <td data-label="Unrealized P/L"><span class="profit-neg">-12.15% (-15.02 USDT)</span></td>
+          <td data-label="Capital Locked">123.58 USDT</td>
+          <td data-label="Open Rate">0.007973</td>
+          <td data-label="Live Price">0.00795</td>
+          <td data-label="Unrealized P/L"><span class="profit-neg">-0.87% (-1.07 USDT)</span></td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SUI/USDT:USDT</td>
+          <td data-label="Enter Tag">141  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-10-08 15:25</td>
+          <td data-label="Age">0.2d</td>
+          <td data-label="Rebuys">0</td>
+          <td data-label="Capital Locked">123.67 USDT</td>
+          <td data-label="Open Rate">1.0363</td>
+          <td data-label="Live Price">1.0494</td>
+          <td data-label="Unrealized P/L"><span class="profit-pos">+3.79% (+4.69 USDT)</span></td>
+        </tr>
+        <tr>
+          <td data-label="Pair">WLD/USDT:USDT</td>
+          <td data-label="Enter Tag">141  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-10-08 15:25</td>
+          <td data-label="Age">0.2d</td>
+          <td data-label="Rebuys">0</td>
+          <td data-label="Capital Locked">123.60 USDT</td>
+          <td data-label="Open Rate">0.4866</td>
+          <td data-label="Live Price">0.4836</td>
+          <td data-label="Unrealized P/L"><span class="profit-neg">-1.85% (-2.29 USDT)</span></td>
+        </tr>
+        <tr>
+          <td data-label="Pair">GALA/USDT:USDT</td>
+          <td data-label="Enter Tag">141  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-10-08 15:25</td>
+          <td data-label="Age">0.2d</td>
+          <td data-label="Rebuys">0</td>
+          <td data-label="Capital Locked">123.75 USDT</td>
+          <td data-label="Open Rate">0.002188</td>
+          <td data-label="Live Price">0.002214</td>
+          <td data-label="Unrealized P/L"><span class="profit-pos">+3.56% (+4.41 USDT)</span></td>
+        </tr>
+        <tr>
+          <td data-label="Pair">TRIA/USDT:USDT</td>
+          <td data-label="Enter Tag">2 6 </td>
+          <td data-label="Opened">2026-10-08 15:30</td>
+          <td data-label="Age">0.2d</td>
+          <td data-label="Rebuys">0</td>
+          <td data-label="Capital Locked">124.28 USDT</td>
+          <td data-label="Open Rate">0.003245</td>
+          <td data-label="Live Price">0.003282</td>
+          <td data-label="Unrealized P/L"><span class="profit-pos">+3.42% (+4.25 USDT)</span></td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ARB/USDT:USDT</td>
+          <td data-label="Enter Tag">141 143 </td>
+          <td data-label="Opened">2026-10-08 15:39</td>
+          <td data-label="Age">0.2d</td>
+          <td data-label="Rebuys">0</td>
+          <td data-label="Capital Locked">124.44 USDT</td>
+          <td data-label="Open Rate">0.16839</td>
+          <td data-label="Live Price">0.17237</td>
+          <td data-label="Unrealized P/L"><span class="profit-pos">+7.09% (+8.82 USDT)</span></td>
         </tr>
   </table>
   </div>
@@ -377,7 +504,28 @@
   <div class="table-scroll">
   <table>
     <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
-    <tr><td colspan="5" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td data-label="Enter Tag">6 141 </td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.50%</td>
+          <td data-label="Total Profit" class="profit-pos">+3.50%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">2  <span class="muted">(Normal)</span></td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.52%</td>
+          <td data-label="Total Profit" class="profit-pos">+1.04%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">2 141 </td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.32%</td>
+          <td data-label="Total Profit" class="profit-pos">+0.32%</td>
+        </tr>
   </table>
   </div>
 </div>
@@ -387,17 +535,67 @@
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
-    <tr><td colspan="4" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td data-label="Pair">ROBO/USDT:USDT</td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.52%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ARB/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.32%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">AVAX/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.50%</td>
+        </tr>
   </table>
   </div>
 </div>
 
 <div class="card">
-  <h3>Closed Trades (0)</h3>
+  <h3>Closed Trades (4)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
-    <tr><td colspan="6" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td data-label="Pair">ROBO/USDT:USDT</td>
+          <td data-label="Enter Tag">2  <span class="muted">(Normal)</span></td>
+          <td data-label="Opened">2026-10-08 15:30</td>
+          <td data-label="Closed">2026-10-08 15:39</td>
+          <td data-label="Profit" class="profit-pos">+0.72%</td>
+          <td data-label="Exit Reason">exit_long_normal_u_0 ( 2 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">AVAX/USDT:USDT</td>
+          <td data-label="Enter Tag">6 141 </td>
+          <td data-label="Opened">2026-10-08 15:25</td>
+          <td data-label="Closed">2026-10-08 15:28</td>
+          <td data-label="Profit" class="profit-pos">+3.50%</td>
+          <td data-label="Exit Reason">exit_long_normal_u_1 ( 6 141 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ROBO/USDT:USDT</td>
+          <td data-label="Enter Tag">2  <span class="muted">(Normal)</span></td>
+          <td data-label="Opened">2026-10-08 15:26</td>
+          <td data-label="Closed">2026-10-08 15:28</td>
+          <td data-label="Profit" class="profit-pos">+0.32%</td>
+          <td data-label="Exit Reason">exit_long_normal_u_0 ( 2 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ARB/USDT:USDT</td>
+          <td data-label="Enter Tag">2 141 </td>
+          <td data-label="Opened">2026-10-08 15:25</td>
+          <td data-label="Closed">2026-10-08 15:25</td>
+          <td data-label="Profit" class="profit-pos">+0.32%</td>
+          <td data-label="Exit Reason">exit_long_normal_u_0 ( 2 141 )</td>
+        </tr>
   </table>
   </div>
 </div>
@@ -413,9 +611,9 @@
 new Chart(document.getElementById('guardEquity'), {
   type: 'scatter',
   data: { datasets: [
-    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 27.92, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
+    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 29.11, "y": 1.09}, {"x": 29.2, "y": 2.94}, {"x": 32.04, "y": 7.63}, {"x": 34.06, "y": 7.63}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 },
-    { label: 'X8 Guard', data: [{"x": 0.0, "y": 0.0}, {"x": 27.92, "y": 0.0}], borderColor: '#bc8cff', backgroundColor: '#bc8cff',
+    { label: 'X8 Guard', data: [{"x": 0.0, "y": 0.0}, {"x": 29.08, "y": 0.4}, {"x": 29.12, "y": 0.79}, {"x": 29.12, "y": 5.12}, {"x": 29.3, "y": 6.02}, {"x": 34.06, "y": 6.02}], borderColor: '#bc8cff', backgroundColor: '#bc8cff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 }
   ]},
   options: {
@@ -435,10 +633,10 @@ Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
 new Chart(document.getElementById('equityChart_futures_x8guard'), {
   type: 'line',
   data: {
-    labels: [],
+    labels: ["2026-10-08 15:25", "2026-10-08 15:28", "2026-10-08 15:28", "2026-10-08 15:39"],
     datasets: [{
       label: 'Cumulative profit %',
-      data: [],
+      data: [0.323, 3.823, 4.143, 4.865],
       borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
       fill: true, tension: 0.2, pointRadius: 2
     }]
@@ -456,9 +654,9 @@ new Chart(document.getElementById('equityChart_futures_x8guard'), {
 new Chart(document.getElementById('reasonChart_futures_x8guard'), {
   type: 'doughnut',
   data: {
-    labels: [],
+    labels: ["exit_long_normal_u_0 ( 2 141 )", "exit_long_normal_u_1 ( 6 141 )", "exit_long_normal_u_0 ( 2 )"],
     datasets: [{
-      data: [],
+      data: [1, 1, 2],
       backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
     }]
   },
@@ -472,17 +670,17 @@ new Chart(document.getElementById('reasonChart_futures_x8guard'), {
 new Chart(document.getElementById('trendChart_futures_x8guard'), {
   type: 'bar',
   data: {
-    labels: ["10-07 19:44", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 06:53", "10-08 14:16"],
+    labels: ["10-07 19:44", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 06:53", "10-08 14:16", "10-08 20:24"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [-0.03, -0.37, -0.42, -1.21, -0.93, -0.82, -16.48],
+        data: [-0.03, -0.37, -0.42, -1.21, -0.93, -0.82, -16.48, 12.87],
         borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 1],
         backgroundColor: 'rgba(217,100,90,0.35)', order: 2
       }
     ]
