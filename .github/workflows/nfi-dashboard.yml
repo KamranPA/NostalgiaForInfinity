@@ -12,22 +12,18 @@ name: NFI Dashboard
 # (the same files the dry-run-*.yml workflows persist across restarts)
 # instead of a Postgres database.
 #
-# FOUR PAGES are produced:
-#   docs/index.html    — classic main dashboard, X7ML spot + futures
-#                        (generate_dashboard.py, unchanged)
+# FIVE PAGES are produced:
+#   docs/index.html    — MAIN dashboard: only stats grid, Capital Efficiency,
+#                        Equity Curve and True Total & Stuck for all 5 bots
+#                        (generate_dashboard_overview.py)
+#   docs/details.html  — trade tables + ML/analytics for all bots (same script)
+#   docs/classic.html  — the old full X7ML page (generate_dashboard.py,
+#                        unchanged; it still runs because it records the
+#                        spot/futures history snapshots)
 #   docs/compare.html  — X7ML vs X8 head-to-head (generate_dashboard_compare.py)
 #   docs/guard.html    — X8 vs X8 Guard head-to-head (generate_dashboard_guard.py)
-#   docs/overview.html — NEW reordered page: spot + futures summaries for
-#                        X7ML / X8 / Guard on top, trade details and ML data
-#                        lower (generate_dashboard_overview.py).
 # Every page except index.html is built with continue-on-error so a problem
 # in one can never stop the others from updating.
-#
-# TO MAKE THE OVERVIEW THE HOME PAGE once you're happy with it:
-#   1. in "Generate combined dashboard" change the last argument
-#      docs/index.html -> docs/classic.html
-#   2. in "Generate overview page" change docs/overview.html -> docs/index.html
-#   3. in "Commit and push docs pages" add: git add docs/classic.html
 #
 # This workflow's OWN read/write is to a separate branch
 # (dashboard-history) that holds nothing but the trend-chart history.
@@ -104,7 +100,7 @@ jobs:
             /tmp/dashboard_data/spot.sqlite \
             /tmp/dashboard_data/futures.sqlite \
             /tmp/dashboard_data/history.sqlite \
-            docs/index.html
+            docs/classic.html
 
       - name: Generate X7ML vs X8 comparison page
         continue-on-error: true
@@ -126,7 +122,7 @@ jobs:
             /tmp/dashboard_data/history.sqlite \
             docs/guard.html
 
-      - name: Generate overview page (summaries on top, ML data lower)
+      - name: Generate main page (index) + details page
         # Runs AFTER the other pages: it only reads the history file and
         # never records snapshots, so nothing is double-counted.
         continue-on-error: true
@@ -138,16 +134,18 @@ jobs:
             /tmp/dashboard_data/futures_x8.sqlite \
             /tmp/dashboard_data/futures_x8guard.sqlite \
             /tmp/dashboard_data/history.sqlite \
-            docs/overview.html
+            docs/index.html \
+            docs/details.html
 
       - name: Commit and push docs pages
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/index.html
+          git add docs/classic.html
+          [ -f docs/index.html ] && git add docs/index.html || true
+          [ -f docs/details.html ] && git add docs/details.html || true
           [ -f docs/compare.html ] && git add docs/compare.html || true
           [ -f docs/guard.html ] && git add docs/guard.html || true
-          [ -f docs/overview.html ] && git add docs/overview.html || true
           git diff --cached --quiet && echo "No dashboard changes to commit." || \
             (git commit -m "Update dashboard $(date -u +%Y-%m-%dT%H:%M:%SZ)" --quiet && git push origin HEAD:${{ github.ref_name }})
 
