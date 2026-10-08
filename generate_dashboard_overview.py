@@ -124,7 +124,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
             dict(live_price_exchange_id="okx", live_price_ccxt_options=swap)))
 
     tops = {"spot": "", "futures": ""}
-    details, analytics, js = "", "", ""
+    details, analytics, fulls, js = "", "", "", ""
     for group, builder, args, kwargs in jobs:
         try:
             title, top, detail, ana, section_js = build_and_split(builder, *args, **kwargs)
@@ -133,6 +133,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
             tops[group] += f'<div class="card skip-note">Could not build {gd.esc(args[3])} (see workflow log).</div>'
             continue
         tops[group] += slim_top(top)
+        fulls += f'<details class="fold"><summary>{gd.esc(title)}</summary><div class="inner">{top}</div></details>'
         details += f'<details class="fold"><summary>{gd.esc(title)}</summary><div class="inner">{detail}</div></details>'
         if ana.strip():
             analytics += f'<details class="fold"><summary>{gd.esc(title)}</summary><div class="inner">{ana}</div></details>'
@@ -198,6 +199,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NFI Dry-Run Dashboard — Details</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 {gd.PAGE_STYLES}
 {gc.EXTRA_CSS}
@@ -207,11 +209,14 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 <body>
 <div class="topbar">
   <div class="brand">NFI <span>dry-run</span></div>
-  <nav><a href="#details">Trade details</a><a href="#ml">ML &amp; analytics</a></nav>
+  <nav><a href="#summary">Full summary</a><a href="#details">Trade details</a><a href="#ml">ML &amp; analytics</a></nav>
   <span class="gen-time">generated {now} UTC</span>
   <a class="compare-link" href="index.html">← Main</a>
 </div>
 <main>
+<h2 class="group-title" id="summary">Full summary</h2>
+<div class="subtitle">Everything from the main page plus Portfolio Utilization and Exit Reasons — nothing is dropped.</div>
+{fulls}
 <h2 class="group-title" id="details">Trade details</h2>
 <div class="subtitle">Open / closed trades, tag and pair performance — tap a bot to expand.</div>
 {details}
@@ -219,6 +224,9 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 <div class="subtitle">ML readiness (X7ML only), significance, duration, clustering, DCA activity.</div>
 {analytics}
 </main>
+<script>
+{js}
+</script>
 </body>
 </html>"""
         with open(details_path, "w") as f:
