@@ -1,15 +1,16 @@
 """
 generate_dashboard_overview.py
 
-ONE page, reordered for reading:
+TWO pages from one run:
 
-  1. SPOT     summaries: X7ML, X8
-  2. FUTURES  summaries: X7ML, X8, X8 Guard
-     (each summary = headline stats, Capital Efficiency, Portfolio,
-      Equity curve + Exit reasons, True Total & Stuck trend)
-  3. Trade details (open/closed trades, tags, pairs) -- collapsed per bot
-  4. ML data & analytics (ML readiness, significance, duration,
-     clustering, DCA) -- collapsed per bot, at the very bottom
+  MAIN page (output_html_path) -- ONLY the essentials, for all 5 bots:
+     SPOT: X7ML, X8   |   FUTURES: X7ML, X8, X8 Guard
+     per bot = headline stats grid, Capital Efficiency card,
+               Equity Curve, True Total & Stuck Trades chart.
+
+  DETAILS page (optional 8th arg) -- everything else, collapsed per bot:
+     trade tables, tag/pair performance, significance, duration,
+     clustering, DCA, ML readiness.
 
 It IMPORTS generate_dashboard.py and generate_dashboard_compare.py and
 reuses their builders; neither file is edited. The existing section HTML
@@ -23,10 +24,11 @@ Usage:
     python generate_dashboard_overview.py \\
         <spot_x7ml.sqlite> <futures_x7ml.sqlite> \\
         <spot_x8.sqlite> <futures_x8.sqlite> <futures_x8guard.sqlite> \\
-        <history.sqlite> <output_html_path>
+        <history.sqlite> <main_html_path> [<details_html_path>]
 """
 
 import os
+import re
 import sys
 import traceback
 from datetime import datetime, timezone
@@ -88,7 +90,16 @@ def build_and_split(builder, *args, **kwargs):
     return b["compare"]["mode_title"], top, detail, analytics, b["section_js"]
 
 
-def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path):
+def slim_top(top):
+    """Keep only: heading, stats grid, Capital Efficiency, Equity Curve,
+    True Total & Stuck. Portfolio Utilization and Exit Reasons are hidden
+    (not removed) so their chart canvases still exist for the JS."""
+    top = re.sub(r'<div class="card">(\s*<h3>(?:Portfolio Utilization|Exit Reasons)</h3>)',
+                 r'<div class="card" style="display:none">\1', top)
+    return top.replace('<div class="two-col">', '<div>')
+
+
+def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, details_path=None):
     gc.install_patches()
     swap = gc.SWAP_OPTIONS
 
@@ -121,7 +132,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path):
             traceback.print_exc()
             tops[group] += f'<div class="card skip-note">Could not build {gd.esc(args[3])} (see workflow log).</div>'
             continue
-        tops[group] += top
+        tops[group] += slim_top(top)
         details += f'<details class="fold"><summary>{gd.esc(title)}</summary><div class="inner">{detail}</div></details>'
         if ana.strip():
             analytics += f'<details class="fold"><summary>{gd.esc(title)}</summary><div class="inner">{ana}</div></details>'
@@ -151,29 +162,20 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path):
   <nav>
     <a href="#grp-spot">Spot</a>
     <a href="#grp-futures">Futures</a>
-    <a href="#details">Details</a>
-    <a href="#ml">ML &amp; analytics</a>
   </nav>
   <span class="gen-time">generated {now} UTC</span>
-  <a class="compare-link" href="compare.html">X7ML vs X8 →</a>
+  <a class="compare-link" href="details.html">Details →</a>
 </div>
 
 <main>
-<div class="disclaimer">Dry-run (simulated) — no real funds involved · all bots on OKX · <a href="guard.html">X8 vs Guard →</a></div>
+<div class="disclaimer">Dry-run (simulated) — no real funds involved · all bots on OKX ·
+  <a href="compare.html">X7ML vs X8</a> · <a href="guard.html">X8 vs Guard</a> · <a href="details.html">Trade details &amp; ML</a></div>
 
 <h2 class="group-title" id="grp-spot">🟢 SPOT</h2>
 {tops['spot']}
 
 <h2 class="group-title" id="grp-futures">🟣 FUTURES</h2>
 {tops['futures']}
-
-<h2 class="group-title" id="details">Trade details</h2>
-<div class="subtitle">Open / closed trades, tag and pair performance — tap a bot to expand.</div>
-{details}
-
-<h2 class="group-title" id="ml">ML data &amp; analytics</h2>
-<div class="subtitle">ML readiness (X7ML only), significance, duration, clustering, DCA activity.</div>
-{analytics}
 
 <div class="subtitle">Small sample sizes can look great or terrible by chance.</div>
 </main>
@@ -186,11 +188,46 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path):
 </html>"""
     with open(output_path, "w") as f:
         f.write(html)
-    print(f"Overview dashboard written to {output_path}")
+    print(f"Main dashboard written to {output_path}")
+
+    if details_path:
+        d = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFI Dry-Run Dashboard — Details</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+{gd.PAGE_STYLES}
+{gc.EXTRA_CSS}
+{EXTRA_CSS}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">NFI <span>dry-run</span></div>
+  <nav><a href="#details">Trade details</a><a href="#ml">ML &amp; analytics</a></nav>
+  <span class="gen-time">generated {now} UTC</span>
+  <a class="compare-link" href="index.html">← Main</a>
+</div>
+<main>
+<h2 class="group-title" id="details">Trade details</h2>
+<div class="subtitle">Open / closed trades, tag and pair performance — tap a bot to expand.</div>
+{details}
+<h2 class="group-title" id="ml">ML data &amp; analytics</h2>
+<div class="subtitle">ML readiness (X7ML only), significance, duration, clustering, DCA activity.</div>
+{analytics}
+</main>
+</body>
+</html>"""
+        with open(details_path, "w") as f:
+            f.write(d)
+        print(f"Details page written to {details_path}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 8:
+    if len(sys.argv) not in (8, 9):
         print(__doc__)
         sys.exit(1)
-    main(*sys.argv[1:8])
+    main(*sys.argv[1:])
