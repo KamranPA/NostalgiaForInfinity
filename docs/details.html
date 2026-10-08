@@ -1,0 +1,2570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFI Dry-Run Dashboard — Details</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+
+  :root {
+    --bg: #0b0c10; --bg-raised: #131620; --card: #131620; --border: #232838;
+    --text: #dfe2ea; --muted: #838aa0; --accent: #d1a350; --accent-dim: #8a7040;
+    --pos: #4fae7a; --neg: #d9645a; --pos-soft: rgba(79,174,122,0.12); --neg-soft: rgba(217,100,90,0.12);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    margin: 0; padding: 0; line-height: 1.5; font-size: 15px;
+  }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 48px; }
+
+  /* ---- top bar ------------------------------------------------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 20px;
+    background: rgba(11,12,16,0.92); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px; height: 56px;
+  }
+  .topbar .brand { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; white-space: nowrap; }
+  .topbar .brand span { color: var(--accent); }
+  .topbar nav { display: flex; gap: 4px; flex: 1; }
+  .topbar nav a {
+    color: var(--muted); text-decoration: none; font-size: 0.85rem;
+    padding: 6px 12px; border-radius: 6px; transition: color .15s, background .15s;
+  }
+  .topbar nav a:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .topbar .gen-time { color: var(--muted); font-size: 0.75rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .topbar .compare-link {
+    color: var(--bg); background: var(--accent); font-weight: 600;
+    padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .topbar .compare-link:hover { background: #e0b566; }
+
+  .disclaimer {
+    color: var(--muted); font-size: 0.78rem; padding: 10px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 28px;
+  }
+
+  h2.market-heading {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 600;
+    font-size: 1.3rem; margin: 0 0 2px 0; padding-top: 40px; letter-spacing: -0.01em;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2.market-heading .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  h2.market-heading.mode-spot .dot { background: #4fae7a; }
+  h2.market-heading.mode-futures .dot { background: #7c8fd6; }
+  .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+
+  /* ---- ticker strip (headline stats) ---------------------------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; margin-bottom: 24px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .stat-card { background: var(--bg-raised); padding: 14px 16px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .grid .stat-card:last-child { border-right: none; }
+  .stat-card .label { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.02em; }
+  .stat-card .value { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; margin-bottom: 20px;
+  }
+  .card h3 { margin-top: 0; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 0.72rem; letter-spacing: 0.02em; position: sticky; top: 56px; background: var(--card); }
+  tr:hover td { background: rgba(255,255,255,0.025); }
+  .profit-pos { color: var(--pos); font-weight: 600; }
+  .profit-neg { color: var(--neg); font-weight: 600; }
+  .muted { color: var(--muted); }
+  .stuck-badge {
+    display: inline-block; background: var(--neg-soft); color: var(--neg);
+    border: 1px solid rgba(217,100,90,0.3); border-radius: 4px;
+    font-size: 0.68rem; padding: 1px 6px; margin-left: 4px; white-space: nowrap;
+  }
+  .chart-wrap { position: relative; height: 280px; }
+  .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+  @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } .topbar nav { display: none; } }
+  @media (max-width: 600px) {
+    .topbar { padding: 0 14px; gap: 10px; }
+    .topbar .gen-time { display: none; }
+    .topbar .brand { font-size: 0.95rem; }
+    .topbar .compare-link { flex-shrink: 0; padding: 6px 10px; font-size: 0.78rem; }
+    main { padding: 16px 14px 40px; }
+
+    /* Stacked "card" tables instead of horizontal scrolling: each row
+       becomes a small block, each cell a label:value line using the
+       data-label attribute set on every <td> above. */
+    .table-scroll { overflow-x: visible; }
+    table { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    table thead { display: none; }
+    table, tbody, tr, td { display: block; width: 100%; }
+    tr { border-bottom: 1px solid var(--border); padding: 10px 12px; }
+    tr:last-child { border-bottom: none; }
+    td {
+      border: none; padding: 4px 0; display: flex;
+      justify-content: space-between; align-items: baseline; gap: 14px;
+      text-align: right;
+    }
+    td::before {
+      content: attr(data-label); color: var(--muted); font-size: 0.7rem;
+      flex-shrink: 0; text-align: left;
+    }
+    /* the comparison table's first column is the row's own heading, not
+       a labeled value — render it full-width and bold instead */
+    table.compare-table td:first-child {
+      display: block; text-align: left; font-weight: 600; color: var(--text);
+      padding-bottom: 6px; font-size: 0.82rem;
+    }
+  }
+  .table-scroll { overflow-x: auto; }
+  .compare-table td:not(:first-child), .compare-table th:not(:first-child) { text-align: right; }
+
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .edge { background: rgba(63,185,80,0.12); }
+  .warn-note { color: #d29922; font-size: 0.85rem; margin: 8px 0 0 0; }
+  .nav { margin-bottom: 20px; font-size: 0.9rem; }
+  .nav a { margin-right: 14px; }
+  .legend-x7 { color: #d29922; font-weight: 600; }
+  .legend-x8 { color: #58a6ff; font-weight: 600; }
+  .era-marker { color: #8b949e; font-size: 0.75rem; }
+
+
+  .group-title { font-family:'Space Grotesk',sans-serif; font-size:1.6rem; font-weight:700;
+                 margin:48px 0 0; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  .group-title:first-of-type { margin-top:8px; }
+  details.fold { margin-bottom:12px; border:1px solid var(--border); border-radius:10px; background:var(--bg-raised); }
+  details.fold > summary { cursor:pointer; padding:14px 18px; font-weight:600; }
+  details.fold[open] > summary { border-bottom:1px solid var(--border); }
+  details.fold > .inner { padding:16px; }
+  .skip-note { color:var(--muted); font-size:0.85rem; }
+
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">NFI <span>dry-run</span></div>
+  <nav><a href="#summary">Full summary</a><a href="#details">Trade details</a><a href="#ml">ML &amp; analytics</a></nav>
+  <span class="gen-time">generated 2026-10-08 04:55:58 UTC</span>
+  <a class="compare-link" href="index.html">← Main</a>
+</div>
+<main>
+<h2 class="group-title" id="summary">Full summary</h2>
+<div class="subtitle">Everything from the main page plus Portfolio Utilization and Exit Reasons — nothing is dropped.</div>
+<details class="fold"><summary>🟢 X7ML SPOT — OKX</summary><div class="inner">
+<h2 class="market-heading mode-spot" id="spot"><span class="dot"></span>🟢 X7ML SPOT — OKX</h2>
+<div class="subtitle">OKX spot market · no leverage</div>
+
+<div class="grid">
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">1</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">21</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
+  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
+    <div class="value profit-pos">+14.95 USDT</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
+</div>
+
+
+    <div class="card">
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Realized Profit</div>
+          <div class="value profit-pos">+14.95 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unrealized P/L (open)</div>
+          <div class="value profit-neg">-4.61 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">62.77 USDT currently locked in open trades</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">True Total (realized + unrealized)</div>
+          <div class="value profit-pos">+10.35 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stuck Trades</div>
+          <div class="value profit-neg">1 / 1</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">100% of open capital, open &gt;0.5d</div>
+        </div>
+      </div>
+      <p style="margin-top:16px;margin-bottom:4px;">
+        Realized return per capital-day: <b>3.0087%</b>
+        (≈ 1098.2%/yr if repeated — simple, non-compounded extrapolation)
+      </p>
+      <p style="margin-bottom:4px;">
+        Blended return per capital-day (incl. unrealized): <b>1.9890%</b>
+        (≈ 726.0%/yr equivalent)
+      </p>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck.
+      </p>
+    </div>
+
+
+    <div class="card">
+      <h3>Portfolio Utilization</h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Slots Used</div>
+          <div class="value">1 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">7 free — 12% deployed</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Capital Deployed</div>
+          <div class="value">62.77 / 1000 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">6% of dry-run wallet</div>
+        </div>
+      </div>
+    </div>
+
+<div class="two-col">
+  <div class="card">
+    <h3>Equity Curve (cumulative %, closed trades)</h3>
+    <div class="chart-wrap"><canvas id="equityChart_spot"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Exit Reasons</h3>
+    <div class="chart-wrap"><canvas id="reasonChart_spot"></canvas></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
+  <div class="chart-wrap"><canvas id="trendChart_spot"></canvas></div>
+</div>
+
+
+        </div></details><details class="fold"><summary>🔵 X8 SPOT — OKX</summary><div class="inner">
+<h2 class="market-heading mode-futures" id="spot_x8"><span class="dot"></span>🔵 X8 SPOT — OKX</h2>
+<div class="subtitle">OKX spot market · no leverage · NostalgiaForInfinityX8</div>
+
+<div class="grid">
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">2</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">13</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
+  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
+    <div class="value profit-pos">+12.74 USDT</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
+</div>
+
+
+    <div class="card">
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Realized Profit</div>
+          <div class="value profit-pos">+12.74 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unrealized P/L (open)</div>
+          <div class="value profit-neg">-8.04 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">187.69 USDT currently locked in open trades</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">True Total (realized + unrealized)</div>
+          <div class="value profit-pos">+4.70 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stuck Trades</div>
+          <div class="value profit-neg">1 / 2</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">67% of open capital, open &gt;0.8d</div>
+        </div>
+      </div>
+      <p style="margin-top:16px;margin-bottom:4px;">
+        Realized return per capital-day: <b>3.0787%</b>
+        (≈ 1123.7%/yr if repeated — simple, non-compounded extrapolation)
+      </p>
+      <p style="margin-bottom:4px;">
+        Blended return per capital-day (incl. unrealized): <b>0.7897%</b>
+        (≈ 288.2%/yr equivalent)
+      </p>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck.
+      </p>
+    </div>
+
+
+    <div class="card">
+      <h3>Portfolio Utilization</h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Slots Used</div>
+          <div class="value">2 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">6 free — 25% deployed</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Capital Deployed</div>
+          <div class="value">187.69 / 1000 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">19% of dry-run wallet</div>
+        </div>
+      </div>
+    </div>
+
+<div class="two-col">
+  <div class="card">
+    <h3>Equity Curve (cumulative %, closed trades)</h3>
+    <div class="chart-wrap"><canvas id="equityChart_spot_x8"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Exit Reasons</h3>
+    <div class="chart-wrap"><canvas id="reasonChart_spot_x8"></canvas></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
+  <div class="chart-wrap"><canvas id="trendChart_spot_x8"></canvas></div>
+</div>
+
+
+        </div></details><details class="fold"><summary>🟣 X7ML FUTURES — OKX</summary><div class="inner">
+<h2 class="market-heading mode-futures" id="futures"><span class="dot"></span>🟣 X7ML FUTURES — OKX</h2>
+<div class="subtitle">OKX perpetual swaps · isolated margin · 3x leverage (default)</div>
+
+<div class="grid">
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">0</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">21</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
+  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
+    <div class="value profit-pos">+56.73 USDT</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
+</div>
+
+
+    <div class="card">
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Realized Profit</div>
+          <div class="value profit-pos">+56.73 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unrealized P/L (open)</div>
+          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0.00 USDT currently locked in open trades</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">True Total (realized + unrealized)</div>
+          <div class="value profit-pos">+56.73 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stuck Trades</div>
+          <div class="value ">0 / 0</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;0.9d</div>
+        </div>
+      </div>
+      <p style="margin-top:16px;margin-bottom:4px;">
+        Realized return per capital-day: <b>3.5172%</b>
+        (≈ 1283.8%/yr if repeated — simple, non-compounded extrapolation)
+      </p>
+      <p style="margin-bottom:4px;">
+        Blended return per capital-day (incl. unrealized): <b>3.5172%</b>
+        (≈ 1283.8%/yr equivalent)
+      </p>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck.
+      </p>
+    </div>
+
+
+    <div class="card">
+      <h3>Portfolio Utilization</h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Slots Used</div>
+          <div class="value">0 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">8 free — 0% deployed</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Capital Deployed</div>
+          <div class="value">0.00 / 1000 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of dry-run wallet</div>
+        </div>
+      </div>
+    </div>
+
+<div class="two-col">
+  <div class="card">
+    <h3>Equity Curve (cumulative %, closed trades)</h3>
+    <div class="chart-wrap"><canvas id="equityChart_futures"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Exit Reasons</h3>
+    <div class="chart-wrap"><canvas id="reasonChart_futures"></canvas></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
+  <div class="chart-wrap"><canvas id="trendChart_futures"></canvas></div>
+</div>
+
+
+        </div></details><details class="fold"><summary>🟠 X8 FUTURES — OKX</summary><div class="inner">
+<h2 class="market-heading mode-futures" id="futures_x8"><span class="dot"></span>🟠 X8 FUTURES — OKX</h2>
+<div class="subtitle">OKX perpetual swaps · isolated margin · 3x leverage</div>
+
+<div class="grid">
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">2</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">14</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
+  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
+    <div class="value profit-pos">+69.54 USDT</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
+</div>
+
+
+    <div class="card">
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Realized Profit</div>
+          <div class="value profit-pos">+69.54 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unrealized P/L (open)</div>
+          <div class="value profit-neg">-26.51 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">96.45 USDT currently locked in open trades</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">True Total (realized + unrealized)</div>
+          <div class="value profit-pos">+43.03 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stuck Trades</div>
+          <div class="value ">0 / 2</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;1.0d</div>
+        </div>
+      </div>
+      <p style="margin-top:16px;margin-bottom:4px;">
+        Realized return per capital-day: <b>6.1791%</b>
+        (≈ 2255.4%/yr if repeated — simple, non-compounded extrapolation)
+      </p>
+      <p style="margin-bottom:4px;">
+        Blended return per capital-day (incl. unrealized): <b>3.1636%</b>
+        (≈ 1154.7%/yr equivalent)
+      </p>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck.
+      </p>
+    </div>
+
+
+    <div class="card">
+      <h3>Portfolio Utilization</h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Slots Used</div>
+          <div class="value">2 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">6 free — 25% deployed</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Capital Deployed</div>
+          <div class="value">96.45 / 1000 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">10% of dry-run wallet</div>
+        </div>
+      </div>
+    </div>
+
+<div class="two-col">
+  <div class="card">
+    <h3>Equity Curve (cumulative %, closed trades)</h3>
+    <div class="chart-wrap"><canvas id="equityChart_futures_x8"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Exit Reasons</h3>
+    <div class="chart-wrap"><canvas id="reasonChart_futures_x8"></canvas></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
+  <div class="chart-wrap"><canvas id="trendChart_futures_x8"></canvas></div>
+</div>
+
+
+        </div></details><details class="fold"><summary>🛡️ X8 GUARD FUTURES — OKX</summary><div class="inner">
+<h2 class="market-heading mode-futures" id="futures_x8guard"><span class="dot"></span>🛡️ X8 GUARD FUTURES — OKX</h2>
+<div class="subtitle">OKX perpetual swaps · isolated margin · 3x leverage · stale_range 15</div>
+
+<div class="grid">
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">1</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">0</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">0.0%</div></div>
+  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
+    <div class="value profit-pos">+0.00 USDT</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
+</div>
+
+
+    <div class="card">
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Realized Profit</div>
+          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unrealized P/L (open)</div>
+          <div class="value profit-neg">-0.93 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">30.76 USDT currently locked in open trades</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">True Total (realized + unrealized)</div>
+          <div class="value profit-neg">-0.93 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stuck Trades</div>
+          <div class="value ">0 / 1</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;2.0d</div>
+        </div>
+      </div>
+      <p style="margin-top:16px;margin-bottom:4px;">
+        Realized return per capital-day: <b>—</b>
+        
+      </p>
+      <p style="margin-bottom:4px;">
+        Blended return per capital-day (incl. unrealized): <b>-1.4046%</b>
+        (≈ -512.7%/yr equivalent)
+      </p>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck.
+      </p>
+    </div>
+
+
+    <div class="card">
+      <h3>Portfolio Utilization</h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Slots Used</div>
+          <div class="value">1 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">7 free — 12% deployed</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Capital Deployed</div>
+          <div class="value">30.76 / 1000 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">3% of dry-run wallet</div>
+        </div>
+      </div>
+    </div>
+
+<div class="two-col">
+  <div class="card">
+    <h3>Equity Curve (cumulative %, closed trades)</h3>
+    <div class="chart-wrap"><canvas id="equityChart_futures_x8guard"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Exit Reasons</h3>
+    <div class="chart-wrap"><canvas id="reasonChart_futures_x8guard"></canvas></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
+  <div class="chart-wrap"><canvas id="trendChart_futures_x8guard"></canvas></div>
+</div>
+
+
+        </div></details>
+<h2 class="group-title" id="details">Trade details</h2>
+<div class="subtitle">Open / closed trades, tag and pair performance — tap a bot to expand.</div>
+<details class="fold"><summary>🟢 X7ML SPOT — OKX</summary><div class="inner">
+
+
+
+
+
+
+
+<div class="card">
+  <h3>Open Trades (1)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
+    
+        <tr>
+          <td data-label="Pair">NMR/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-07 11:30</td>
+          <td data-label="Age">0.7d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">stuck</span></td>
+          <td data-label="Rebuys">1</td>
+          <td data-label="Capital Locked">62.77 USDT</td>
+          <td data-label="Open Rate">15.143</td>
+          <td data-label="Live Price">14.032</td>
+          <td data-label="Unrealized P/L"><span class="profit-neg">-7.34% (-4.61 USDT)</span></td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Tag Family Performance (closed trades) <span class="muted" style="font-weight:400;font-size:0.75rem;">— "open now" marks a tag currently held by an open trade</span></h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
+    
+        <tr>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span> <span class="stuck-badge" style="background:rgba(209,163,80,0.15);color:var(--accent);border-color:rgba(209,163,80,0.35);">open now</span></td>
+          <td data-label="Trades">12</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.82%</td>
+          <td data-label="Total Profit" class="profit-pos">+21.79%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">142  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Trades">3</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.14%</td>
+          <td data-label="Total Profit" class="profit-pos">+3.43%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.49%</td>
+          <td data-label="Total Profit" class="profit-pos">+2.98%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">141 142 </td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.27%</td>
+          <td data-label="Total Profit" class="profit-pos">+1.27%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">163  <span class="muted">(Scalp)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.69%</td>
+          <td data-label="Total Profit" class="profit-pos">+0.69%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">161  <span class="muted">(Scalp)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.25%</td>
+          <td data-label="Total Profit" class="profit-pos">+0.25%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">144  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.16%</td>
+          <td data-label="Total Profit" class="profit-pos">+0.16%</td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Per-Pair Performance (closed trades)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
+    
+        <tr>
+          <td data-label="Pair">SAND/USDT</td>
+          <td data-label="Trades">3</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.74%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">AKE/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.15%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ARB/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.51%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">INJ/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.25%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">LUNA/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.28%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MORPHO/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.51%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">NEAR/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.42%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ICP/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.02%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">LAT/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.44%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CHIP/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.14%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">WLD/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.30%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">DASH/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.14%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">TRB/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.58%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MOVE/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.78%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SUI/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.13%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">APE/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.16%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">GALA/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.26%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">GRASS/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.59%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">API3/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.69%</td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Closed Trades (21)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
+    
+        <tr>
+          <td data-label="Pair">SAND/USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-07 05:25</td>
+          <td data-label="Closed">2026-10-07 15:45</td>
+          <td data-label="Profit" class="profit-pos">+1.54%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_1_42 ( 65 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">API3/USDT</td>
+          <td data-label="Enter Tag">163  <span class="muted">(Scalp)</span></td>
+          <td data-label="Opened">2026-10-07 02:25</td>
+          <td data-label="Closed">2026-10-07 02:56</td>
+          <td data-label="Profit" class="profit-pos">+0.69%</td>
+          <td data-label="Exit Reason">exit_profit_long_scalp_t_0_1_m ( 163 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">GRASS/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-05 14:55</td>
+          <td data-label="Closed">2026-10-05 16:57</td>
+          <td data-label="Profit" class="profit-pos">+1.59%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_1_119 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">APE/USDT</td>
+          <td data-label="Enter Tag">144  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-10-02 17:25</td>
+          <td data-label="Closed">2026-10-03 10:18</td>
+          <td data-label="Profit" class="profit-pos">+0.16%</td>
+          <td data-label="Exit Reason">exit_long_tc_d_0_98 ( 144 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SUI/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-02 08:55</td>
+          <td data-label="Closed">2026-10-03 00:49</td>
+          <td data-label="Profit" class="profit-pos">+0.13%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_0_2 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SAND/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-02 20:45</td>
+          <td data-label="Closed">2026-10-02 21:06</td>
+          <td data-label="Profit" class="profit-pos">+2.40%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_2_110 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">GALA/USDT</td>
+          <td data-label="Enter Tag">142  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-10-02 18:50</td>
+          <td data-label="Closed">2026-10-02 19:25</td>
+          <td data-label="Profit" class="profit-pos">+1.26%</td>
+          <td data-label="Exit Reason">exit_long_tc_d_1_120 ( 142 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SAND/USDT</td>
+          <td data-label="Enter Tag">141 142 </td>
+          <td data-label="Opened">2026-10-02 18:40</td>
+          <td data-label="Closed">2026-10-02 19:20</td>
+          <td data-label="Profit" class="profit-pos">+1.27%</td>
+          <td data-label="Exit Reason">exit_long_tc_d_1_110 ( 141 142 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MOVE/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-01 07:40</td>
+          <td data-label="Closed">2026-10-01 09:46</td>
+          <td data-label="Profit" class="profit-pos">+0.78%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_0_7 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">TRB/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-30 00:25</td>
+          <td data-label="Closed">2026-09-30 01:30</td>
+          <td data-label="Profit" class="profit-pos">+0.58%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_0_117 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">DASH/USDT</td>
+          <td data-label="Enter Tag">142  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-09-29 01:30</td>
+          <td data-label="Closed">2026-09-29 11:44</td>
+          <td data-label="Profit" class="profit-pos">+1.14%</td>
+          <td data-label="Exit Reason">exit_long_tc_d_1_119 ( 142 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">WLD/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-26 22:25</td>
+          <td data-label="Closed">2026-09-27 06:18</td>
+          <td data-label="Profit" class="profit-pos">+1.30%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_1_17 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CHIP/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-25 15:45</td>
+          <td data-label="Closed">2026-09-25 16:16</td>
+          <td data-label="Profit" class="profit-pos">+1.14%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_1_117 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MORPHO/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-21 14:05</td>
+          <td data-label="Closed">2026-09-24 13:20</td>
+          <td data-label="Profit" class="profit-pos">+2.51%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_1_1_1 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ICP/USDT</td>
+          <td data-label="Enter Tag">142  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-09-23 14:20</td>
+          <td data-label="Closed">2026-09-24 12:37</td>
+          <td data-label="Profit" class="profit-pos">+1.02%</td>
+          <td data-label="Exit Reason">exit_long_tc_d_1_119 ( 142 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">LAT/USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-23 21:25</td>
+          <td data-label="Closed">2026-09-23 23:03</td>
+          <td data-label="Profit" class="profit-pos">+1.44%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_e_r ( 65 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">LUNA/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-20 20:40</td>
+          <td data-label="Closed">2026-09-22 21:40</td>
+          <td data-label="Profit" class="profit-pos">+2.28%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_2_1_1 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">NEAR/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-22 06:50</td>
+          <td data-label="Closed">2026-09-22 08:41</td>
+          <td data-label="Profit" class="profit-pos">+2.42%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_2_42 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">INJ/USDT</td>
+          <td data-label="Enter Tag">161  <span class="muted">(Scalp)</span></td>
+          <td data-label="Opened">2026-09-20 14:25</td>
+          <td data-label="Closed">2026-09-20 15:23</td>
+          <td data-label="Profit" class="profit-pos">+0.25%</td>
+          <td data-label="Exit Reason">exit_profit_long_scalp_t_0_1_m ( 161 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ARB/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-17 21:45</td>
+          <td data-label="Closed">2026-09-18 01:00</td>
+          <td data-label="Profit" class="profit-pos">+3.51%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_3_17 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">AKE/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-14 12:51</td>
+          <td data-label="Closed">2026-09-14 23:00</td>
+          <td data-label="Profit" class="profit-pos">+3.15%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_3_17 ( 64 )</td>
+        </tr>
+  </table>
+  </div>
+</div>
+</div></details><details class="fold"><summary>🔵 X8 SPOT — OKX</summary><div class="inner">
+
+
+
+
+
+
+
+<div class="card">
+  <h3>Open Trades (2)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
+    
+        <tr>
+          <td data-label="Pair">APT/USDT</td>
+          <td data-label="Enter Tag">141 142 </td>
+          <td data-label="Opened">2026-10-07 02:15</td>
+          <td data-label="Age">1.1d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">stuck</span></td>
+          <td data-label="Rebuys">0</td>
+          <td data-label="Capital Locked">125.10 USDT</td>
+          <td data-label="Open Rate">0.7816</td>
+          <td data-label="Live Price">0.7672</td>
+          <td data-label="Unrealized P/L"><span class="profit-neg">-1.84% (-2.30 USDT)</span></td>
+        </tr>
+        <tr>
+          <td data-label="Pair">NMR/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-07 11:40</td>
+          <td data-label="Age">0.7d</td>
+          <td data-label="Rebuys">1</td>
+          <td data-label="Capital Locked">62.59 USDT</td>
+          <td data-label="Open Rate">15.447</td>
+          <td data-label="Live Price">14.032</td>
+          <td data-label="Unrealized P/L"><span class="profit-neg">-9.16% (-5.73 USDT)</span></td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Tag Family Performance (closed trades) <span class="muted" style="font-weight:400;font-size:0.75rem;">— "open now" marks a tag currently held by an open trade</span></h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
+    
+        <tr>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span> <span class="stuck-badge" style="background:rgba(209,163,80,0.15);color:var(--accent);border-color:rgba(209,163,80,0.35);">open now</span></td>
+          <td data-label="Trades">6</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.91%</td>
+          <td data-label="Total Profit" class="profit-pos">+11.48%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.54%</td>
+          <td data-label="Total Profit" class="profit-pos">+5.09%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">142  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.00%</td>
+          <td data-label="Total Profit" class="profit-pos">+4.01%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">143  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.75%</td>
+          <td data-label="Total Profit" class="profit-pos">+0.75%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">145  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.64%</td>
+          <td data-label="Total Profit" class="profit-pos">+0.64%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">163  <span class="muted">(Scalp)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.54%</td>
+          <td data-label="Total Profit" class="profit-pos">+0.54%</td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Per-Pair Performance (closed trades)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
+    
+        <tr>
+          <td data-label="Pair">SAND/USDT</td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.20%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">NEAR/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.54%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ICP/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.08%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">LAT/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.44%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">OP/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.64%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CHIP/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.11%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">WLD/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+6.61%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">DASH/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.93%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">TRB/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.36%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MOVE/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.68%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SUI/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.19%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">API3/USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.54%</td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Closed Trades (13)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
+    
+        <tr>
+          <td data-label="Pair">SAND/USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-07 05:25</td>
+          <td data-label="Closed">2026-10-07 15:45</td>
+          <td data-label="Profit" class="profit-pos">+3.65%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_e_r ( 65 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">API3/USDT</td>
+          <td data-label="Enter Tag">163  <span class="muted">(Scalp)</span></td>
+          <td data-label="Opened">2026-10-07 02:25</td>
+          <td data-label="Closed">2026-10-07 02:56</td>
+          <td data-label="Profit" class="profit-pos">+0.54%</td>
+          <td data-label="Exit Reason">exit_profit_long_scalp_t_0_1_m ( 163 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SAND/USDT</td>
+          <td data-label="Enter Tag">143  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-10-02 15:17</td>
+          <td data-label="Closed">2026-10-02 23:02</td>
+          <td data-label="Profit" class="profit-pos">+0.75%</td>
+          <td data-label="Exit Reason">exit_profit_long_tc_t_0_1_m ( 143 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SUI/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-02 08:55</td>
+          <td data-label="Closed">2026-10-02 14:20</td>
+          <td data-label="Profit" class="profit-pos">+0.19%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MOVE/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-01 07:40</td>
+          <td data-label="Closed">2026-10-01 11:20</td>
+          <td data-label="Profit" class="profit-pos">+0.68%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">DASH/USDT</td>
+          <td data-label="Enter Tag">142  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-09-29 01:30</td>
+          <td data-label="Closed">2026-09-30 13:39</td>
+          <td data-label="Profit" class="profit-pos">+0.93%</td>
+          <td data-label="Exit Reason">exit_profit_long_tc_t_0_1_m ( 142 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">TRB/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-30 00:25</td>
+          <td data-label="Closed">2026-09-30 02:56</td>
+          <td data-label="Profit" class="profit-pos">+1.36%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_1_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">WLD/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-26 22:25</td>
+          <td data-label="Closed">2026-09-27 10:12</td>
+          <td data-label="Profit" class="profit-pos">+6.61%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_6_1 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CHIP/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-25 15:30</td>
+          <td data-label="Closed">2026-09-25 17:25</td>
+          <td data-label="Profit" class="profit-pos">+0.11%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">OP/USDT</td>
+          <td data-label="Enter Tag">145  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-09-25 14:05</td>
+          <td data-label="Closed">2026-09-25 16:00</td>
+          <td data-label="Profit" class="profit-pos">+0.64%</td>
+          <td data-label="Exit Reason">exit_profit_long_tc_t_0_1_m ( 145 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ICP/USDT</td>
+          <td data-label="Enter Tag">142  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-09-23 14:20</td>
+          <td data-label="Closed">2026-09-24 13:16</td>
+          <td data-label="Profit" class="profit-pos">+3.08%</td>
+          <td data-label="Exit Reason">exit_long_tc_2_1_1 ( 142 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">LAT/USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-23 21:25</td>
+          <td data-label="Closed">2026-09-23 23:03</td>
+          <td data-label="Profit" class="profit-pos">+1.44%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_e_r ( 65 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">NEAR/USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-22 06:50</td>
+          <td data-label="Closed">2026-09-22 09:12</td>
+          <td data-label="Profit" class="profit-pos">+2.54%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_2_1_m ( 64 )</td>
+        </tr>
+  </table>
+  </div>
+</div>
+</div></details><details class="fold"><summary>🟣 X7ML FUTURES — OKX</summary><div class="inner">
+
+
+
+
+
+
+
+<div class="card">
+  <h3>Open Trades (0)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
+    <tr><td colspan="9" class="muted">No open trades</td></tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Tag Family Performance (closed trades) <span class="muted" style="font-weight:400;font-size:0.75rem;">— "open now" marks a tag currently held by an open trade</span></h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
+    
+        <tr>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">11</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+4.64%</td>
+          <td data-label="Total Profit" class="profit-pos">+51.08%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">6  <span class="muted">(Normal)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+7.10%</td>
+          <td data-label="Total Profit" class="profit-pos">+7.10%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">47  <span class="muted">(Quick)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+6.93%</td>
+          <td data-label="Total Profit" class="profit-pos">+6.93%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">562  <span class="muted">(Short Rebuy)</span></td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.14%</td>
+          <td data-label="Total Profit" class="profit-pos">+6.28%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+4.29%</td>
+          <td data-label="Total Profit" class="profit-pos">+4.29%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">41 61 63 163 </td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.82%</td>
+          <td data-label="Total Profit" class="profit-pos">+3.82%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">142  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.79%</td>
+          <td data-label="Total Profit" class="profit-pos">+3.79%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">2  <span class="muted">(Normal)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.33%</td>
+          <td data-label="Total Profit" class="profit-pos">+3.33%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">4  <span class="muted">(Normal)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.07%</td>
+          <td data-label="Total Profit" class="profit-pos">+3.07%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">163  <span class="muted">(Scalp)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.45%</td>
+          <td data-label="Total Profit" class="profit-pos">+1.45%</td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Per-Pair Performance (closed trades)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
+    
+        <tr>
+          <td data-label="Pair">CHIP/USDT:USDT</td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+5.10%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">LAB/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+4.04%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">BASED/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.25%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ARB/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+10.88%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">OP/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.31%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">BOME/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+7.86%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">UB/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.07%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">WLD/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.85%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">HUMA/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.07%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">APR/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.82%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MON/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+11.29%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SUI/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.83%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">GALA/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.79%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MANA/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.47%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">AT/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+6.93%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">STRK/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+0.38%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">USELESS/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.33%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">API3/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.45%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CAP/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+5.05%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SAND/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+4.29%</td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Closed Trades (21)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
+    
+        <tr>
+          <td data-label="Pair">MANA/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-03 06:20</td>
+          <td data-label="Closed">2026-10-07 15:51</td>
+          <td data-label="Profit" class="profit-pos">+1.47%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_0_119 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SAND/USDT:USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-07 05:25</td>
+          <td data-label="Closed">2026-10-07 15:45</td>
+          <td data-label="Profit" class="profit-pos">+4.29%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_e_r ( 65 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CAP/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-07 04:35</td>
+          <td data-label="Closed">2026-10-07 08:36</td>
+          <td data-label="Profit" class="profit-pos">+5.05%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_1_42 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">API3/USDT:USDT</td>
+          <td data-label="Enter Tag">163  <span class="muted">(Scalp)</span></td>
+          <td data-label="Opened">2026-10-07 02:25</td>
+          <td data-label="Closed">2026-10-07 02:56</td>
+          <td data-label="Profit" class="profit-pos">+1.45%</td>
+          <td data-label="Exit Reason">exit_profit_long_scalp_t_0_1_m ( 163 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">USELESS/USDT:USDT</td>
+          <td data-label="Enter Tag">2  <span class="muted">(Normal)</span></td>
+          <td data-label="Opened">2026-10-07 02:05</td>
+          <td data-label="Closed">2026-10-07 02:10</td>
+          <td data-label="Profit" class="profit-pos">+3.33%</td>
+          <td data-label="Exit Reason">exit_long_normal_u_1 ( 2 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">STRK/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-05 04:45</td>
+          <td data-label="Closed">2026-10-05 08:56</td>
+          <td data-label="Profit" class="profit-pos">+0.38%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_0_118 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">AT/USDT:USDT</td>
+          <td data-label="Enter Tag">47  <span class="muted">(Quick)</span></td>
+          <td data-label="Opened">2026-10-04 04:15</td>
+          <td data-label="Closed">2026-10-04 19:14</td>
+          <td data-label="Profit" class="profit-pos">+6.93%</td>
+          <td data-label="Exit Reason">exit_long_quick_q_1 ( 47 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SUI/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-02 08:55</td>
+          <td data-label="Closed">2026-10-03 00:50</td>
+          <td data-label="Profit" class="profit-pos">+0.83%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_0_2 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">GALA/USDT:USDT</td>
+          <td data-label="Enter Tag">142  <span class="muted">(Top Coins)</span></td>
+          <td data-label="Opened">2026-10-02 18:50</td>
+          <td data-label="Closed">2026-10-02 19:25</td>
+          <td data-label="Profit" class="profit-pos">+3.79%</td>
+          <td data-label="Exit Reason">exit_long_tc_d_1_60 ( 142 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MON/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-01 13:50</td>
+          <td data-label="Closed">2026-10-01 17:12</td>
+          <td data-label="Profit" class="profit-pos">+11.29%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_3_17 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">APR/USDT:USDT</td>
+          <td data-label="Enter Tag">41 61 63 163 </td>
+          <td data-label="Opened">2026-09-30 05:00</td>
+          <td data-label="Closed">2026-09-30 05:22</td>
+          <td data-label="Profit" class="profit-pos">+3.82%</td>
+          <td data-label="Exit Reason">exit_long_quick_u_1 ( 41 61 63 163 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">HUMA/USDT:USDT</td>
+          <td data-label="Enter Tag">4  <span class="muted">(Normal)</span></td>
+          <td data-label="Opened">2026-09-28 06:20</td>
+          <td data-label="Closed">2026-09-28 07:01</td>
+          <td data-label="Profit" class="profit-pos">+3.07%</td>
+          <td data-label="Exit Reason">exit_long_normal_u_1 ( 4 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">WLD/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-26 22:25</td>
+          <td data-label="Closed">2026-09-27 06:15</td>
+          <td data-label="Profit" class="profit-pos">+3.85%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_1_17 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">UB/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-23 17:50</td>
+          <td data-label="Closed">2026-09-26 08:09</td>
+          <td data-label="Profit" class="profit-pos">+3.07%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_1_100 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CHIP/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-25 15:30</td>
+          <td data-label="Closed">2026-09-25 16:10</td>
+          <td data-label="Profit" class="profit-pos">+3.10%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_1_117 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CHIP/USDT:USDT</td>
+          <td data-label="Enter Tag">6  <span class="muted">(Normal)</span></td>
+          <td data-label="Opened">2026-09-23 14:20</td>
+          <td data-label="Closed">2026-09-24 15:46</td>
+          <td data-label="Profit" class="profit-pos">+7.10%</td>
+          <td data-label="Exit Reason">exit_long_normal_d_2_100 ( 6 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">BOME/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-21 19:25</td>
+          <td data-label="Closed">2026-09-22 03:32</td>
+          <td data-label="Profit" class="profit-pos">+7.86%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_2_16 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">OP/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-20 21:00</td>
+          <td data-label="Closed">2026-09-21 00:27</td>
+          <td data-label="Profit" class="profit-pos">+3.31%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_1_10 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ARB/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-17 21:45</td>
+          <td data-label="Closed">2026-09-18 01:00</td>
+          <td data-label="Profit" class="profit-pos">+10.88%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_w_3_17 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">BASED/USDT:USDT</td>
+          <td data-label="Enter Tag">562  <span class="muted">(Short Rebuy)</span></td>
+          <td data-label="Opened">2026-09-16 12:20</td>
+          <td data-label="Closed">2026-09-16 17:40</td>
+          <td data-label="Profit" class="profit-pos">+2.25%</td>
+          <td data-label="Exit Reason">exit_short_rebuy_w_0_8 ( 562 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">LAB/USDT:USDT</td>
+          <td data-label="Enter Tag">562  <span class="muted">(Short Rebuy)</span></td>
+          <td data-label="Opened">2026-09-16 05:00</td>
+          <td data-label="Closed">2026-09-16 12:32</td>
+          <td data-label="Profit" class="profit-pos">+4.04%</td>
+          <td data-label="Exit Reason">exit_short_rebuy_d_1_133 ( 562 )</td>
+        </tr>
+  </table>
+  </div>
+</div>
+</div></details><details class="fold"><summary>🟠 X8 FUTURES — OKX</summary><div class="inner">
+
+
+
+
+
+
+
+<div class="card">
+  <h3>Open Trades (2)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
+    
+        <tr>
+          <td data-label="Pair">CAP/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-07 04:35</td>
+          <td data-label="Age">1.0d</td>
+          <td data-label="Rebuys">1</td>
+          <td data-label="Capital Locked">63.45 USDT</td>
+          <td data-label="Open Rate">0.08275</td>
+          <td data-label="Live Price">0.07166</td>
+          <td data-label="Unrealized P/L"><span class="profit-neg">-40.20% (-25.51 USDT)</span></td>
+        </tr>
+        <tr>
+          <td data-label="Pair">H/USDT:USDT</td>
+          <td data-label="Enter Tag">562  <span class="muted">(Short Rebuy)</span></td>
+          <td data-label="Opened">2026-10-07 11:35</td>
+          <td data-label="Age">0.7d</td>
+          <td data-label="Rebuys">0</td>
+          <td data-label="Capital Locked">33.01 USDT</td>
+          <td data-label="Open Rate">0.06736</td>
+          <td data-label="Live Price">0.06804</td>
+          <td data-label="Unrealized P/L"><span class="profit-neg">-3.03% (-1.00 USDT)</span></td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Tag Family Performance (closed trades) <span class="muted" style="font-weight:400;font-size:0.75rem;">— "open now" marks a tag currently held by an open trade</span></h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
+    
+        <tr>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span> <span class="stuck-badge" style="background:rgba(209,163,80,0.15);color:var(--accent);border-color:rgba(209,163,80,0.35);">open now</span></td>
+          <td data-label="Trades">7</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+6.93%</td>
+          <td data-label="Total Profit" class="profit-pos">+48.54%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">6  <span class="muted">(Normal)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+18.14%</td>
+          <td data-label="Total Profit" class="profit-pos">+18.14%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">4  <span class="muted">(Normal)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+17.06%</td>
+          <td data-label="Total Profit" class="profit-pos">+17.06%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">61  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.82%</td>
+          <td data-label="Total Profit" class="profit-pos">+3.82%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">502  <span class="muted">(Short Normal)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.20%</td>
+          <td data-label="Total Profit" class="profit-pos">+3.20%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.29%</td>
+          <td data-label="Total Profit" class="profit-pos">+2.58%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">163  <span class="muted">(Scalp)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.48%</td>
+          <td data-label="Total Profit" class="profit-pos">+2.48%</td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Per-Pair Performance (closed trades)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
+    
+        <tr>
+          <td data-label="Pair">CHIP/USDT:USDT</td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+10.21%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">UB/USDT:USDT</td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.90%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MON/USDT:USDT</td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.90%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">WLD/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+19.23%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ONE/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.20%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">HUMA/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+17.06%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">APR/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.82%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SUI/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.20%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MANA/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.53%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">GRASS/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+19.28%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">API3/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+2.48%</td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Closed Trades (14)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
+    
+        <tr>
+          <td data-label="Pair">API3/USDT:USDT</td>
+          <td data-label="Enter Tag">163  <span class="muted">(Scalp)</span></td>
+          <td data-label="Opened">2026-10-07 02:25</td>
+          <td data-label="Closed">2026-10-07 02:56</td>
+          <td data-label="Profit" class="profit-pos">+2.48%</td>
+          <td data-label="Exit Reason">exit_profit_long_scalp_t_0_1_m ( 163 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">GRASS/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-05 14:55</td>
+          <td data-label="Closed">2026-10-05 19:26</td>
+          <td data-label="Profit" class="profit-pos">+19.28%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_6_1 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MANA/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-03 06:25</td>
+          <td data-label="Closed">2026-10-04 05:17</td>
+          <td data-label="Profit" class="profit-pos">+1.53%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">SUI/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-02 08:55</td>
+          <td data-label="Closed">2026-10-02 14:20</td>
+          <td data-label="Profit" class="profit-pos">+1.20%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MON/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-01 13:50</td>
+          <td data-label="Closed">2026-10-01 16:40</td>
+          <td data-label="Profit" class="profit-pos">+1.86%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">APR/USDT:USDT</td>
+          <td data-label="Enter Tag">61  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-30 05:00</td>
+          <td data-label="Closed">2026-09-30 05:22</td>
+          <td data-label="Profit" class="profit-pos">+3.82%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_u_1 ( 61 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">MON/USDT:USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-28 16:10</td>
+          <td data-label="Closed">2026-09-29 07:32</td>
+          <td data-label="Profit" class="profit-pos">+1.94%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_e_r ( 65 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">HUMA/USDT:USDT</td>
+          <td data-label="Enter Tag">4  <span class="muted">(Normal)</span></td>
+          <td data-label="Opened">2026-09-28 06:20</td>
+          <td data-label="Closed">2026-09-28 08:11</td>
+          <td data-label="Profit" class="profit-pos">+17.06%</td>
+          <td data-label="Exit Reason">exit_long_normal_d_5_1 ( 4 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ONE/USDT:USDT</td>
+          <td data-label="Enter Tag">502  <span class="muted">(Short Normal)</span></td>
+          <td data-label="Opened">2026-09-28 03:45</td>
+          <td data-label="Closed">2026-09-28 04:05</td>
+          <td data-label="Profit" class="profit-pos">+3.20%</td>
+          <td data-label="Exit Reason">exit_short_normal_u_1 ( 502 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">UB/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-23 17:45</td>
+          <td data-label="Closed">2026-09-28 01:21</td>
+          <td data-label="Profit" class="profit-pos">+3.17%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_1_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">WLD/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-26 22:25</td>
+          <td data-label="Closed">2026-09-27 10:12</td>
+          <td data-label="Profit" class="profit-pos">+19.23%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_6_1 ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CHIP/USDT:USDT</td>
+          <td data-label="Enter Tag">64  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-25 15:30</td>
+          <td data-label="Closed">2026-09-25 21:05</td>
+          <td data-label="Profit" class="profit-pos">+2.28%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 64 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">CHIP/USDT:USDT</td>
+          <td data-label="Enter Tag">6  <span class="muted">(Normal)</span></td>
+          <td data-label="Opened">2026-09-23 14:20</td>
+          <td data-label="Closed">2026-09-24 16:31</td>
+          <td data-label="Profit" class="profit-pos">+18.14%</td>
+          <td data-label="Exit Reason">exit_long_normal_d_6_1 ( 6 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">UB/USDT:USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-09-23 15:15</td>
+          <td data-label="Closed">2026-09-23 15:40</td>
+          <td data-label="Profit" class="profit-pos">+0.64%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 65 )</td>
+        </tr>
+  </table>
+  </div>
+</div>
+</div></details><details class="fold"><summary>🛡️ X8 GUARD FUTURES — OKX</summary><div class="inner">
+
+
+
+
+
+
+
+<div class="card">
+  <h3>Open Trades (1)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
+    
+        <tr>
+          <td data-label="Pair">H/USDT:USDT</td>
+          <td data-label="Enter Tag">562  <span class="muted">(Short Rebuy)</span></td>
+          <td data-label="Opened">2026-10-07 11:35</td>
+          <td data-label="Age">0.7d</td>
+          <td data-label="Rebuys">0</td>
+          <td data-label="Capital Locked">30.76 USDT</td>
+          <td data-label="Open Rate">0.06736</td>
+          <td data-label="Live Price">0.06804</td>
+          <td data-label="Unrealized P/L"><span class="profit-neg">-3.03% (-0.93 USDT)</span></td>
+        </tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Tag Family Performance (closed trades) <span class="muted" style="font-weight:400;font-size:0.75rem;">— "open now" marks a tag currently held by an open trade</span></h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
+    <tr><td colspan="5" class="muted">No closed trades yet</td></tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Per-Pair Performance (closed trades)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
+    <tr><td colspan="4" class="muted">No closed trades yet</td></tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Closed Trades (0)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
+    <tr><td colspan="6" class="muted">No closed trades yet</td></tr>
+  </table>
+  </div>
+</div>
+</div></details>
+<h2 class="group-title" id="ml">ML data &amp; analytics</h2>
+<div class="subtitle">ML readiness (X7ML only), significance, duration, clustering, DCA activity.</div>
+<details class="fold"><summary>🟢 X7ML SPOT — OKX</summary><div class="inner"><div class="card">
+          <h3>Statistical Significance</h3>
+          <p>Win-rate p-value (two-sided binomial vs. 50%): <b>0.0000</b> — statistically distinguishable from 50/50</p>
+          <p>95% bootstrap CI on mean profit/trade: <b>[1.07%, 1.86%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
+        </div>
+
+
+    <div class="card">
+      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across 21 closed trades</span></h3>
+      <p>Correlation(duration, profit): <b>+0.239</b></p>
+      <p class="muted" style="font-size:0.85rem;">No strong linear relationship between duration and outcome — duration alone isn't a reliable signal here.</p>
+      <p style="font-size:0.85rem;">Fastest closes: 0.3h, 0.5h, 0.5h &nbsp;|&nbsp; Slowest closes: 22.3h, 49.0h, 71.3h</p>
+    </div>
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <p class="muted">Not enough open trades to check clustering.</p>
+    </div>
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <div class="table-scroll">
+      <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
+      <tr><td data-label="Pair">NMR/USDT</td><td data-label="Entry Fills">2</td><td data-label="Extra DCA/Rebuy">1</td><td class="muted"></td></tr>
+      </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>ML Data Readiness <span class="muted" style="font-weight:400;font-size:0.75rem;">— labeled feature data logged via entry_context/ml_snapshot custom_data</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Trades With Logged Features</div>
+          <div class="value">22</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Labeled (Closed)</div>
+          <div class="value">21</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">21/100 — below the minimum sample size before any model trained on this would be meaningful.</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unlabeled (Open)</div>
+          <div class="value">1</div>
+        </div>
+      </div>
+      <div class="two-col" style="margin-top:16px;">
+        <div>
+          <p class="muted" style="font-size:0.8rem;margin-bottom:4px;">Feature health check (non-null rate)</p>
+          <table><tr><th>Feature</th><th>Coverage</th></tr><tr><td data-label="Feature">rsi_14</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">btc_rsi_14</td><td data-label="Coverage" class="profit-pos">95%</td></tr><tr><td data-label="Feature">ema_20</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">adx_14</td><td data-label="Coverage" class="profit-pos">95%</td></tr><tr><td data-label="Feature">atr_14</td><td data-label="Coverage" class="">91%</td></tr><tr><td data-label="Feature">enter_tag</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">exit_reason</td><td data-label="Coverage" class="">86%</td></tr><tr><td data-label="Feature">rsi_14_1h</td><td data-label="Coverage" class="">91%</td></tr><tr><td data-label="Feature">ema_12_1h</td><td data-label="Coverage" class="">91%</td></tr><tr><td data-label="Feature">ema_200_1h</td><td data-label="Coverage" class="">91%</td></tr><tr><td data-label="Feature">rsi_14_1d</td><td data-label="Coverage" class="">91%</td></tr><tr><td data-label="Feature">ema_50_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">ema_200_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">range_pct_14_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">btc_ema_20_1h</td><td data-label="Coverage" class="">91%</td></tr><tr><td data-label="Feature">btc_roc_3_1h</td><td data-label="Coverage" class="">91%</td></tr><tr><td data-label="Feature">btc_ema_200_1d</td><td data-label="Coverage" class="">91%</td></tr></table>
+        </div>
+        <div>
+          <p class="muted" style="font-size:0.8rem;margin-bottom:4px;">By enter_tag (closed / total logged)</p>
+          <table><tr><th>Tag</th><th>Closed/Total</th></tr><tr><td data-label="Tag">64 </td><td data-label="Closed/Total">12/13</td></tr><tr><td data-label="Tag">142 </td><td data-label="Closed/Total">3/3</td></tr><tr><td data-label="Tag">65 </td><td data-label="Closed/Total">2/2</td></tr><tr><td data-label="Tag">161 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">144 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">141 142 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">163 </td><td data-label="Closed/Total">1/1</td></tr></table>
+        </div>
+      </div>
+    </div></div></details><details class="fold"><summary>🔵 X8 SPOT — OKX</summary><div class="inner"><div class="card">
+          <h3>Statistical Significance</h3>
+          <p>Win-rate p-value (two-sided binomial vs. 50%): <b>0.0002</b> — statistically distinguishable from 50/50</p>
+          <p>95% bootstrap CI on mean profit/trade: <b>[0.88%, 2.80%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
+        </div>
+
+
+    <div class="card">
+      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across 13 closed trades</span></h3>
+      <p>Correlation(duration, profit): <b>+0.236</b></p>
+      <p class="muted" style="font-size:0.85rem;">No strong linear relationship between duration and outcome — duration alone isn't a reliable signal here.</p>
+      <p style="font-size:0.85rem;">Fastest closes: 0.5h, 1.6h, 1.9h &nbsp;|&nbsp; Slowest closes: 11.8h, 22.9h, 36.1h</p>
+    </div>
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <div class="table-scroll"><table><tr><th>Pair</th><th>Opened</th></tr><tr><td data-label="Pair">APT/USDT</td><td data-label="Opened">2026-10-07 02:15</td></tr><tr><td data-label="Pair">NMR/USDT</td><td data-label="Opened">2026-10-07 11:40</td></tr></table></div>
+      <p class="muted" style="font-size:0.85rem;margin-top:8px;">Opens are spread out — no clustered entry burst; each trade was an independent signal.</p>
+    </div>
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <div class="table-scroll">
+      <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
+      <tr><td data-label="Pair">APT/USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr><tr><td data-label="Pair">NMR/USDT</td><td data-label="Entry Fills">2</td><td data-label="Extra DCA/Rebuy">1</td><td class="muted"></td></tr>
+      </table>
+      </div>
+    </div></div></details><details class="fold"><summary>🟣 X7ML FUTURES — OKX</summary><div class="inner"><div class="card">
+          <h3>Statistical Significance</h3>
+          <p>Win-rate p-value (two-sided binomial vs. 50%): <b>0.0000</b> — statistically distinguishable from 50/50</p>
+          <p>95% bootstrap CI on mean profit/trade: <b>[3.17%, 5.70%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
+        </div>
+
+
+    <div class="card">
+      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across 21 closed trades</span></h3>
+      <p>Correlation(duration, profit): <b>-0.198</b></p>
+      <p class="muted" style="font-size:0.85rem;">No strong linear relationship between duration and outcome — duration alone isn't a reliable signal here.</p>
+      <p style="font-size:0.85rem;">Fastest closes: 0.1h, 0.4h, 0.5h &nbsp;|&nbsp; Slowest closes: 25.4h, 62.3h, 105.5h</p>
+    </div>
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <p class="muted">Not enough open trades to check clustering.</p>
+    </div>
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <div class="table-scroll">
+      <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
+      <tr><td colspan="4" class="muted">No open trades</td></tr>
+      </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>ML Data Readiness <span class="muted" style="font-weight:400;font-size:0.75rem;">— labeled feature data logged via entry_context/ml_snapshot custom_data</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Trades With Logged Features</div>
+          <div class="value">21</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Labeled (Closed)</div>
+          <div class="value">21</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">21/100 — below the minimum sample size before any model trained on this would be meaningful.</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unlabeled (Open)</div>
+          <div class="value">0</div>
+        </div>
+      </div>
+      <div class="two-col" style="margin-top:16px;">
+        <div>
+          <p class="muted" style="font-size:0.8rem;margin-bottom:4px;">Feature health check (non-null rate)</p>
+          <table><tr><th>Feature</th><th>Coverage</th></tr><tr><td data-label="Feature">rsi_14</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">btc_rsi_14</td><td data-label="Coverage" class="">90%</td></tr><tr><td data-label="Feature">ema_20</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">adx_14</td><td data-label="Coverage" class="">90%</td></tr><tr><td data-label="Feature">atr_14</td><td data-label="Coverage" class="">86%</td></tr><tr><td data-label="Feature">enter_tag</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">exit_reason</td><td data-label="Coverage" class="">86%</td></tr><tr><td data-label="Feature">rsi_14_1h</td><td data-label="Coverage" class="">86%</td></tr><tr><td data-label="Feature">ema_12_1h</td><td data-label="Coverage" class="">86%</td></tr><tr><td data-label="Feature">ema_200_1h</td><td data-label="Coverage" class="">86%</td></tr><tr><td data-label="Feature">rsi_14_1d</td><td data-label="Coverage" class="">86%</td></tr><tr><td data-label="Feature">ema_50_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">ema_200_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">range_pct_14_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">btc_ema_20_1h</td><td data-label="Coverage" class="">86%</td></tr><tr><td data-label="Feature">btc_roc_3_1h</td><td data-label="Coverage" class="">86%</td></tr><tr><td data-label="Feature">btc_ema_200_1d</td><td data-label="Coverage" class="">86%</td></tr></table>
+        </div>
+        <div>
+          <p class="muted" style="font-size:0.8rem;margin-bottom:4px;">By enter_tag (closed / total logged)</p>
+          <table><tr><th>Tag</th><th>Closed/Total</th></tr><tr><td data-label="Tag">64 </td><td data-label="Closed/Total">11/11</td></tr><tr><td data-label="Tag">562 </td><td data-label="Closed/Total">2/2</td></tr><tr><td data-label="Tag">6 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">4 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">41 61 63 163 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">142 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">47 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">2 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">163 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">65 </td><td data-label="Closed/Total">1/1</td></tr></table>
+        </div>
+      </div>
+    </div></div></details><details class="fold"><summary>🟠 X8 FUTURES — OKX</summary><div class="inner"><div class="card">
+          <h3>Statistical Significance</h3>
+          <p>Win-rate p-value (two-sided binomial vs. 50%): <b>0.0001</b> — statistically distinguishable from 50/50</p>
+          <p>95% bootstrap CI on mean profit/trade: <b>[3.24%, 10.83%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
+        </div>
+
+
+    <div class="card">
+      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across 14 closed trades</span></h3>
+      <p>Correlation(duration, profit): <b>-0.051</b></p>
+      <p class="muted" style="font-size:0.85rem;">No strong linear relationship between duration and outcome — duration alone isn't a reliable signal here.</p>
+      <p style="font-size:0.85rem;">Fastest closes: 0.3h, 0.4h, 0.4h &nbsp;|&nbsp; Slowest closes: 22.9h, 26.2h, 103.6h</p>
+    </div>
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <div class="table-scroll"><table><tr><th>Pair</th><th>Opened</th></tr><tr><td data-label="Pair">CAP/USDT:USDT</td><td data-label="Opened">2026-10-07 04:35</td></tr><tr><td data-label="Pair">H/USDT:USDT</td><td data-label="Opened">2026-10-07 11:35</td></tr></table></div>
+      <p class="muted" style="font-size:0.85rem;margin-top:8px;">Opens are spread out — no clustered entry burst; each trade was an independent signal.</p>
+    </div>
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <div class="table-scroll">
+      <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
+      <tr><td data-label="Pair">CAP/USDT:USDT</td><td data-label="Entry Fills">2</td><td data-label="Extra DCA/Rebuy">1</td><td class="muted"></td></tr><tr><td data-label="Pair">H/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr>
+      </table>
+      </div>
+    </div></div></details><details class="fold"><summary>🛡️ X8 GUARD FUTURES — OKX</summary><div class="inner"><div class="card">
+          <h3>Statistical Significance</h3>
+          <p>Only 0 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
+        </div>
+
+
+    <div class="card">
+      <h3>Duration vs Outcome</h3>
+      <p class="muted">Not enough closed trades with duration data yet.</p>
+    </div>
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <p class="muted">Not enough open trades to check clustering.</p>
+    </div>
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <div class="table-scroll">
+      <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
+      <tr><td data-label="Pair">H/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr>
+      </table>
+      </div>
+    </div></div></details>
+</main>
+<script>
+
+Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
+new Chart(document.getElementById('equityChart_spot'), {
+  type: 'line',
+  data: {
+    labels: ["2026-09-14 23:00", "2026-09-18 01:00", "2026-09-20 15:23", "2026-09-22 21:40", "2026-09-24 13:20", "2026-09-22 08:41", "2026-09-24 12:37", "2026-09-23 23:03", "2026-09-25 16:16", "2026-09-27 06:18", "2026-09-29 11:44", "2026-09-30 01:30", "2026-10-01 09:46", "2026-10-03 00:49", "2026-10-03 10:18", "2026-10-02 19:20", "2026-10-02 19:25", "2026-10-02 21:06", "2026-10-05 16:57", "2026-10-07 02:56", "2026-10-07 15:45"],
+    datasets: [{
+      label: 'Cumulative profit %',
+      data: [3.153, 6.663, 6.913, 9.19, 11.698, 14.117, 15.138, 16.577, 17.719, 19.022, 20.166, 20.744, 21.527, 21.656, 21.813, 23.086, 24.35, 26.75, 28.34, 29.029, 30.566],
+      borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+      fill: true, tension: 0.2, pointRadius: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { ticks: { color: '#838aa0' }, grid: { color: '#232838' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+new Chart(document.getElementById('reasonChart_spot'), {
+  type: 'doughnut',
+  data: {
+    labels: ["exit_long_rebuy_w_3_17 ( 64 )", "exit_profit_long_scalp_t_0_1_m ( 161 )", "exit_long_rebuy_2_1_1 ( 64 )", "exit_long_rebuy_1_1_1 ( 64 )", "exit_long_rebuy_d_2_42 ( 64 )", "exit_long_tc_d_1_119 ( 142 )", "exit_long_rebuy_e_r ( 65 )", "exit_long_rebuy_d_1_117 ( 64 )", "exit_long_rebuy_w_1_17 ( 64 )", "exit_long_rebuy_d_0_117 ( 64 )", "exit_long_rebuy_w_0_7 ( 64 )", "exit_long_rebuy_w_0_2 ( 64 )", "exit_long_tc_d_0_98 ( 144 )", "exit_long_tc_d_1_110 ( 141 142 )", "exit_long_tc_d_1_120 ( 142 )", "exit_long_rebuy_d_2_110 ( 64 )", "exit_long_rebuy_d_1_119 ( 64 )", "exit_profit_long_scalp_t_0_1_m ( 163 )", "exit_long_rebuy_d_1_42 ( 65 )"],
+    datasets: [{
+      data: [2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+      backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { color: '#dfe2ea', font: { size: 10 } } } }
+  }
+});
+
+
+new Chart(document.getElementById('trendChart_spot'), {
+  type: 'bar',
+  data: {
+    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05", "09-14 06:43", "09-14 12:51", "09-14 17:18", "09-14 21:13", "09-14 21:19", "09-15 00:07", "09-15 05:37", "09-15 10:44", "09-15 15:22", "09-15 19:24", "09-15 22:35", "09-16 00:55", "09-16 05:31", "09-16 07:35", "09-16 10:32", "09-16 15:14", "09-16 19:14", "09-16 22:30", "09-17 00:59", "09-17 05:48", "09-17 17:30", "09-17 19:27", "09-17 22:33", "09-18 00:55", "09-18 05:25", "09-18 10:18", "09-18 14:43", "09-18 17:59", "09-18 20:29", "09-18 22:56", "09-19 00:50", "09-19 05:20", "09-19 10:00", "09-19 13:46", "09-19 16:56", "09-19 19:07", "09-19 21:58", "09-19 23:54", "09-20 02:32", "09-20 08:07", "09-20 13:22", "09-20 17:10", "09-20 20:02", "09-20 22:49", "09-21 00:41", "09-21 05:43", "09-21 11:32", "09-21 17:30", "09-21 20:59", "09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:25", "09-22 22:34", "09-23 01:06", "09-23 07:02", "09-23 13:09", "09-23 18:05", "09-23 21:55", "09-24 00:08", "09-24 05:40", "09-24 10:48", "09-24 15:37", "09-24 19:38", "09-24 22:52", "09-25 01:02", "09-25 06:14", "09-25 06:33", "09-25 06:53", "09-25 12:27", "09-25 17:39", "09-25 20:55", "09-25 23:43", "09-26 02:41", "09-26 08:09", "09-26 13:31", "09-26 17:30", "09-26 20:26", "09-26 23:16", "09-27 02:41", "09-27 08:40", "09-27 08:45", "09-27 08:52", "09-27 09:28", "09-27 13:03", "09-27 14:27", "09-27 18:47", "09-27 21:45", "09-28 00:09", "09-28 04:34", "09-28 06:09", "09-28 14:45", "09-28 20:57", "09-29 00:48", "09-29 06:26", "09-29 08:07", "09-29 13:35", "09-29 19:00", "09-29 22:54", "09-30 01:46", "09-30 07:45", "09-30 14:27", "09-30 19:45", "09-30 23:21", "10-01 03:16", "10-01 10:36", "10-01 17:13", "10-01 22:10", "10-02 01:54", "10-02 07:47", "10-02 14:20", "10-02 19:42", "10-02 23:27", "10-03 03:02", "10-03 07:58", "10-03 09:33", "10-03 14:29", "10-03 18:28", "10-03 21:55", "10-04 00:16", "10-04 06:32", "10-04 12:58", "10-04 17:18", "10-04 20:41", "10-04 23:44", "10-05 03:11", "10-05 11:01", "10-06 01:08", "10-06 08:21", "10-06 15:35", "10-06 20:41", "10-07 00:16", "10-07 06:44", "10-07 14:05", "10-07 19:43", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 04:55"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -2.49, -0.85, -2.04, 0.0, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.67, 2.03, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.07, 2.38, 2.38, 2.8, 2.29, 1.6, 1.69, 1.0, 1.14, 1.01, 0.66, 0.84, -0.46, 0.14, 0.1, 0.95, 2.19, 2.49, 2.3, 2.02, 0.8, -0.48, 0.95, 5.35, 3.47, 6.33, 6.33, 6.33, 6.33, 6.33, 6.33, 6.33, 6.33, 6.69, 6.69, 6.69, 6.69, 6.69, 6.69, 6.69, 6.69, 6.76, 6.89, 7.09, 7.09, 7.09, 7.09, 7.09, 7.09, 7.09, 7.09, 7.09, 7.09, 7.09, 7.09, 7.09, 7.09, 5.68, 7.21, 8.52, 8.52, 8.52, 8.79, 8.7, 8.7, 8.7, 8.7, 8.7, 8.94, 8.94, 8.94, 8.94, 8.94, 9.17, 8.51, 11.13, 14.96, 11.72, 11.49, 13.1, 13.1, 13.1, 13.1, 13.1, 13.1, 13.1, 13.1, 13.1, 13.1, 13.1, 13.6, 13.6, 13.6, 13.6, 13.6, 14.27, 9.07, 11.81, 11.84, 11.78, 12.71, 10.35, 10.35],
+        borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+        backgroundColor: 'rgba(217,100,90,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { position: 'left', ticks: { color: '#838aa0' }, grid: { color: '#232838' },
+           title: { display: true, text: 'USDT', color: '#838aa0' } },
+      y1: { position: 'right', ticks: { color: '#838aa0', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#838aa0' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+
+Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
+new Chart(document.getElementById('equityChart_spot_x8'), {
+  type: 'line',
+  data: {
+    labels: ["2026-09-22 09:12", "2026-09-24 13:16", "2026-09-23 23:03", "2026-09-25 16:00", "2026-09-25 17:25", "2026-09-27 10:12", "2026-09-30 13:39", "2026-09-30 02:56", "2026-10-01 11:20", "2026-10-02 14:20", "2026-10-02 23:02", "2026-10-07 02:56", "2026-10-07 15:45"],
+    datasets: [{
+      label: 'Cumulative profit %',
+      data: [2.536, 5.616, 7.056, 7.693, 7.804, 14.41, 15.338, 16.693, 17.376, 17.564, 18.318, 18.853, 22.503],
+      borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+      fill: true, tension: 0.2, pointRadius: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { ticks: { color: '#838aa0' }, grid: { color: '#232838' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+new Chart(document.getElementById('reasonChart_spot_x8'), {
+  type: 'doughnut',
+  data: {
+    labels: ["exit_profit_long_rebuy_t_2_1_m ( 64 )", "exit_long_tc_2_1_1 ( 142 )", "exit_long_rebuy_e_r ( 65 )", "exit_profit_long_tc_t_0_1_m ( 145 )", "exit_profit_long_rebuy_t_0_1_m ( 64 )", "exit_long_rebuy_d_6_1 ( 64 )", "exit_profit_long_tc_t_0_1_m ( 142 )", "exit_profit_long_rebuy_t_1_1_m ( 64 )", "exit_profit_long_tc_t_0_1_m ( 143 )", "exit_profit_long_scalp_t_0_1_m ( 163 )"],
+    datasets: [{
+      data: [1, 1, 2, 1, 3, 1, 1, 1, 1, 1],
+      backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { color: '#dfe2ea', font: { size: 10 } } } }
+  }
+});
+
+
+new Chart(document.getElementById('trendChart_spot_x8'), {
+  type: 'bar',
+  data: {
+    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:26", "09-22 22:34", "09-23 01:06", "09-23 07:02", "09-23 13:09", "09-23 18:05", "09-23 21:55", "09-24 00:08", "09-24 05:40", "09-24 10:48", "09-24 15:37", "09-24 19:39", "09-24 22:52", "09-25 01:02", "09-25 06:14", "09-25 06:33", "09-25 06:53", "09-25 12:27", "09-25 17:39", "09-25 20:55", "09-25 23:44", "09-26 02:41", "09-26 08:09", "09-26 13:31", "09-26 17:30", "09-26 20:26", "09-26 23:16", "09-27 02:41", "09-27 08:40", "09-27 08:45", "09-27 08:52", "09-27 09:28", "09-27 13:03", "09-27 14:27", "09-27 18:47", "09-27 21:45", "09-28 00:09", "09-28 04:34", "09-28 06:09", "09-28 14:45", "09-28 20:57", "09-29 00:48", "09-29 06:26", "09-29 08:07", "09-29 13:35", "09-29 19:00", "09-29 22:54", "09-30 01:46", "09-30 07:45", "09-30 14:27", "09-30 19:45", "09-30 23:21", "10-01 03:16", "10-01 10:36", "10-01 17:13", "10-01 22:10", "10-02 01:54", "10-02 07:47", "10-02 14:20", "10-02 19:42", "10-02 23:27", "10-03 03:03", "10-03 07:58", "10-03 09:34", "10-03 14:29", "10-03 18:28", "10-03 21:55", "10-04 00:16", "10-04 06:32", "10-04 12:58", "10-04 17:18", "10-04 20:41", "10-04 23:44", "10-05 03:11", "10-05 11:01", "10-06 01:08", "10-06 08:21", "10-06 15:35", "10-06 20:41", "10-07 00:16", "10-07 06:44", "10-07 14:06", "10-07 19:44", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 04:55"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [0.0, 0.0, 0.0, 0.0, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79, -0.88, -1.89, -1.02, 2.02, 0.4, 5.05, 5.05, 5.05, 5.05, 5.05, 5.05, 5.05, 5.05, 5.66, 5.88, 5.88, 5.88, 5.88, 5.88, 5.88, 5.88, 5.93, 6.05, 6.99, 7.0, 7.34, 7.28, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 6.14, 7.75, 8.88, 8.88, 8.24, 8.69, 7.79, 9.52, 9.52, 9.52, 9.52, 9.81, 9.73, 9.73, 9.73, 9.73, 9.97, 3.02, 13.35, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 10.92, 11.19, 1.71, 4.87, 5.67, 5.61, 9.25, 4.78, 4.7],
+        borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+        backgroundColor: 'rgba(217,100,90,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { position: 'left', ticks: { color: '#838aa0' }, grid: { color: '#232838' },
+           title: { display: true, text: 'USDT', color: '#838aa0' } },
+      y1: { position: 'right', ticks: { color: '#838aa0', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#838aa0' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+
+Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
+new Chart(document.getElementById('equityChart_futures'), {
+  type: 'line',
+  data: {
+    labels: ["2026-09-16 12:32", "2026-09-16 17:40", "2026-09-18 01:00", "2026-09-21 00:27", "2026-09-22 03:32", "2026-09-24 15:46", "2026-09-26 08:09", "2026-09-25 16:10", "2026-09-27 06:15", "2026-09-28 07:01", "2026-09-30 05:22", "2026-10-01 17:12", "2026-10-03 00:50", "2026-10-02 19:25", "2026-10-07 15:51", "2026-10-04 19:14", "2026-10-05 08:56", "2026-10-07 02:10", "2026-10-07 02:56", "2026-10-07 08:36", "2026-10-07 15:45"],
+    datasets: [{
+      label: 'Cumulative profit %',
+      data: [4.035, 6.285, 17.163, 20.471, 28.334, 35.429, 38.494, 41.594, 45.44, 48.509, 52.328, 63.621, 64.451, 68.243, 69.712, 76.646, 77.026, 80.354, 81.805, 86.851, 91.145],
+      borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+      fill: true, tension: 0.2, pointRadius: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { ticks: { color: '#838aa0' }, grid: { color: '#232838' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+new Chart(document.getElementById('reasonChart_futures'), {
+  type: 'doughnut',
+  data: {
+    labels: ["exit_short_rebuy_d_1_133 ( 562 )", "exit_short_rebuy_w_0_8 ( 562 )", "exit_long_rebuy_w_3_17 ( 64 )", "exit_long_rebuy_w_1_10 ( 64 )", "exit_long_rebuy_w_2_16 ( 64 )", "exit_long_normal_d_2_100 ( 6 )", "exit_long_rebuy_d_1_100 ( 64 )", "exit_long_rebuy_d_1_117 ( 64 )", "exit_long_rebuy_w_1_17 ( 64 )", "exit_long_normal_u_1 ( 4 )", "exit_long_quick_u_1 ( 41 61 63 163 )", "exit_long_rebuy_w_0_2 ( 64 )", "exit_long_tc_d_1_60 ( 142 )", "exit_long_rebuy_d_0_119 ( 64 )", "exit_long_quick_q_1 ( 47 )", "exit_long_rebuy_d_0_118 ( 64 )", "exit_long_normal_u_1 ( 2 )", "exit_profit_long_scalp_t_0_1_m ( 163 )", "exit_long_rebuy_d_1_42 ( 64 )", "exit_long_rebuy_e_r ( 65 )"],
+    datasets: [{
+      data: [1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+      backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { color: '#dfe2ea', font: { size: 10 } } } }
+  }
+});
+
+
+new Chart(document.getElementById('trendChart_futures'), {
+  type: 'bar',
+  data: {
+    labels: ["09-13 00:34", "09-13 03:57", "09-13 11:21", "09-13 15:52", "09-13 20:31", "09-13 23:01", "09-14 04:05", "09-14 06:43", "09-14 12:51", "09-14 17:18", "09-14 21:13", "09-14 21:19", "09-15 00:07", "09-15 05:37", "09-15 10:44", "09-15 15:22", "09-15 19:24", "09-15 22:35", "09-16 00:55", "09-16 05:31", "09-16 07:35", "09-16 10:32", "09-16 15:14", "09-16 19:14", "09-16 22:30", "09-17 00:59", "09-17 05:48", "09-17 17:30", "09-17 19:27", "09-17 22:33", "09-18 00:55", "09-18 05:25", "09-18 10:18", "09-18 14:43", "09-18 17:59", "09-18 20:29", "09-18 22:56", "09-19 00:50", "09-19 05:20", "09-19 10:00", "09-19 13:46", "09-19 16:56", "09-19 19:07", "09-19 21:58", "09-19 23:54", "09-20 02:32", "09-20 08:07", "09-20 13:22", "09-20 17:10", "09-20 20:02", "09-20 22:49", "09-21 00:41", "09-21 05:43", "09-21 11:32", "09-21 17:30", "09-21 20:59", "09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:25", "09-22 22:34", "09-23 01:06", "09-23 07:02", "09-23 13:09", "09-23 18:05", "09-23 21:55", "09-24 00:08", "09-24 05:40", "09-24 10:48", "09-24 15:37", "09-24 19:38", "09-24 22:52", "09-25 01:02", "09-25 06:14", "09-25 06:33", "09-25 06:53", "09-25 12:27", "09-25 17:39", "09-25 20:55", "09-25 23:43", "09-26 02:41", "09-26 08:09", "09-26 13:31", "09-26 17:30", "09-26 20:26", "09-26 23:16", "09-27 02:41", "09-27 08:40", "09-27 08:45", "09-27 08:52", "09-27 09:28", "09-27 13:03", "09-27 14:27", "09-27 18:47", "09-27 21:45", "09-28 00:09", "09-28 04:34", "09-28 06:09", "09-28 14:45", "09-28 20:57", "09-29 00:48", "09-29 06:26", "09-29 08:07", "09-29 13:35", "09-29 19:00", "09-29 22:54", "09-30 01:46", "09-30 07:45", "09-30 14:27", "09-30 19:45", "09-30 23:21", "10-01 03:16", "10-01 10:36", "10-01 17:13", "10-01 22:10", "10-02 01:54", "10-02 07:47", "10-02 14:20", "10-02 19:42", "10-02 23:27", "10-03 03:02", "10-03 07:58", "10-03 09:33", "10-03 14:29", "10-03 18:28", "10-03 21:55", "10-04 00:16", "10-04 06:32", "10-04 12:58", "10-04 17:18", "10-04 20:41", "10-04 23:44", "10-05 03:11", "10-05 11:01", "10-06 01:08", "10-06 08:21", "10-06 15:35", "10-06 20:41", "10-07 00:16", "10-07 06:44", "10-07 14:05", "10-07 19:43", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 04:55"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.34, -0.2, 1.49, 1.94, 1.94, 1.94, 1.94, 1.94, 1.94, 1.63, 2.99, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.38, 5.48, 6.34, 6.34, 6.34, 6.37, 6.3, 6.36, 6.8, 8.77, 8.77, 8.77, 8.77, 8.77, 8.77, 8.77, 8.77, -1.09, -3.47, -3.04, -1.0, -12.14, 5.89, 12.02, 11.88, 13.27, 14.99, 15.5, 15.77, 16.39, 18.54, 18.35, 16.87, 16.45, 19.18, 19.44, 19.44, 19.44, 19.61, 19.91, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 29.35, 29.35, 29.35, 29.35, 29.35, 29.35, 33.76, 32.94, 32.94, 32.94, 33.55, 32.93, 33.12, 38.05, 36.97, 33.95, 33.87, 37.12, 36.63, 35.61, 36.34, 19.94, 14.6, 43.37, 44.09, 42.43, 44.03, 45.83, 44.45, 43.07, 42.64, 42.45, 51.1, 42.42, 56.73, 56.73, 56.73, 56.73, 56.73, 56.73],
+        borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+        backgroundColor: 'rgba(217,100,90,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { position: 'left', ticks: { color: '#838aa0' }, grid: { color: '#232838' },
+           title: { display: true, text: 'USDT', color: '#838aa0' } },
+      y1: { position: 'right', ticks: { color: '#838aa0', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#838aa0' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+
+Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
+new Chart(document.getElementById('equityChart_futures_x8'), {
+  type: 'line',
+  data: {
+    labels: ["2026-09-24 16:31", "2026-09-23 15:40", "2026-09-28 01:21", "2026-09-25 21:05", "2026-09-27 10:12", "2026-09-28 04:05", "2026-09-28 08:11", "2026-09-29 07:32", "2026-09-30 05:22", "2026-10-01 16:40", "2026-10-02 14:20", "2026-10-04 05:17", "2026-10-05 19:26", "2026-10-07 02:56"],
+    datasets: [{
+      label: 'Cumulative profit %',
+      data: [18.142, 18.78, 21.95, 24.228, 43.463, 46.66, 63.716, 65.661, 69.48, 71.336, 72.533, 74.06, 93.34, 95.817],
+      borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+      fill: true, tension: 0.2, pointRadius: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { ticks: { color: '#838aa0' }, grid: { color: '#232838' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+new Chart(document.getElementById('reasonChart_futures_x8'), {
+  type: 'doughnut',
+  data: {
+    labels: ["exit_long_normal_d_6_1 ( 6 )", "exit_profit_long_rebuy_t_0_1_m ( 65 )", "exit_profit_long_rebuy_t_1_1_m ( 64 )", "exit_profit_long_rebuy_t_0_1_m ( 64 )", "exit_long_rebuy_d_6_1 ( 64 )", "exit_short_normal_u_1 ( 502 )", "exit_long_normal_d_5_1 ( 4 )", "exit_long_rebuy_e_r ( 65 )", "exit_long_rebuy_u_1 ( 61 )", "exit_profit_long_scalp_t_0_1_m ( 163 )"],
+    datasets: [{
+      data: [1, 1, 1, 4, 2, 1, 1, 1, 1, 1],
+      backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { color: '#dfe2ea', font: { size: 10 } } } }
+  }
+});
+
+
+new Chart(document.getElementById('trendChart_futures_x8'), {
+  type: 'bar',
+  data: {
+    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:26", "09-22 22:34", "09-23 01:06", "09-23 07:02", "09-23 13:09", "09-23 18:05", "09-23 21:55", "09-24 00:08", "09-24 05:40", "09-24 10:48", "09-24 15:37", "09-24 19:39", "09-24 22:52", "09-25 01:02", "09-25 06:14", "09-25 06:33", "09-25 06:53", "09-25 12:27", "09-25 17:39", "09-25 20:55", "09-25 23:44", "09-26 02:41", "09-26 08:09", "09-26 13:31", "09-26 17:31", "09-26 20:26", "09-26 23:16", "09-27 02:41", "09-27 08:40", "09-27 08:45", "09-27 08:52", "09-27 09:28", "09-27 13:03", "09-27 14:27", "09-27 18:47", "09-27 21:45", "09-28 00:09", "09-28 04:34", "09-28 06:09", "09-28 14:45", "09-28 20:57", "09-29 00:48", "09-29 06:27", "09-29 08:07", "09-29 13:35", "09-29 19:00", "09-29 22:54", "09-30 01:46", "09-30 07:45", "09-30 14:27", "09-30 19:45", "09-30 23:21", "10-01 03:16", "10-01 10:36", "10-01 17:13", "10-01 22:10", "10-02 01:54", "10-02 07:47", "10-02 14:20", "10-02 19:42", "10-02 23:27", "10-03 03:03", "10-03 07:58", "10-03 09:34", "10-03 14:29", "10-03 18:28", "10-03 21:55", "10-04 00:16", "10-04 06:32", "10-04 12:58", "10-04 17:18", "10-04 20:41", "10-04 23:44", "10-05 03:11", "10-05 11:01", "10-06 01:08", "10-06 08:21", "10-06 15:35", "10-06 20:41", "10-07 00:16", "10-07 06:44", "10-07 14:06", "10-07 19:44", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 04:55"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -9.47, -12.0, -11.92, -10.02, -20.62, -2.81, 16.54, 16.4, 17.79, 19.51, 20.05, 20.29, 20.91, 21.39, 23.92, 21.14, 20.77, 23.45, 22.36, 19.83, 19.07, 19.05, 21.64, 23.36, 23.41, 24.4, 24.47, 29.17, 28.44, 28.73, 28.98, 31.42, 34.25, 34.25, 55.97, 52.12, 50.07, 50.05, 57.24, 57.24, 57.24, 57.24, 57.24, 58.47, 58.47, 58.47, 58.47, 58.47, 58.47, 59.08, 59.08, 59.08, 59.08, 59.83, 59.47, 59.47, 59.47, 58.96, 55.97, 55.77, 59.13, 58.66, 57.64, 59.97, 59.97, 59.97, 59.97, 59.97, 59.97, 59.97, 66.27, 66.27, 66.27, 66.27, 66.27, 69.51, 50.96, 47.5, 47.54, 46.93, 44.72, 43.08, 43.03],
+        borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        backgroundColor: 'rgba(217,100,90,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { position: 'left', ticks: { color: '#838aa0' }, grid: { color: '#232838' },
+           title: { display: true, text: 'USDT', color: '#838aa0' } },
+      y1: { position: 'right', ticks: { color: '#838aa0', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#838aa0' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+
+Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
+new Chart(document.getElementById('equityChart_futures_x8guard'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'Cumulative profit %',
+      data: [],
+      borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+      fill: true, tension: 0.2, pointRadius: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { ticks: { color: '#838aa0' }, grid: { color: '#232838' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+new Chart(document.getElementById('reasonChart_futures_x8guard'), {
+  type: 'doughnut',
+  data: {
+    labels: [],
+    datasets: [{
+      data: [],
+      backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { color: '#dfe2ea', font: { size: 10 } } } }
+  }
+});
+
+
+new Chart(document.getElementById('trendChart_futures_x8guard'), {
+  type: 'bar',
+  data: {
+    labels: ["10-07 19:44", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 04:55"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [-0.03, -0.37, -0.42, -1.21, -0.93, -0.93],
+        borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0, 0, 0, 0, 0],
+        backgroundColor: 'rgba(217,100,90,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { position: 'left', ticks: { color: '#838aa0' }, grid: { color: '#232838' },
+           title: { display: true, text: 'USDT', color: '#838aa0' } },
+      y1: { position: 'right', ticks: { color: '#838aa0', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#838aa0' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+
+</script>
+</body>
+</html>
