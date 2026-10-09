@@ -1,0 +1,46 @@
+# SAVE THIS FILE AS: .github/workflows/diagnose-x8-vs-guard.yml
+# ONE-SHOT, read-only diagnostic. Run manually (Actions -> Run workflow).
+# Needs diagnose_x8_vs_guard.py in the repo root. Output: Job Summary
+# (+ artifact "x8-vs-guard-report"). It never writes to any branch.
+name: Diagnose X8 vs X8 Guard
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch SQLite state of X8 futures and X8 Guard futures
+        run: |
+          mkdir -p /tmp/diag
+          git fetch origin state-futures-x8 && \
+            git show origin/state-futures-x8:tradesv3.dryrun_futures_x8.sqlite > /tmp/diag/x8.sqlite
+          git fetch origin state-futures-x8guard && \
+            git show origin/state-futures-x8guard:tradesv3.dryrun_futures_x8guard.sqlite > /tmp/diag/guard.sqlite
+          ls -la /tmp/diag
+
+      - name: Build report
+        run: |
+          python diagnose_x8_vs_guard.py /tmp/diag/x8.sqlite /tmp/diag/guard.sqlite | tee /tmp/diag/report.md
+          cat /tmp/diag/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: x8-vs-guard-report
+          path: /tmp/diag/report.md
