@@ -3,8 +3,9 @@
 # Needs analyze_long_trades.py in the repo root. Run manually.
 #
 # Inputs: all 5 dry-run SQLite state files are always analysed.
-# Optional: comma-separated Run IDs of finished "backtest-signal-frequency"
-# runs -> their uploaded artifacts (backtest result zip/json) are analysed too.
+# Optional: comma-separated run NUMBERS (the "#8" shown in the run title) or
+# full run IDs of finished "Backtest Signal Frequency" runs -> their uploaded
+# artifacts (backtest result zip/json) are analysed too.
 # (If that workflow uploads no artifact, the step says so and continues.)
 # Output: Job Summary + artifact "long-trades-report" (report.md + trades.csv).
 name: Analyze long trades
@@ -16,7 +17,7 @@ on:
         description: "Only trades open longer than this many days"
         default: "2"
       backtest_run_ids:
-        description: "Optional: backtest run IDs, comma-separated"
+        description: "Optional: backtest run numbers like 8,9 (or full run IDs), comma-separated"
         default: ""
 
 permissions:
@@ -58,7 +59,14 @@ jobs:
           IDS: ${{ inputs.backtest_run_ids }}
         run: |
           [ -z "$IDS" ] && { echo "no backtest run ids given"; exit 0; }
-          for id in $(echo "$IDS" | tr ',' ' '); do
+          for id in $(echo "$IDS" | tr ',' ' ' | tr -d '#'); do
+            if [ "${#id}" -le 6 ]; then
+              num="$id"
+              id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "Backtest Signal Frequency" --limit 300 \
+                     --json databaseId,number -q ".[] | select(.number==$num) | .databaseId")
+              [ -z "$id" ] && { echo "run #$num not found"; continue; }
+              echo "run #$num -> id $id"
+            fi
             mkdir -p "/tmp/la/bt_$id"
             gh run download "$id" --repo "$GITHUB_REPOSITORY" -D "/tmp/la/bt_$id" \
               || echo "run $id: no downloadable artifacts"
