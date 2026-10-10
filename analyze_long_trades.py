@@ -163,6 +163,8 @@ def load_backtest(path, label):
             docs.append(json.load(f))
     out = []
     for d in docs:
+        if not isinstance(d, dict):
+            continue
         for strat, body in (d.get("strategy") or {}).items():
             for t in body.get("trades", []):
                 out.append(norm_bt_trade(t, f"{label}:{strat}"))
@@ -234,14 +236,23 @@ def enrich(t):
                               if len(entries) > 1 else None)
     stake0 = (entries[0]["cost"] / lev) if entries and entries[0]["cost"] else t["stake"]
     t["stake0"] = stake0
-    cum, mx = 0.0, 0.0
+    # Margin replay with a cost-basis method: an exit removes the SAME FRACTION of the
+    # entry cost that it removes of the position (exit notional is NOT the stake freed).
+    amt, basis, mx = 0.0, 0.0, 0.0
     for o in t["orders"]:
-        c = (o["cost"] or 0.0) / lev
-        cum += c if o["side"] == "entry" else -c
-        mx = max(mx, cum)
-        o["cum"] = max(cum, 0.0)
-    t["max_margin"] = t["max_stake"] or mx or t["stake"]
-    t["stake_growth"] = (t["max_margin"] / stake0) if stake0 else None
+        a = o["amount"] or 0.0
+        if o["side"] == "entry":
+            basis += (o["cost"] or ((o["price"] or 0.0) * a))
+            amt += a
+        elif amt > 0:
+            frac = min(a / amt, 1.0)
+            basis -= basis * frac
+            amt = max(amt - a, 0.0)
+        o["cum"] = basis / lev
+        mx = max(mx, o["cum"])
+    t["ft_max_stake"] = t["max_stake"]
+    t["max_margin"] = mx or t["stake"]
+    t["stake_growth"] = (t["max_margin"] / stake0) if stake0 and t["max_margin"] else None
     r = (t["exit_reason"] or "")
     if t["is_open"]:
         t["outcome"] = "STILL OPEN"
@@ -298,8 +309,9 @@ def trade_block(i, t):
         ("best excursion (price / margin)", f"{pct(t['mfe_price'])} / {pct(t['mfe_margin'])}"),
         ("entries (DCA) / partial exits", f"{t['n_entries']} / {t['n_partial_exits']}"),
         ("time to first DCA", f"{t['time_to_first_dca']:.2f} d" if t["time_to_first_dca"] is not None else "—"),
-        ("margin first → max", f"{t['stake0'] or 0:.1f} → {t['max_margin'] or 0:.1f} USDT"
+        ("margin first → peak (replayed)", f"{t['stake0'] or 0:.1f} → {t['max_margin'] or 0:.1f} USDT"
                               + (f" (x{t['stake_growth']:.1f})" if t["stake_growth"] else "")),
+        ("freqtrade max_stake_amount (cumulative, for reference)", t.get("ft_max_stake") or "—"),
         ("funding fees", usd(t["funding"])),
     ]))
     rows = []
@@ -406,7 +418,7 @@ def main():
         cols = ["source", "id", "pair", "is_short", "tag", "family", "open_dt", "close_dt", "dur", "outcome",
                 "exit_reason", "profit_ratio", "profit_abs", "leverage", "mae_price", "mae_margin", "mfe_price",
                 "mfe_margin", "n_entries", "n_partial_exits", "time_to_first_dca", "stake0", "max_margin",
-                "stake_growth", "funding"]
+                "stake_growth", "ft_max_stake", "funding"]
         with open(a.csv, "w", newline="") as f:
             w = csv.writer(f)
             w.writerow(cols)
