@@ -1,0 +1,82 @@
+# SAVE THIS FILE AS: .github/workflows/analyze-long-trades.yml
+# ONE-SHOT, read-only analysis of every trade open longer than N days.
+# Needs analyze_long_trades.py in the repo root. Run manually.
+#
+# Inputs: all 5 dry-run SQLite state files are always analysed.
+# Optional: comma-separated Run IDs of finished "backtest-signal-frequency"
+# runs -> their uploaded artifacts (backtest result zip/json) are analysed too.
+# (If that workflow uploads no artifact, the step says so and continues.)
+# Output: Job Summary + artifact "long-trades-report" (report.md + trades.csv).
+name: Analyze long trades
+
+on:
+  workflow_dispatch:
+    inputs:
+      min_days:
+        description: "Only trades open longer than this many days"
+        default: "2"
+      backtest_run_ids:
+        description: "Optional: backtest run IDs, comma-separated"
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch dry-run SQLite states
+        run: |
+          mkdir -p /tmp/la/in
+          fetch () { # branch file out
+            git fetch origin "$1" 2>/dev/null && git show "origin/$1:$2" > "/tmp/la/in/$3.sqlite" 2>/dev/null \
+              && echo "ok $3" || echo "missing $3"
+          }
+          fetch state-spot              tradesv3.dryrun.sqlite               x7ml_spot
+          fetch state-futures           tradesv3.dryrun_futures.sqlite       x7ml_futures
+          fetch state-spot-x8           tradesv3.dryrun_x8.sqlite            x8_spot
+          fetch state-futures-x8        tradesv3.dryrun_futures_x8.sqlite    x8_futures
+          fetch state-futures-x8guard   tradesv3.dryrun_futures_x8guard.sqlite x8guard_futures
+          find /tmp/la/in -size 0 -delete
+          ls -la /tmp/la/in
+
+      - name: Download backtest artifacts (optional)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IDS: ${{ inputs.backtest_run_ids }}
+        run: |
+          [ -z "$IDS" ] && { echo "no backtest run ids given"; exit 0; }
+          for id in $(echo "$IDS" | tr ',' ' '); do
+            mkdir -p "/tmp/la/bt_$id"
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" -D "/tmp/la/bt_$id" \
+              || echo "run $id: no downloadable artifacts"
+          done
+          find /tmp/la -type f \( -name '*.zip' -o -name '*.json' \) | head -50
+
+      - name: Build report
+        env:
+          MIN_DAYS: ${{ inputs.min_days }}
+        run: |
+          FILES=$(find /tmp/la -type f \( -name '*.sqlite' -o -name '*.zip' -o -name '*.json' \) ! -name '*config*' ! -name '*meta*' | sort)
+          echo "$FILES"
+          python analyze_long_trades.py --min-days "${MIN_DAYS:-2}" --csv /tmp/la/trades.csv $FILES | tee /tmp/la/report.md
+          cat /tmp/la/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: long-trades-report
+          path: |
+            /tmp/la/report.md
+            /tmp/la/trades.csv
