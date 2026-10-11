@@ -271,6 +271,33 @@ def enrich(t):
 
 
 # ------------------------------------------------------------------ report
+def whatif_flatten(t, prefix):
+    """What if the WHOLE position had been closed at the first exit order whose tag
+    starts with `prefix` (e.g. derisk_level_3)? Replays the orders with a cost basis:
+    realized P&L of every exit up to and including the trigger + the unrealized P&L of
+    what is still open, marked at the trigger price. Fees/funding are ignored.
+    Returns (day_since_open, hypothetical_pnl) or None."""
+    amt = basis = realized = 0.0
+    for o in t["orders"]:
+        a, p = o["amount"], o["price"]
+        if a is None or p is None:
+            return None
+        if o["side"] == "entry":
+            basis += (o["cost"] if o["cost"] else p * a)
+            amt += a
+        elif amt > 0:
+            a = min(a, amt)
+            avg = basis / amt
+            realized += ((avg - p) if t["is_short"] else (p - avg)) * a
+            basis -= avg * a
+            amt -= a
+        if o["side"] == "exit" and str(o.get("tag") or "").startswith(prefix):
+            avg = basis / amt if amt > 0 else 0.0
+            unreal = ((avg - p) if t["is_short"] else (p - avg)) * amt
+            return ((o["dt"] - t["open_dt"]).total_seconds() / 86400.0, realized + unreal)
+    return None
+
+
 def agg_rows(trades, keyfn, order=None):
     g = defaultdict(list)
     for t in trades:
@@ -343,6 +370,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-days", type=float, default=2.0)
     ap.add_argument("--csv")
+    ap.add_argument("--trigger", default="derisk_level_3",
+                    help="exit-order tag prefix for the what-if section (empty = off)")
     ap.add_argument("files", nargs="+")
     a = ap.parse_args()
 
@@ -409,6 +438,25 @@ def main():
     pr.sort(key=lambda r: float(r[6]))
     print(table(AGG_H, pr[:15]))
 
+    if a.trigger:
+        print(f"## 3b. What-if: close EVERYTHING at the first `{a.trigger}*` exit order\n")
+        wr, tot_a, tot_h = [], 0.0, 0.0
+        for t in sorted(long_t, key=lambda x: (x["profit_abs"] if x["profit_abs"] is not None else 1e9)):
+            t["whatif_day"], t["whatif_pnl"] = None, None
+            w = whatif_flatten(t, a.trigger)
+            if not w or t["is_open"] or t["profit_abs"] is None:
+                continue
+            t["whatif_day"], t["whatif_pnl"] = w
+            tot_a += t["profit_abs"]
+            tot_h += w[1]
+            wr.append((t["source"][-30:], t["pair"], "S" if t["is_short"] else "L", f"{w[0]:.2f}d",
+                       usd(t["profit_abs"]), usd(w[1]), usd(w[1] - t["profit_abs"])))
+        print(table(["run", "pair", "L/S", "trigger at", "actual P&L", "if closed there", "difference"], wr))
+        print(f"**Triggered trades: {len(wr)} · actual {usd(tot_a)} USDT · if closed at trigger {usd(tot_h)} USDT "
+              f"· difference {usd(tot_h - tot_a)} USDT**\n")
+        print("_Replayed from the order list (cost-basis, fees/funding ignored). It only shows what closing at "
+              "that moment would have realized; it does NOT include what the freed slot could have earned._\n")
+
     print(f"## 4. Every trade > {a.min_days:g} days (worst first)\n")
     key = lambda t: (t["profit_abs"] if t["profit_abs"] is not None else 1e9)  # noqa: E731
     for i, t in enumerate(sorted(long_t, key=key), 1):
@@ -418,7 +466,7 @@ def main():
         cols = ["source", "id", "pair", "is_short", "tag", "family", "open_dt", "close_dt", "dur", "outcome",
                 "exit_reason", "profit_ratio", "profit_abs", "leverage", "mae_price", "mae_margin", "mfe_price",
                 "mfe_margin", "n_entries", "n_partial_exits", "time_to_first_dca", "stake0", "max_margin",
-                "stake_growth", "ft_max_stake", "funding"]
+                "stake_growth", "ft_max_stake", "funding", "whatif_day", "whatif_pnl"]
         with open(a.csv, "w", newline="") as f:
             w = csv.writer(f)
             w.writerow(cols)
