@@ -1,0 +1,61 @@
+# SAVE THIS FILE AS: .github/workflows/flatten-signals.yml
+# ONE-SHOT, read-only. Turns the signal pickles of a FINISHED backtest run
+# (made with export_signals=yes) into CSV.gz files. No backtest is re-run.
+# Needs convert_signals.py in the repo root.
+# Input: the run's number (like "12") or full run ID of "Backtest Signal Frequency".
+# Output: artifact "signals-flat" (signals.csv.gz, rejected.csv.gz, exited.csv.gz, structure.txt)
+name: Flatten backtest signals
+
+on:
+  workflow_dispatch:
+    inputs:
+      backtest_run_id:
+        description: "Backtest run number (like 12) or full run ID"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  flatten:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pandas + pyarrow
+        run: pip install pandas pyarrow numpy
+
+      - name: Download the backtest artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_IN: ${{ inputs.backtest_run_id }}
+        run: |
+          id=$(echo "$RUN_IN" | tr -d '# ')
+          if [ "${#id}" -le 6 ]; then
+            num="$id"
+            id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "Backtest Signal Frequency" --limit 300 \
+                   --json databaseId,number -q ".[] | select(.number==$num) | .databaseId")
+            [ -z "$id" ] && { echo "run #$num not found"; exit 1; }
+            echo "run #$num -> id $id"
+          fi
+          mkdir -p /tmp/sig
+          gh run download "$id" --repo "$GITHUB_REPOSITORY" --name "backtest-$id" -D /tmp/sig/in
+          find /tmp/sig/in -type f | sort
+
+      - name: Flatten
+        run: |
+          Z=$(find /tmp/sig/in -name 'backtest-result-*.zip' | sort | tail -1)
+          echo "using $Z"
+          python convert_signals.py "$Z" /tmp/sig/out | tee /tmp/sig/out/log.txt
+          { echo '```'; cat /tmp/sig/out/structure.txt; echo '```'; ls -la /tmp/sig/out | sed 's/^/    /'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signals-flat
+          path: /tmp/sig/out
