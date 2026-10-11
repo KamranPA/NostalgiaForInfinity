@@ -2,7 +2,7 @@ name: Backtest Signal Frequency
 
 run-name: >-
   Backtest ${{ inputs.strategy }} ${{ inputs.market }} ${{ inputs.direction }}
-  end=${{ inputs.end_date || 'today' }} ref=${{ inputs.ref || 'main' }}${{ inputs.derisk_hold_short != 'default' && format(' derisk_short={0}', inputs.derisk_hold_short) || '' }}${{ inputs.stale_max_daily_range_pct != '' && format(' stale_range={0}', inputs.stale_max_daily_range_pct) || '' }}${{ inputs.nfi_overrides != '' && ' +overrides' || '' }}
+  end=${{ inputs.end_date || 'today' }} ref=${{ inputs.ref || 'main' }}${{ inputs.derisk_hold_short != 'default' && format(' derisk_short={0}', inputs.derisk_hold_short) || '' }}${{ inputs.stale_max_daily_range_pct != '' && format(' stale_range={0}', inputs.stale_max_daily_range_pct) || '' }}${{ inputs.nfi_overrides != '' && ' +overrides' || '' }}${{ inputs.export_signals == 'yes' && ' +signals' || '' }}${{ inputs.breakdown != 'none' && format(' breakdown={0}', inputs.breakdown) || '' }} days=${{ inputs.test_days }}
 
 # Manual backtest of the NFI strategies on OKX data.
 #
@@ -24,6 +24,15 @@ run-name: >-
 #                                  Keys must be in the strategy's NFI_SAFE_PARAMETERS.
 #   All three are written into the "nfi_parameters" block of the backtest config.
 #   Values from nfi_overrides win over the two dedicated inputs.
+#
+# Extra analysis outputs (added for the long-window pattern study):
+#   * export_signals -> yes = freqtrade `--export signals`: besides the trades, the
+#                       result zip also gets the indicator values of the signal
+#                       candles (entries/exits) and the rejected signals, for
+#                       `backtesting-analysis` or our own scripts.
+#   * breakdown      -> none | month | week : freqtrade `--breakdown` table.
+#   Peak memory / wall time of the backtest are written to the Job Summary
+#   (use them to size longer windows).
 #
 # Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
 # applied to the whole window (freqtrade can't rebuild historical pairlists).
@@ -90,6 +99,21 @@ on:
         description: 'X8Guard only: JSON object, e.g. {"guard_max_stake_multiple": 4} (empty = Guard defaults)'
         type: string
         default: ''
+      export_signals:
+        description: 'Export indicator values at signal candles + rejected signals (freqtrade --export signals)'
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+        default: 'no'
+      breakdown:
+        description: 'freqtrade --breakdown table'
+        type: choice
+        options:
+          - none
+          - month
+          - week
+        default: none
 
 permissions:
   contents: read
@@ -102,7 +126,7 @@ defaults:
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
     env:
       STRATEGY_IN: ${{ inputs.strategy }}
       MARKET_IN: ${{ inputs.market }}
@@ -115,6 +139,8 @@ jobs:
       STALE_RANGE_IN: ${{ inputs.stale_max_daily_range_pct }}
       OVERRIDES_IN: ${{ inputs.nfi_overrides }}
       GUARD_IN: ${{ inputs.guard_parameters }}
+      EXPORT_IN: ${{ inputs.export_signals }}
+      BREAKDOWN_IN: ${{ inputs.breakdown }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repository
@@ -451,18 +477,43 @@ jobs:
       - name: Run backtest (results restricted to test window)
         run: |
           echo "Backtesting strategy: $bt_strategy on market: $market (direction: $DIRECTION_IN)"
+
+          EXPORT_MODE=trades
+          if [ "$EXPORT_IN" = "yes" ]; then EXPORT_MODE=signals; fi
+          BREAKDOWN_ARGS=()
+          if [ -n "$BREAKDOWN_IN" ] && [ "$BREAKDOWN_IN" != "none" ]; then
+            BREAKDOWN_ARGS=(--breakdown "$BREAKDOWN_IN")
+          fi
+          echo "export mode: $EXPORT_MODE ; breakdown: ${BREAKDOWN_ARGS[*]:-none}"
+
           # stdout (the report) -> backtest.log ; stderr (freqtrade/strategy log lines,
           # incl. "Parameter X changed from ...") -> backtest_stderr.log + console.
-          freqtrade backtesting \
+          # /usr/bin/time -v appends peak memory / wall time to stderr.
+          /usr/bin/time -v freqtrade backtesting \
             --config user_data/config.json \
             --strategy "$bt_strategy" \
             --strategy-path user_data/strategies \
             --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframe 5m \
-            --export trades \
+            --export "$EXPORT_MODE" \
             --export-directory user_data/backtest_results \
+            "${BREAKDOWN_ARGS[@]}" \
             2> >(tee user_data/logs/backtest_stderr.log >&2) \
             | tee user_data/logs/backtest.log
+
+      - name: Peak memory, wall time and result file sizes
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "Resources of the backtest step:"
+            grep -E "Maximum resident set size|Elapsed \(wall clock\)" user_data/logs/backtest_stderr.log || echo "(no time -v output: backtest did not finish)"
+            echo ""
+            echo "Result files:"
+            ls -la user_data/backtest_results 2>/dev/null || true
+            echo "Runner memory:"
+            free -h
+          } | tee user_data/logs/resources.txt
 
       - name: Verify NFI overrides were applied
         if: always()
@@ -617,10 +668,17 @@ jobs:
             echo "| Test window | ${{ steps.dates.outputs.test_start }} - ${{ steps.dates.outputs.test_end }} (${{ steps.dates.outputs.test_days }} days) |"
             echo "| Pairlist | $( [ -n "$PAIRS_RUN_IN" ] && echo "reused from run $PAIRS_RUN_IN" || echo "new snapshot -- reuse with pairs_run_id=${{ github.run_id }}" ) |"
             echo "| Data cache | ${{ steps.datacache.outputs.cache-hit == 'true' && 'hit' || 'miss (downloaded)' }} |"
+            echo "| Export / breakdown | \`$EXPORT_IN\` / \`$BREAKDOWN_IN\` |"
             echo ""
             echo "**Known limitation:** the pairlist is a snapshot of TODAY's top pairs by volume,"
             echo "applied to the whole historical window."
             echo ""
+            if [ -f user_data/logs/resources.txt ]; then
+              echo "### Resources"
+              echo '```'
+              cat user_data/logs/resources.txt
+              echo '```'
+            fi
             if [ -f user_data/logs/overrides_requested.json ]; then
               echo "### NFI parameter overrides"
               echo "Requested:"
