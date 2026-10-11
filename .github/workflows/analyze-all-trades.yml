@@ -1,0 +1,74 @@
+# SAVE THIS FILE AS: .github/workflows/analyze-all-trades.yml
+# ONE-SHOT, read-only pattern search over EVERY backtest trade.
+# Needs analyze_all_trades.py AND analyze_long_trades.py in the repo root.
+# Input: run NUMBERS (like "4,8") or full run IDs of finished
+# "Backtest Signal Frequency" runs. Use runs of the SAME strategy; the script
+# keeps only --only-strategy (default NostalgiaForInfinityX8) and de-duplicates
+# identical trades across runs.
+# Output: Job Summary + artifact "all-trades-report" (report.md + all_trades.csv).
+name: Analyze all trades (patterns)
+
+on:
+  workflow_dispatch:
+    inputs:
+      backtest_run_ids:
+        description: "Backtest run numbers like 4,8 (or full run IDs), comma-separated"
+        required: true
+      deep:
+        description: "Deep loss = adverse move x leverage >= this share of margin"
+        default: "0.5"
+      strategy:
+        description: "Strategy name to analyse"
+        default: "NostalgiaForInfinityX8"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download backtest artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IDS: ${{ inputs.backtest_run_ids }}
+        run: |
+          mkdir -p /tmp/aa
+          for id in $(echo "$IDS" | tr ',' ' ' | tr -d '#'); do
+            if [ "${#id}" -le 6 ]; then
+              num="$id"
+              id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "Backtest Signal Frequency" --limit 300 \
+                     --json databaseId,number -q ".[] | select(.number==$num) | .databaseId")
+              [ -z "$id" ] && { echo "run #$num not found"; continue; }
+              echo "run #$num -> id $id"
+            fi
+            mkdir -p "/tmp/aa/bt_$id"
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" -D "/tmp/aa/bt_$id" \
+              || echo "run $id: no downloadable artifacts"
+          done
+          find /tmp/aa -type f \( -name '*.zip' -o -name '*.json' \) | sort
+
+      - name: Build report
+        env:
+          DEEP: ${{ inputs.deep }}
+          STRATEGY: ${{ inputs.strategy }}
+        run: |
+          FILES=$(find /tmp/aa -type f \( -name '*.zip' -o -name '*.json' \) ! -name '*config*' ! -name '*meta*' | sort)
+          python analyze_all_trades.py --deep "${DEEP:-0.5}" --only-strategy "${STRATEGY:-NostalgiaForInfinityX8}" \
+            --csv /tmp/aa/all_trades.csv $FILES | tee /tmp/aa/report.md
+          cat /tmp/aa/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: all-trades-report
+          path: |
+            /tmp/aa/report.md
+            /tmp/aa/all_trades.csv
