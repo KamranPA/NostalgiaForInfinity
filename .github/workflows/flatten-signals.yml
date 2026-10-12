@@ -50,6 +50,8 @@ jobs:
 
       - name: Flatten
         run: |
+          mkdir -p /tmp/sig/out
+          pip install -q joblib pandas pyarrow
           Z=$(find /tmp/sig/in -name 'backtest-result-*.zip' | sort | tail -1)
           echo "using $Z"
           python convert_signals.py "$Z" /tmp/sig/out | tee /tmp/sig/out/log.txt
