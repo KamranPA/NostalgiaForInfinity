@@ -10,7 +10,8 @@ Output: <outdir>/signals.csv.gz, rejected.csv.gz, exited.csv.gz
         (+ structure.txt describing what was found, so a new freqtrade layout is easy to adapt)
 
 Usage : python convert_signals.py RESULT.zip OUTDIR
-Needs : pandas (+ pyarrow if the pickles hold arrow-backed columns).
+Needs : pandas, joblib, pyarrow (freqtrade saves these files with joblib and the
+        DataFrames inside use arrow-backed columns).
 Nothing here modifies the backtest data; it only reads and re-saves it.
 """
 import glob
@@ -20,7 +21,20 @@ import sys
 import tempfile
 import zipfile
 
+import joblib
 import pandas as pd
+
+
+def load_pickle(path):
+    """freqtrade writes these files with joblib; fall back to plain pickle just in case."""
+    try:
+        return joblib.load(path)
+    except Exception as e_joblib:  # noqa: BLE001
+        try:
+            with open(path, "rb") as f:
+                return pickle.load(f)
+        except Exception as e_pickle:  # noqa: BLE001
+            raise RuntimeError(f"joblib: {e_joblib!r} | pickle: {e_pickle!r}") from e_pickle
 
 
 def walk(obj, path, frames, tree):
@@ -45,8 +59,7 @@ def walk(obj, path, frames, tree):
 
 
 def convert(pkl_path, out_csv, tree_lines):
-    with open(pkl_path, "rb") as f:
-        obj = pickle.load(f)
+    obj = load_pickle(pkl_path)
     frames, tree = [], []
     walk(obj, [os.path.basename(pkl_path).split("_")[-1].replace(".pkl", "")], frames, tree)
     tree_lines.append(f"== {os.path.basename(pkl_path)}")
