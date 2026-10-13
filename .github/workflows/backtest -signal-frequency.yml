@@ -474,6 +474,21 @@ jobs:
             --timerange "${{ steps.dates.outputs.short_download_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframes 5m 15m
 
+      - name: Download BTC informative data (BTC 4h used by grind-exit filters)
+        run: |
+          # The pair is not in the pairlist, so download-data never fetches it.
+          # Runs on every run (also on cache hits); only a small amount of data.
+          if [ "$market" = "futures" ]; then BTC_PAIR="BTC/USDT:USDT"; else BTC_PAIR="BTC/USDT"; fi
+          freqtrade download-data \
+            --config user_data/config.json \
+            --exchange okx \
+            --pairs "$BTC_PAIR" \
+            --timerange "${{ steps.dates.outputs.download_start }}-${{ steps.dates.outputs.test_end }}" \
+            --timeframes 1h 4h 1d
+          find user_data/data -name 'BTC_USDT*' | sort
+          test -n "$(find user_data/data -name 'BTC_USDT*4h*' | head -1)" \
+            || { echo "::error::BTC 4h data is missing after download"; exit 1; }
+
       - name: Run backtest (results restricted to test window)
         run: |
           echo "Backtesting strategy: $bt_strategy on market: $market (direction: $DIRECTION_IN)"
