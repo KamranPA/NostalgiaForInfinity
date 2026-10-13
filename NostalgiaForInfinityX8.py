@@ -4858,9 +4858,17 @@ class NostalgiaForInfinityX8(IStrategy):
     for btc_tf in btc_info_timeframes:
       btc_df = btc_info_switcher(btc_info_pair, btc_tf)
       if btc_df.empty:
-        continue
-
-      btc_df = prepare_informative_merge(btc_df)
+        # Empty BTC data: build a NaN placeholder instead of skipping the timeframe.
+        # merge_informative_pair needs a "date" column and appends the "_<tf>" suffix itself.
+        btc_df = pd.DataFrame({"date": df["date"]})
+        if btc_tf == "4h":
+          btc_df["BTC_RSI_14"] = np.nan
+        elif btc_tf == "1h":
+          btc_df["BTC_RSI_14"] = np.nan
+          btc_df["BTC_ROC_3"] = np.nan
+        # add other timeframes here if needed
+      else:
+        btc_df = prepare_informative_merge(btc_df)
       btc_frames[btc_tf] = btc_df
 
     # ============================================================
@@ -38406,7 +38414,7 @@ class NostalgiaForInfinityX8(IStrategy):
         and (last_candle["RSI_3_1h"] < 20.0)
         and (last_candle["RSI_3_4h"] < 20.0)
         and (last_candle["ROC_9_1d"] > -10.0)
-        and (last_candle["BTC_RSI_14_4h"] < 35.0)
+        and (last_candle.get("BTC_RSI_14_4h", 50.0) < 35.0)
       )
     ):
       return True
@@ -40780,7 +40788,7 @@ class NostalgiaForInfinityX8(IStrategy):
         and (last_candle["RSI_3_1h"] < 20.0)
         and (last_candle["RSI_3_4h"] < 20.0)
         and (last_candle["ROC_9_1d"] > -10.0)
-        and (last_candle["BTC_RSI_14_4h"] < 35.0)
+        and (last_candle.get("BTC_RSI_14_4h", 50.0) < 35.0)
       )
     ):
       is_normal_exit = True
@@ -43272,7 +43280,7 @@ class NostalgiaForInfinityX8(IStrategy):
         and (last_candle["RSI_3_1h"] < 20.0)
         and (last_candle["RSI_3_4h"] < 20.0)
         and (last_candle["ROC_9_1d"] > -10.0)
-        and (last_candle["BTC_RSI_14_4h"] < 35.0)
+        and (last_candle.get("BTC_RSI_14_4h", 50.0) < 35.0)
       )
     ):
       is_normal_exit = True
