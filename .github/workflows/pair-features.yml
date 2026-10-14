@@ -2,13 +2,17 @@
 # ONE-SHOT, read-only. Downloads DAILY OKX candles of the pairs of finished backtest runs,
 # builds pair features (volatility, drops, volume spikes, age, relation to BTC ...) and
 # compares them with the trade outcomes of those runs. No backtest is re-run.
-# Needs pair_features.py in the repo root and config_dryrun_futures.json (already there).
+# Needs pair_features.py in the repo root.
 #
 # Input run_ids: backtest run IDs, comma separated. FIRST = discovery period, SECOND = check
 #                on an independent period. Both runs must still have their artifacts
 #                "backtest-<id>" and "pairlist-<id>" (GitHub keeps artifacts for 30 days).
 # Output: artifact "pair-features" (report.md, trades_with_features.csv, pair_features_daily.csv.gz)
 #         and the report in the Job Summary.
+#
+# Daily candles come straight from OKX through ccxt (public data, no key). freqtrade's own
+# download-data is NOT used: in futures mode it also pulls years of hourly mark/funding data
+# (that is what made the first version run into the time limit).
 name: Pair features vs trade outcomes
 
 on:
@@ -30,7 +34,7 @@ permissions:
 jobs:
   features:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     env:
       RUN_IDS: ${{ inputs.run_ids }}
       HIST_START: ${{ inputs.history_start }}
@@ -42,10 +46,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install freqtrade + pandas + pyarrow
+      - name: Install ccxt + pandas + pyarrow
         run: |
           python -m pip install --upgrade pip
-          pip install freqtrade pandas pyarrow numpy
+          pip install ccxt pandas pyarrow numpy
 
       - name: Download the backtest and pairlist artifacts of the runs
         run: |
@@ -65,34 +69,13 @@ jobs:
           RUNS=$(echo "$RUN_IDS" | tr -d ' #')
           python pair_features.py pairs --artifacts /tmp/pf/in --runs "$RUNS" --out /tmp/pf/pairs.json
 
-      - name: Build download config (live futures config + StaticPairList)
+      - name: Download daily OKX candles (ccxt)
+        timeout-minutes: 30
         run: |
-          mkdir -p user_data/data
-          python3 << 'PYEOF'
-          import json
-          with open("config_dryrun_futures.json") as f:
-              cfg = json.load(f)
-          with open("/tmp/pf/pairs.json") as f:
-              pairs = json.load(f)
-          cfg["exchange"]["pair_whitelist"] = pairs
-          cfg["pairlists"] = [{"method": "StaticPairList"}]
-          cfg["telegram"] = {"enabled": False, "token": "", "chat_id": ""}
-          with open("user_data/config.json", "w") as f:
-              json.dump(cfg, f, indent=2)
-          print(len(pairs), "pairs in the download config")
-          PYEOF
-
-      - name: Download daily OKX candles
-        run: |
-          # Daily candles only: small and quick (futures mode also fetches mark/funding data).
-          freqtrade download-data \
-            --config user_data/config.json \
-            --exchange okx \
-            --timerange "${HIST_START}-$(date -u +%Y%m%d)" \
-            --timeframes 1d \
-            --data-format-ohlcv feather
-          find user_data/data -name '*-1d-futures.feather' | wc -l
-          find user_data/data -name 'BTC_USDT_USDT-1d-futures.feather'
+          python pair_features.py download \
+            --pairs /tmp/pf/pairs.json \
+            --out user_data/data/okx/futures \
+            --start "$HIST_START"
 
       - name: Build features and compare with the trades
         run: |
