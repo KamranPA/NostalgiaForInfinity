@@ -2,11 +2,16 @@
 """
 pair_features.py -- do the pairs that produced the big losses look different BEFORE the entry?
 
-Two sub-commands (used by .github/workflows/pair-features.yml):
+Three sub-commands (used by .github/workflows/pair-features.yml):
 
   python pair_features.py pairs   --artifacts DIR --runs ID1,ID2 --out pairs.json
       Union of the pairlist snapshots of the given backtest runs (+ BTC), used to decide
       which daily candles must be downloaded.
+
+  python pair_features.py download --pairs pairs.json --out DIR [--start YYYYMMDD]
+      Downloads DAILY candles of OKX swap pairs with ccxt (no API key) and stores them as
+      <DIR>/<BASE_QUOTE_SETTLE>-1d-futures.feather. Daily bars only: freqtrade's own
+      download-data also pulls years of hourly mark/funding data in futures mode (far too slow).
 
   python pair_features.py analyze --data DIR --artifacts DIR --runs ID1,ID2 --out OUTDIR
                                   [--history-start YYYYMMDD]
@@ -20,13 +25,14 @@ Outputs in OUTDIR: report.md, trades_with_features.csv, pair_features_daily.csv.
 
 Run IDs: FIRST = discovery period, SECOND = out-of-sample check.
 Nothing here changes the backtest data; it only reads it.
-Needs: pandas, numpy, pyarrow (feather files written by `freqtrade download-data`).
+Needs: pandas, numpy, pyarrow, ccxt.
 """
 import argparse
 import glob
 import json
 import os
 import sys
+import time
 import zipfile
 
 import numpy as np
@@ -210,6 +216,62 @@ def cmd_pairs(args):
     print(f"{len(out)} pairs (incl. BTC) -> {args.out}")
 
 
+def fetch_daily(ex, symbol, start_ms, now_ms, log):
+    """All daily candles of one symbol from start_ms to now (OKX returns at most 100 per call)."""
+    day = 86400000
+    rows, since, last_ts, empty_steps = [], start_ms, None, 0
+    while since < now_ms:
+        batch = ex.fetch_ohlcv(symbol, "1d", since=since, limit=100)
+        if not batch:
+            # before the listing there may be nothing: jump forward and try again
+            since += 90 * day
+            empty_steps += 1
+            if empty_steps > 40:
+                break
+            continue
+        empty_steps = 0
+        new = [b for b in batch if last_ts is None or b[0] > last_ts]
+        if not new:
+            break
+        rows.extend(new)
+        last_ts = new[-1][0]
+        since = last_ts + day
+    return rows
+
+
+def cmd_download(args):
+    import ccxt
+
+    with open(args.pairs) as f:
+        pairs = json.load(f)
+    os.makedirs(args.out, exist_ok=True)
+    start_ms = int(pd.Timestamp(args.start, tz="UTC").timestamp() * 1000)
+    now_ms = int(time.time() * 1000)
+    ex = ccxt.okx({"enableRateLimit": True, "options": {"defaultType": "swap"}})
+    ex.load_markets()
+    ok, failed = 0, []
+    for i, pair in enumerate(pairs, 1):
+        try:
+            if pair not in ex.markets:
+                raise RuntimeError("symbol not in OKX markets")
+            rows = fetch_daily(ex, pair, start_ms, now_ms, print)
+            if len(rows) < 20:
+                raise RuntimeError(f"only {len(rows)} candles")
+            df = pd.DataFrame(rows, columns=["date", "open", "high", "low", "close", "volume"])
+            df["date"] = pd.to_datetime(df["date"], unit="ms", utc=True)
+            df = df.drop_duplicates("date").sort_values("date").reset_index(drop=True)
+            df.to_feather(os.path.join(args.out, f"{file_key(pair)}-1d-futures.feather"))
+            ok += 1
+            print(f"[{i}/{len(pairs)}] {pair}: {len(df)} candles {df['date'].iloc[0].date()} -> {df['date'].iloc[-1].date()}")
+        except Exception as e:  # noqa: BLE001
+            failed.append(pair)
+            print(f"[{i}/{len(pairs)}] {pair}: FAILED ({e})")
+    print(f"downloaded {ok} pairs, failed {len(failed)}: {failed}")
+    btc_ok = os.path.exists(os.path.join(args.out, f"{file_key(BTC)}-1d-futures.feather"))
+    if not btc_ok or ok < 0.5 * len(pairs):
+        raise SystemExit("too many failures (or BTC missing) -- aborting")
+
+
 def cmd_analyze(args):
     runs = [r.strip() for r in args.runs.split(",") if r.strip()]
     os.makedirs(args.out, exist_ok=True)
@@ -347,6 +409,10 @@ def main():
     p.add_argument("--artifacts", required=True)
     p.add_argument("--runs", required=True)
     p.add_argument("--out", required=True)
+    d = sub.add_parser("download")
+    d.add_argument("--pairs", required=True)
+    d.add_argument("--out", required=True)
+    d.add_argument("--start", default="20240101")
     a = sub.add_parser("analyze")
     a.add_argument("--data", required=True)
     a.add_argument("--artifacts", required=True)
@@ -354,7 +420,7 @@ def main():
     a.add_argument("--out", required=True)
     a.add_argument("--history-start", default="20240101")
     args = ap.parse_args()
-    {"pairs": cmd_pairs, "analyze": cmd_analyze}[args.cmd](args)
+    {"pairs": cmd_pairs, "download": cmd_download, "analyze": cmd_analyze}[args.cmd](args)
 
 
 if __name__ == "__main__":
