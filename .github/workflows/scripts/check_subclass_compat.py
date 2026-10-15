@@ -1,253 +1,117 @@
-# SAVE THIS FILE AS: .github/workflows/sync-upstream-strategy.yml
-# (in .github/workflows/, alongside the dry-run workflows)
-name: Sync Repo from Upstream (auto)
+#!/usr/bin/env python3
+"""Static compatibility check: custom subclass vs. its (freshly synced) upstream base.
 
-# What this does (fully automatic — commits straight to main, no PR):
-# - Pulls the ENTIRE upstream repo (iterativv/NostalgiaForInfinity),
-#   copies every file that is NEW or CHANGED into this fork, and commits
-#   directly to main if anything changed.
-# - Files/paths in the exclude list below are never touched, added, or
-#   overwritten — that's how this project's own customizations
-#   (workflows, configs, the ML subclass) survive every sync.
-# - Never DELETES a file just because it disappeared upstream (rsync is
-#   run without --delete) — safer default; a removed-upstream file just
-#   sits there unused instead of vanishing silently.
-#
-# RISK NOTE: this pushes straight to main with no human review step, and
-# main is exactly what the dry-run bots read on their next self-queued
-# restart (see dry-run-telegram-signals.yml / dry-run-telegram-futures.yml
-# and their -x8 twins). A behavior-changing upstream update (new config
-# keys required, changed pairlist defaults, etc.) can reach the live
-# dry-run bots automatically. The only safety net here is the py_compile
-# syntax check below — it catches broken Python, not behavior changes.
-#
-# X8 NOTE: NostalgiaForInfinityX8.py is NOT excluded, so upstream changes
-# to it reach the X8 bots on their next restart, exactly like X7. X8 is
-# still under active development upstream, so its behavior can shift
-# mid-comparison — note the sync dates when comparing X8 against X7ML.
-#
-# STRATEGY-FILE ALERT (added): NostalgiaForInfinityX7.py and
-# NostalgiaForInfinityX8.py are exactly the two files that actually drive
-# live trade logic (entry/exit conditions, DCA/rebuy, stops, position
-# sizing) — everything else the sync touches (docs, CI templates, etc.)
-# doesn't change what the bots do. So whenever either of these two is
-# among today's changed files, a SEPARATE, more insistent Telegram
-# message is sent (in addition to the normal "synced N files" notice)
-# specifically calling them out, so they don't get lost in a routine
-# multi-file sync notice and actually get reviewed.
-#
-# COMPAT GATE (added): before committing, .github/workflows/scripts/check_subclass_compat.py checks that
-# X7ML and X8Guard still match their (new) base files. On failure nothing is committed,
-# Telegram sends a BLOCKED notice, and the sync retries on the next run.
-# The check's stdout AND stderr are both captured (2>&1), so if the script itself
-# crashes or can't be found, the error text still reaches the Telegram message.
-#
-# WHEN YOU ADD A NEW CUSTOM FILE: it must be added in TWO places below —
-# the rsync exclude list (so it isn't overwritten) AND the `git add`
-# pathspec in the commit step (so it isn't staged/committed by the sync).
+No freqtrade / TA-Lib needed (pure AST), so it runs in seconds on a bare runner.
 
-on:
-  schedule:
-    - cron: "0 3 * * *"   # once a day, 03:00 UTC — adjust as you like
-  workflow_dispatch: {}
+Usage: check_subclass_compat.py SUB.py SubClass BASE.py BaseClass [...more quadruples]
+Exit 0 = OK (warnings may still print), exit 1 = hard failure.
 
-permissions:
-  contents: write
+HARD failures (would break or silently disable the subclass):
+  1. A class attribute the subclass overrides no longer exists in the base
+     (override would silently do nothing, e.g. a renamed config attribute).
+  2. A method the subclass overrides exists in the base but its positional
+     parameter names/order changed (wrapper's super() call would break).
+  3. The subclass calls self.<x>() where x looks like a base indicator helper
+     (contains "indicators" or starts with "btc_") but neither class defines it.
+WARNINGS (data-quality only, never block): column-name string literals read
+by the subclass (safe_get("...")) that no longer appear anywhere in the base.
+"""
+import ast
+import re
+import sys
 
-env:
-  UPSTREAM_REPO: iterativv/NostalgiaForInfinity
-  UPSTREAM_BRANCH: main
+# freqtrade IStrategy callbacks: legitimately absent from the base file.
+ISTRATEGY_METHODS = {
+    "version", "order_filled", "adjust_trade_position", "bot_loop_start",
+    "custom_exit", "custom_stake_amount", "confirm_trade_entry",
+    "confirm_trade_exit", "leverage", "custom_entry_price", "custom_exit_price",
+    "populate_indicators", "populate_entry_trend", "populate_exit_trend",
+    "check_entry_timeout", "check_exit_timeout", "__init__",
+}
 
-jobs:
-  sync-upstream:
-    runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+def load_class(path, name):
+    src = open(path, encoding="utf-8").read()
+    tree = ast.parse(src)
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            return node, src
+    raise SystemExit(f"class {name} not found in {path}")
 
-      - name: Set up Python (for a syntax check only)
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
 
-      - name: Clone upstream repo (shallow)
-        run: |
-          git clone --depth 1 --branch "$UPSTREAM_BRANCH" \
-            "https://github.com/${UPSTREAM_REPO}.git" /tmp/upstream
+def members(cls):
+    attrs, funcs = set(), {}
+    for n in cls.body:
+        if isinstance(n, ast.Assign):
+            for t in n.targets:
+                if isinstance(t, ast.Name):
+                    attrs.add(t.id)
+        elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+            attrs.add(n.target.id)
+        elif isinstance(n, ast.FunctionDef):
+            a = n.args
+            funcs[n.name] = [x.arg for x in a.posonlyargs + a.args if x.arg != "self"]
+    return attrs, funcs
 
-      - name: Mirror new/changed upstream files into this repo (excluding our customizations)
-        id: sync
-        run: |
-          # ------------------------------------------------------------------
-          # Anything matching these paths is NEVER touched by this sync, no
-          # matter what upstream does with it. Add more lines here any time
-          # you create a new custom file at the repo root or under a custom
-          # folder — one path (or rsync-style glob) per line.
-          # ------------------------------------------------------------------
-          cat > /tmp/exclude.txt <<'EOF'
-          .git/
-          .github/
-          NostalgiaForInfinityX7ML.py
-          config_dryrun_telegram.json
-          config_dryrun_futures.json
-          config_dryrun_telegram_x8.json
-          config_dryrun_futures_x8.json
-          README.md
-          EOF
 
-          rsync -a --itemize-changes \
-            --exclude-from=/tmp/exclude.txt \
-            --exclude='.git/' \
-            /tmp/upstream/ ./ \
-            | tee /tmp/rsync_output.txt
+def self_calls(cls):
+    out = set()
+    for n in ast.walk(cls):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and isinstance(n.func.value, ast.Name) and n.func.value.id == "self"):
+            out.add(n.func.attr)
+    return out
 
-          # rsync -a without --delete never removes anything, so this only
-          # ever adds new files or overwrites changed ones.
-          CHANGED_FILES=$(grep -E '^[><ch]' /tmp/rsync_output.txt | awk '{print $2}' || true)
-          {
-            echo "changed_files<<EOF_CHANGED"
-            echo "$CHANGED_FILES"
-            echo "EOF_CHANGED"
-          } >> "$GITHUB_OUTPUT"
 
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo "No changes — already up to date with upstream."
-          else
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "Changed/added files:"
-            echo "$CHANGED_FILES"
-          fi
+def check(sub_path, sub_name, base_path, base_name):
+    sub, sub_src = load_class(sub_path, sub_name)
+    base, base_src = load_class(base_path, base_name)
+    s_attrs, s_funcs = members(sub)
+    b_attrs, b_funcs = members(base)
+    errors, warns = [], []
 
-          # Which of the two live-logic strategy files (if any) changed —
-          # feeds the dedicated alert step below. Exact-match against the
-          # bare filename since both live at the repo root.
-          STRATEGY_HIT=""
-          if echo "$CHANGED_FILES" | grep -qx "NostalgiaForInfinityX7.py"; then
-            STRATEGY_HIT="${STRATEGY_HIT}NostalgiaForInfinityX7.py "
-          fi
-          if echo "$CHANGED_FILES" | grep -qx "NostalgiaForInfinityX8.py"; then
-            STRATEGY_HIT="${STRATEGY_HIT}NostalgiaForInfinityX8.py "
-          fi
-          {
-            echo "strategy_files_changed<<EOF_STRAT"
-            echo "$STRATEGY_HIT"
-            echo "EOF_STRAT"
-          } >> "$GITHUB_OUTPUT"
+    for a in sorted(s_attrs):
+        if a not in b_attrs and a not in b_funcs and not a.startswith("_"):
+            # attribute that only the subclass owns (e.g. guard_*) is fine;
+            # only flag overrides of things the base is expected to own.
+            if a.startswith(("guard_",)):
+                continue
+            errors.append(f"attribute '{a}' overridden in {sub_name} but missing in {base_name}")
+    for f, params in s_funcs.items():
+        if f in b_funcs:
+            if params != b_funcs[f]:
+                errors.append(f"method '{f}' signature changed: {sub_name}{params} vs {base_name}{b_funcs[f]}")
+        elif f not in ISTRATEGY_METHODS and not f.startswith("_"):
+            errors.append(f"method '{f}' overridden in {sub_name} but missing in {base_name}")
+    for c in sorted(self_calls(sub)):
+        risky = "indicators" in c or c.startswith("btc_")
+        if risky and c not in s_funcs and c not in b_funcs:
+            errors.append(f"{sub_name} calls self.{c}() but neither class defines it")
 
-      - name: Sanity-check syntax of every changed Python file
-        if: steps.sync.outputs.has_changes == 'true'
-        run: |
-          FAILED=0
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            case "$f" in
-              *.py)
-                if [ -f "$f" ]; then
-                  echo "Checking $f ..."
-                  python -m py_compile "$f" || FAILED=1
-                fi
-                ;;
-            esac
-          done <<< "${{ steps.sync.outputs.changed_files }}"
+    for col in sorted(set(re.findall(r'safe_get\(\s*\w+\s*,\s*"([^"]+)"', sub_src))):
+        # Timeframe suffixes (_1h, _4h ...) are appended dynamically by the
+        # base, so look for the stem (e.g. BTC_EMA_20) rather than the full name.
+        stem = re.sub(r"_(5m|15m|1h|4h|1d)$", "", col)
+        if stem not in base_src:
+            warns.append(f"column '{col}' read by {sub_name} no longer appears in {base_name}")
+    return errors, warns
 
-          if [ "$FAILED" -eq 1 ]; then
-            echo "::error::One or more changed Python files failed to compile. Aborting WITHOUT committing — repo left untouched by git (working tree changes will be discarded)."
-            exit 1
-          fi
-          echo "Syntax check passed for all changed .py files."
 
-      - name: Compatibility check (custom subclasses vs freshly synced base files)
-        id: compat
-        if: steps.sync.outputs.has_changes == 'true'
-        continue-on-error: true
-        run: |
-          # Static AST check, no freqtrade needed. Hard-fails if upstream renamed/removed
-          # something NostalgiaForInfinityX7ML or NostalgiaForInfinityX8Guard overrides or
-          # calls. Runs on the working tree AFTER rsync, i.e. on the NEW upstream files.
-          # 2>&1 so a crash / missing script ends up in the report too (not only in the log).
-          set -o pipefail
-          # Works wherever the script was saved: .github/scripts/ or .github/workflows/scripts/
-          SCRIPT=.github/workflows/scripts/check_subclass_compat.py
-          [ -f "$SCRIPT" ] || SCRIPT=.github/workflows/scripts/check_subclass_compat.py
-          python3 "$SCRIPT" \
-            NostalgiaForInfinityX7ML.py NostalgiaForInfinityX7ML NostalgiaForInfinityX7.py NostalgiaForInfinityX7 \
-            NostalgiaForInfinityX8Guard.py NostalgiaForInfinityX8Guard NostalgiaForInfinityX8.py NostalgiaForInfinityX8 \
-            2>&1 | tee /tmp/compat_report.txt
-          {
-            echo '### Subclass compatibility check'
-            echo '```'
-            cat /tmp/compat_report.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+def main(argv):
+    if len(argv) < 4 or len(argv) % 4:
+        raise SystemExit(__doc__)
+    bad = False
+    for i in range(0, len(argv), 4):
+        sp, sn, bp, bn = argv[i:i + 4]
+        errors, warns = check(sp, sn, bp, bn)
+        print(f"== {sn} vs {bn}: {len(errors)} error(s), {len(warns)} warning(s)")
+        for e in errors:
+            print(f"  ERROR: {e}")
+        for w in warns:
+            print(f"  warn:  {w}")
+        bad |= bool(errors)
+    return 1 if bad else 0
 
-      - name: Commit and push to main
-        if: steps.sync.outputs.has_changes == 'true' && steps.compat.outcome == 'success'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A -- . ':!.github' ':!NostalgiaForInfinityX7ML.py' ':!config_dryrun_telegram.json' ':!config_dryrun_futures.json' ':!config_dryrun_telegram_x8.json' ':!config_dryrun_futures_x8.json' ':!README.md'
-          if git diff --cached --quiet; then
-            echo "Nothing staged after exclusions — nothing to commit."
-          else
-            git commit -m "chore: sync from ${UPSTREAM_REPO}@${UPSTREAM_BRANCH} ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
-            git push origin HEAD:main
-          fi
 
-      - name: Notify Telegram — sync applied
-        if: steps.sync.outputs.has_changes == 'true' && steps.compat.outcome == 'success'
-        env:
-          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          FILE_COUNT=$(echo "${{ steps.sync.outputs.changed_files }}" | grep -c . || echo 0)
-          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-            -d chat_id="${CHAT_ID}" \
-            -d text="🔄 Synced ${FILE_COUNT} file(s) from upstream (${UPSTREAM_REPO}) directly to main. Bots will pick this up on their next self-queued restart. Check the commit before assuming everything still behaves the same: ${{ github.server_url }}/${{ github.repository }}/commits/main" \
-            > /dev/null || true
-
-      - name: Notify Telegram — strategy file(s) changed, review needed
-        if: steps.sync.outputs.has_changes == 'true' && steps.compat.outcome == 'success' && steps.sync.outputs.strategy_files_changed != ''
-        env:
-          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          FILES="${{ steps.sync.outputs.strategy_files_changed }}"
-          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-            -d chat_id="${CHAT_ID}" \
-            -d text="🚨 REVIEW NEEDED: today's sync changed the live-logic strategy file(s): ${FILES}— these directly drive entry/exit conditions, DCA/rebuy, stops and position sizing for the running bots. Diff it before assuming today's trades still mean what yesterday's did: ${{ github.server_url }}/${{ github.repository }}/commits/main" \
-            > /dev/null || true
-
-      - name: Notify Telegram — sync BLOCKED by compatibility check
-        if: steps.sync.outputs.has_changes == 'true' && steps.compat.outcome == 'failure'
-        env:
-          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          # Prefer the ERROR/summary lines; if there are none (script crashed or
-          # was not found), fall back to the last lines of whatever it printed.
-          REPORT=$(grep -E 'ERROR|==|Error|No such file|not found' /tmp/compat_report.txt 2>/dev/null | head -c 1500 || true)
-          if [ -z "$REPORT" ]; then
-            REPORT=$(tail -n 6 /tmp/compat_report.txt 2>/dev/null | head -c 1500 || true)
-          fi
-          if [ -z "$REPORT" ]; then
-            REPORT="(no output captured — check the run log)"
-          fi
-          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${CHAT_ID}" \
-            --data-urlencode "text=⛔ Upstream sync BLOCKED (nothing committed, bots stay on current files). Upstream changed something NostalgiaForInfinityX7ML / X8Guard depends on, or the check itself failed. Details: ${REPORT} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            > /dev/null || true
-
-      - name: Notify Telegram — sync failed
-        if: failure()
-        env:
-          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-            -d chat_id="${CHAT_ID}" \
-            -d text="❌ Upstream sync failed (nothing was committed). See: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            > /dev/null || true
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
