@@ -36,6 +36,10 @@ name: Sync Repo from Upstream (auto)
 # specifically calling them out, so they don't get lost in a routine
 # multi-file sync notice and actually get reviewed.
 #
+# COMPAT GATE (added): before committing, .github/scripts/check_subclass_compat.py checks that
+# X7ML and X8Guard still match their (new) base files. On failure nothing is committed,
+# Telegram sends a BLOCKED notice, and the sync retries on the next run.
+#
 # WHEN YOU ADD A NEW CUSTOM FILE: it must be added in TWO places below —
 # the rsync exclude list (so it isn't overwritten) AND the `git add`
 # pathspec in the commit step (so it isn't staged/committed by the sync).
@@ -154,8 +158,28 @@ jobs:
           fi
           echo "Syntax check passed for all changed .py files."
 
-      - name: Commit and push to main
+      - name: Compatibility check (custom subclasses vs freshly synced base files)
+        id: compat
         if: steps.sync.outputs.has_changes == 'true'
+        continue-on-error: true
+        run: |
+          # Static AST check, no freqtrade needed. Hard-fails if upstream renamed/removed
+          # something NostalgiaForInfinityX7ML or NostalgiaForInfinityX8Guard overrides or
+          # calls. Runs on the working tree AFTER rsync, i.e. on the NEW upstream files.
+          set -o pipefail
+          python3 .github/scripts/check_subclass_compat.py \
+            NostalgiaForInfinityX7ML.py NostalgiaForInfinityX7ML NostalgiaForInfinityX7.py NostalgiaForInfinityX7 \
+            NostalgiaForInfinityX8Guard.py NostalgiaForInfinityX8Guard NostalgiaForInfinityX8.py NostalgiaForInfinityX8 \
+            | tee /tmp/compat_report.txt
+          {
+            echo '### Subclass compatibility check'
+            echo '```'
+            cat /tmp/compat_report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit and push to main
+        if: steps.sync.outputs.has_changes == 'true' && steps.compat.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -168,7 +192,7 @@ jobs:
           fi
 
       - name: Notify Telegram — sync applied
-        if: steps.sync.outputs.has_changes == 'true'
+        if: steps.sync.outputs.has_changes == 'true' && steps.compat.outcome == 'success'
         env:
           TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -180,7 +204,7 @@ jobs:
             > /dev/null || true
 
       - name: Notify Telegram — strategy file(s) changed, review needed
-        if: steps.sync.outputs.has_changes == 'true' && steps.sync.outputs.strategy_files_changed != ''
+        if: steps.sync.outputs.has_changes == 'true' && steps.compat.outcome == 'success' && steps.sync.outputs.strategy_files_changed != ''
         env:
           TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -189,6 +213,18 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             -d chat_id="${CHAT_ID}" \
             -d text="🚨 REVIEW NEEDED: today's sync changed the live-logic strategy file(s): ${FILES}— these directly drive entry/exit conditions, DCA/rebuy, stops and position sizing for the running bots. Diff it before assuming today's trades still mean what yesterday's did: ${{ github.server_url }}/${{ github.repository }}/commits/main" \
+            > /dev/null || true
+
+      - name: Notify Telegram — sync BLOCKED by compatibility check
+        if: steps.sync.outputs.has_changes == 'true' && steps.compat.outcome == 'failure'
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          REPORT=$(grep -E 'ERROR|==' /tmp/compat_report.txt | head -c 1500)
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=⛔ Upstream sync BLOCKED (nothing committed, bots stay on current files). Upstream changed something NostalgiaForInfinityX7ML / X8Guard depends on. Fix the subclass, then re-run the sync. Details: ${REPORT} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             > /dev/null || true
 
       - name: Notify Telegram — sync failed
