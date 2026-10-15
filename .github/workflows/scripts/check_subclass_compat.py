@@ -171,7 +171,7 @@ jobs:
           # 2>&1 so a crash / missing script ends up in the report too (not only in the log).
           set -o pipefail
           # Works wherever the script was saved: .github/scripts/ or .github/workflows/scripts/
-          SCRIPT=.github/scripts/check_subclass_compat.py
+          SCRIPT=.github/workflows/scripts/check_subclass_compat.py
           [ -f "$SCRIPT" ] || SCRIPT=.github/workflows/scripts/check_subclass_compat.py
           python3 "$SCRIPT" \
             NostalgiaForInfinityX7ML.py NostalgiaForInfinityX7ML NostalgiaForInfinityX7.py NostalgiaForInfinityX7 \
