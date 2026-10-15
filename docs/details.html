@@ -149,7 +149,7 @@
 <div class="topbar">
   <div class="brand">NFI <span>dry-run</span></div>
   <nav><a href="#summary">Full summary</a><a href="#details">Trade details</a><a href="#ml">ML &amp; analytics</a></nav>
-  <span class="gen-time">generated 2026-10-15 15:05:53 UTC</span>
+  <span class="gen-time">generated 2026-10-15 17:59:28 UTC</span>
   <a class="compare-link" href="index.html">← Main</a>
 </div>
 <main>
@@ -160,7 +160,7 @@
 <div class="subtitle">OKX perpetual swaps · isolated margin · 3x leverage (default)</div>
 
 <div class="grid">
-  <div class="stat-card"><div class="label">Open Trades</div><div class="value">0</div></div>
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">1</div></div>
   <div class="stat-card"><div class="label">Closed Trades</div><div class="value">41</div></div>
   <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
   <div class="stat-card"><div class="label">Total Profit (closed only)</div>
@@ -179,17 +179,17 @@
         </div>
         <div class="stat-card">
           <div class="label">Unrealized P/L (open)</div>
-          <div class="value profit-pos">+0.00 USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0.00 USDT currently locked in open trades</div>
+          <div class="value profit-pos">+1.02 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">34.70 USDT currently locked in open trades</div>
         </div>
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
-          <div class="value profit-pos">+122.81 USDT</div>
+          <div class="value profit-pos">+123.83 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
         </div>
         <div class="stat-card">
           <div class="label">Stuck Trades</div>
-          <div class="value ">0 / 0</div>
+          <div class="value ">0 / 1</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;0.9d</div>
         </div>
       </div>
@@ -198,8 +198,96 @@
         (≈ 950.5%/yr if repeated — simple, non-compounded extrapolation)
       </p>
       <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>2.6042%</b>
-        (≈ 950.5%/yr equivalent)
+        Blended return per capital-day (incl. unrealized): <b>2.6194%</b>
+        (≈ 956.1%/yr equivalent)
+      </p>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck.
+      </p>
+    </div>
+
+
+    <div class="card">
+      <h3>Portfolio Utilization</h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Slots Used</div>
+          <div class="value">1 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">7 free — 12% deployed</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Capital Deployed</div>
+          <div class="value">34.70 / 1000 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">3% of dry-run wallet</div>
+        </div>
+      </div>
+    </div>
+
+<div class="two-col">
+  <div class="card">
+    <h3>Equity Curve (cumulative %, closed trades)</h3>
+    <div class="chart-wrap"><canvas id="equityChart_futures"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Exit Reasons</h3>
+    <div class="chart-wrap"><canvas id="reasonChart_futures"></canvas></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
+  <div class="chart-wrap"><canvas id="trendChart_futures"></canvas></div>
+</div>
+
+
+        </div></details><details class="fold"><summary>🟠 X8 FUTURES — OKX</summary><div class="inner">
+<h2 class="market-heading mode-futures" id="futures_x8"><span class="dot"></span>🟠 X8 FUTURES — OKX</h2>
+<div class="subtitle">OKX perpetual swaps · isolated margin · 3x leverage</div>
+
+<div class="grid">
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">0</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">35</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
+  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
+    <div class="value profit-pos">+166.41 USDT</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
+</div>
+
+
+    <div class="card">
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Realized Profit</div>
+          <div class="value profit-pos">+166.41 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unrealized P/L (open)</div>
+          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0.00 USDT currently locked in open trades</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">True Total (realized + unrealized)</div>
+          <div class="value profit-pos">+166.41 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stuck Trades</div>
+          <div class="value ">0 / 0</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;1.1d</div>
+        </div>
+      </div>
+      <p style="margin-top:16px;margin-bottom:4px;">
+        Realized return per capital-day: <b>2.5860%</b>
+        (≈ 943.9%/yr if repeated — simple, non-compounded extrapolation)
+      </p>
+      <p style="margin-bottom:4px;">
+        Blended return per capital-day (incl. unrealized): <b>2.5860%</b>
+        (≈ 943.9%/yr equivalent)
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
@@ -229,94 +317,6 @@
 <div class="two-col">
   <div class="card">
     <h3>Equity Curve (cumulative %, closed trades)</h3>
-    <div class="chart-wrap"><canvas id="equityChart_futures"></canvas></div>
-  </div>
-  <div class="card">
-    <h3>Exit Reasons</h3>
-    <div class="chart-wrap"><canvas id="reasonChart_futures"></canvas></div>
-  </div>
-</div>
-
-<div class="card">
-  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
-  <div class="chart-wrap"><canvas id="trendChart_futures"></canvas></div>
-</div>
-
-
-        </div></details><details class="fold"><summary>🟠 X8 FUTURES — OKX</summary><div class="inner">
-<h2 class="market-heading mode-futures" id="futures_x8"><span class="dot"></span>🟠 X8 FUTURES — OKX</h2>
-<div class="subtitle">OKX perpetual swaps · isolated margin · 3x leverage</div>
-
-<div class="grid">
-  <div class="stat-card"><div class="label">Open Trades</div><div class="value">1</div></div>
-  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">33</div></div>
-  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
-  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
-    <div class="value profit-pos">+152.40 USDT</div>
-    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
-</div>
-
-
-    <div class="card">
-      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
-      <div class="grid" style="margin-bottom:0;">
-        <div class="stat-card">
-          <div class="label">Realized Profit</div>
-          <div class="value profit-pos">+152.40 USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Unrealized P/L (open)</div>
-          <div class="value profit-pos">+5.99 USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">139.71 USDT currently locked in open trades</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">True Total (realized + unrealized)</div>
-          <div class="value profit-pos">+158.39 USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Stuck Trades</div>
-          <div class="value ">0 / 1</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;1.1d</div>
-        </div>
-      </div>
-      <p style="margin-top:16px;margin-bottom:4px;">
-        Realized return per capital-day: <b>2.4575%</b>
-        (≈ 897.0%/yr if repeated — simple, non-compounded extrapolation)
-      </p>
-      <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>2.4661%</b>
-        (≈ 900.1%/yr equivalent)
-      </p>
-      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
-        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
-        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
-        compared fairly, and it's why "Total Profit" alone can look fine while several slots
-        are quietly stuck.
-      </p>
-    </div>
-
-
-    <div class="card">
-      <h3>Portfolio Utilization</h3>
-      <div class="grid" style="margin-bottom:0;">
-        <div class="stat-card">
-          <div class="label">Slots Used</div>
-          <div class="value">1 / 8</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">7 free — 12% deployed</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Capital Deployed</div>
-          <div class="value">139.71 / 1000 USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">14% of dry-run wallet</div>
-        </div>
-      </div>
-    </div>
-
-<div class="two-col">
-  <div class="card">
-    <h3>Equity Curve (cumulative %, closed trades)</h3>
     <div class="chart-wrap"><canvas id="equityChart_futures_x8"></canvas></div>
   </div>
   <div class="card">
@@ -336,11 +336,11 @@
 <div class="subtitle">OKX perpetual swaps · isolated margin · 3x leverage · stale_range 15</div>
 
 <div class="grid">
-  <div class="stat-card"><div class="label">Open Trades</div><div class="value">1</div></div>
-  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">21</div></div>
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">0</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">23</div></div>
   <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
   <div class="stat-card"><div class="label">Total Profit (closed only)</div>
-    <div class="value profit-pos">+104.08 USDT</div>
+    <div class="value profit-pos">+104.64 USDT</div>
     <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
 </div>
 
@@ -350,32 +350,32 @@
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Realized Profit</div>
-          <div class="value profit-pos">+104.08 USDT</div>
+          <div class="value profit-pos">+104.64 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
         </div>
         <div class="stat-card">
           <div class="label">Unrealized P/L (open)</div>
-          <div class="value profit-pos">+1.04 USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">34.12 USDT currently locked in open trades</div>
+          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0.00 USDT currently locked in open trades</div>
         </div>
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
-          <div class="value profit-pos">+105.12 USDT</div>
+          <div class="value profit-pos">+104.64 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
         </div>
         <div class="stat-card">
           <div class="label">Stuck Trades</div>
-          <div class="value profit-neg">1 / 1</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">100% of open capital, open &gt;0.5d</div>
+          <div class="value ">0 / 0</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;0.5d</div>
         </div>
       </div>
       <p style="margin-top:16px;margin-bottom:4px;">
-        Realized return per capital-day: <b>2.6832%</b>
-        (≈ 979.4%/yr if repeated — simple, non-compounded extrapolation)
+        Realized return per capital-day: <b>2.6589%</b>
+        (≈ 970.5%/yr if repeated — simple, non-compounded extrapolation)
       </p>
       <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>2.6737%</b>
-        (≈ 975.9%/yr equivalent)
+        Blended return per capital-day (incl. unrealized): <b>2.6589%</b>
+        (≈ 970.5%/yr equivalent)
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
@@ -391,13 +391,13 @@
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Slots Used</div>
-          <div class="value">1 / 8</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">7 free — 12% deployed</div>
+          <div class="value">0 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">8 free — 0% deployed</div>
         </div>
         <div class="stat-card">
           <div class="label">Capital Deployed</div>
-          <div class="value">34.12 / 1000 USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">3% of dry-run wallet</div>
+          <div class="value">0.00 / 1000 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of dry-run wallet</div>
         </div>
       </div>
     </div>
@@ -431,11 +431,22 @@
 
 
 <div class="card">
-  <h3>Open Trades (0)</h3>
+  <h3>Open Trades (1)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
-    <tr><td colspan="9" class="muted">No open trades</td></tr>
+    
+        <tr>
+          <td data-label="Pair">ZK/USDT:USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-15 15:15</td>
+          <td data-label="Age">0.1d</td>
+          <td data-label="Rebuys">0</td>
+          <td data-label="Capital Locked">34.70 USDT</td>
+          <td data-label="Open Rate">0.017736</td>
+          <td data-label="Live Price">0.01791</td>
+          <td data-label="Unrealized P/L"><span class="profit-pos">+2.94% (+1.02 USDT)</span></td>
+        </tr>
   </table>
   </div>
 </div>
@@ -503,7 +514,7 @@
           <td data-label="Total Profit" class="profit-pos">+4.30%</td>
         </tr>
         <tr>
-          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span> <span class="stuck-badge" style="background:rgba(209,163,80,0.15);color:var(--accent);border-color:rgba(209,163,80,0.35);">open now</span></td>
           <td data-label="Trades">1</td>
           <td data-label="Win Rate">100%</td>
           <td data-label="Avg Profit" class="profit-pos">+4.29%</td>
@@ -1130,22 +1141,11 @@
 
 
 <div class="card">
-  <h3>Open Trades (1)</h3>
+  <h3>Open Trades (0)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
-    
-        <tr>
-          <td data-label="Pair">OP/USDT:USDT</td>
-          <td data-label="Enter Tag">2  <span class="muted">(Normal)</span></td>
-          <td data-label="Opened">2026-10-15 02:25</td>
-          <td data-label="Age">0.5d</td>
-          <td data-label="Rebuys">0</td>
-          <td data-label="Capital Locked">139.71 USDT</td>
-          <td data-label="Open Rate">0.13434</td>
-          <td data-label="Live Price">0.13626</td>
-          <td data-label="Unrealized P/L"><span class="profit-pos">+4.29% (+5.99 USDT)</span></td>
-        </tr>
+    <tr><td colspan="9" class="muted">No open trades</td></tr>
   </table>
   </div>
 </div>
@@ -1176,6 +1176,13 @@
           <td data-label="Win Rate">100%</td>
           <td data-label="Avg Profit" class="profit-pos">+17.06%</td>
           <td data-label="Total Profit" class="profit-pos">+17.06%</td>
+        </tr>
+        <tr>
+          <td data-label="Enter Tag">2  <span class="muted">(Normal)</span></td>
+          <td data-label="Trades">4</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.96%</td>
+          <td data-label="Total Profit" class="profit-pos">+15.83%</td>
         </tr>
         <tr>
           <td data-label="Enter Tag">562  <span class="muted">(Short Rebuy)</span></td>
@@ -1213,13 +1220,6 @@
           <td data-label="Total Profit" class="profit-pos">+7.16%</td>
         </tr>
         <tr>
-          <td data-label="Enter Tag">2  <span class="muted">(Normal)</span> <span class="stuck-badge" style="background:rgba(209,163,80,0.15);color:var(--accent);border-color:rgba(209,163,80,0.35);">open now</span></td>
-          <td data-label="Trades">3</td>
-          <td data-label="Win Rate">100%</td>
-          <td data-label="Avg Profit" class="profit-pos">+2.00%</td>
-          <td data-label="Total Profit" class="profit-pos">+5.99%</td>
-        </tr>
-        <tr>
           <td data-label="Enter Tag">63  <span class="muted">(Rebuy)</span></td>
           <td data-label="Trades">1</td>
           <td data-label="Win Rate">100%</td>
@@ -1248,18 +1248,18 @@
           <td data-label="Total Profit" class="profit-pos">+3.41%</td>
         </tr>
         <tr>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">3</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.10%</td>
+          <td data-label="Total Profit" class="profit-pos">+3.31%</td>
+        </tr>
+        <tr>
           <td data-label="Enter Tag">502  <span class="muted">(Short Normal)</span></td>
           <td data-label="Trades">1</td>
           <td data-label="Win Rate">100%</td>
           <td data-label="Avg Profit" class="profit-pos">+3.20%</td>
           <td data-label="Total Profit" class="profit-pos">+3.20%</td>
-        </tr>
-        <tr>
-          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
-          <td data-label="Trades">2</td>
-          <td data-label="Win Rate">100%</td>
-          <td data-label="Avg Profit" class="profit-pos">+1.29%</td>
-          <td data-label="Total Profit" class="profit-pos">+2.58%</td>
         </tr>
         <tr>
           <td data-label="Enter Tag">145  <span class="muted">(Top Coins)</span></td>
@@ -1320,6 +1320,12 @@
           <td data-label="Trades">2</td>
           <td data-label="Win Rate">100%</td>
           <td data-label="Avg Profit" class="profit-pos">+2.97%</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">ZK/USDT:USDT</td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.50%</td>
         </tr>
         <tr>
           <td data-label="Pair">HUMA/USDT:USDT</td>
@@ -1400,12 +1406,6 @@
           <td data-label="Avg Profit" class="profit-pos">+3.41%</td>
         </tr>
         <tr>
-          <td data-label="Pair">ZK/USDT:USDT</td>
-          <td data-label="Trades">1</td>
-          <td data-label="Win Rate">100%</td>
-          <td data-label="Avg Profit" class="profit-pos">+2.29%</td>
-        </tr>
-        <tr>
           <td data-label="Pair">PYTH/USDT:USDT</td>
           <td data-label="Trades">1</td>
           <td data-label="Win Rate">100%</td>
@@ -1430,6 +1430,12 @@
           <td data-label="Avg Profit" class="profit-pos">+9.24%</td>
         </tr>
         <tr>
+          <td data-label="Pair">OP/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+9.84%</td>
+        </tr>
+        <tr>
           <td data-label="Pair">MEME/USDT:USDT</td>
           <td data-label="Trades">1</td>
           <td data-label="Win Rate">100%</td>
@@ -1446,11 +1452,27 @@
 </div>
 
 <div class="card">
-  <h3>Closed Trades (33)</h3>
+  <h3>Closed Trades (35)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
     
+        <tr>
+          <td data-label="Pair">ZK/USDT:USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-15 15:15</td>
+          <td data-label="Closed">2026-10-15 16:12</td>
+          <td data-label="Profit" class="profit-pos">+0.72%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 65 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">OP/USDT:USDT</td>
+          <td data-label="Enter Tag">2  <span class="muted">(Normal)</span></td>
+          <td data-label="Opened">2026-10-15 02:25</td>
+          <td data-label="Closed">2026-10-15 15:35</td>
+          <td data-label="Profit" class="profit-pos">+9.84%</td>
+          <td data-label="Exit Reason">exit_long_normal_d_3_1 ( 2 )</td>
+        </tr>
         <tr>
           <td data-label="Pair">TIA/USDT:USDT</td>
           <td data-label="Enter Tag">141 142 </td>
@@ -1727,22 +1749,11 @@
 
 
 <div class="card">
-  <h3>Open Trades (1)</h3>
+  <h3>Open Trades (0)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
-    
-        <tr>
-          <td data-label="Pair">TRIA/USDT:USDT</td>
-          <td data-label="Enter Tag">63  <span class="muted">(Rebuy)</span></td>
-          <td data-label="Opened">2026-10-15 02:45</td>
-          <td data-label="Age">0.5d <span class="stuck-badge" title="Open far longer than this strategy's typical hold time">stuck</span></td>
-          <td data-label="Rebuys">0</td>
-          <td data-label="Capital Locked">34.12 USDT</td>
-          <td data-label="Open Rate">0.002752</td>
-          <td data-label="Live Price">0.00278</td>
-          <td data-label="Unrealized P/L"><span class="profit-pos">+3.05% (+1.04 USDT)</span></td>
-        </tr>
+    <tr><td colspan="9" class="muted">No open trades</td></tr>
   </table>
   </div>
 </div>
@@ -1789,11 +1800,11 @@
           <td data-label="Total Profit" class="profit-pos">+10.90%</td>
         </tr>
         <tr>
-          <td data-label="Enter Tag">63  <span class="muted">(Rebuy)</span> <span class="stuck-badge" style="background:rgba(209,163,80,0.15);color:var(--accent);border-color:rgba(209,163,80,0.35);">open now</span></td>
-          <td data-label="Trades">1</td>
+          <td data-label="Enter Tag">63  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">2</td>
           <td data-label="Win Rate">100%</td>
-          <td data-label="Avg Profit" class="profit-pos">+8.61%</td>
-          <td data-label="Total Profit" class="profit-pos">+8.61%</td>
+          <td data-label="Avg Profit" class="profit-pos">+4.61%</td>
+          <td data-label="Total Profit" class="profit-pos">+9.22%</td>
         </tr>
         <tr>
           <td data-label="Enter Tag">2 6 </td>
@@ -1838,6 +1849,13 @@
           <td data-label="Total Profit" class="profit-pos">+3.34%</td>
         </tr>
         <tr>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.01%</td>
+          <td data-label="Total Profit" class="profit-pos">+1.01%</td>
+        </tr>
+        <tr>
           <td data-label="Enter Tag">6  <span class="muted">(Normal)</span></td>
           <td data-label="Trades">1</td>
           <td data-label="Win Rate">100%</td>
@@ -1880,6 +1898,12 @@
           <td data-label="Avg Profit" class="profit-pos">+0.52%</td>
         </tr>
         <tr>
+          <td data-label="Pair">TRIA/USDT:USDT</td>
+          <td data-label="Trades">2</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+3.46%</td>
+        </tr>
+        <tr>
           <td data-label="Pair">H/USDT:USDT</td>
           <td data-label="Trades">1</td>
           <td data-label="Win Rate">100%</td>
@@ -1914,12 +1938,6 @@
           <td data-label="Trades">1</td>
           <td data-label="Win Rate">100%</td>
           <td data-label="Avg Profit" class="profit-pos">+2.67%</td>
-        </tr>
-        <tr>
-          <td data-label="Pair">TRIA/USDT:USDT</td>
-          <td data-label="Trades">1</td>
-          <td data-label="Win Rate">100%</td>
-          <td data-label="Avg Profit" class="profit-pos">+6.31%</td>
         </tr>
         <tr>
           <td data-label="Pair">STX/USDT:USDT</td>
@@ -1969,16 +1987,38 @@
           <td data-label="Win Rate">100%</td>
           <td data-label="Avg Profit" class="profit-pos">+3.17%</td>
         </tr>
+        <tr>
+          <td data-label="Pair">ZK/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+1.01%</td>
+        </tr>
   </table>
   </div>
 </div>
 
 <div class="card">
-  <h3>Closed Trades (21)</h3>
+  <h3>Closed Trades (23)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
     
+        <tr>
+          <td data-label="Pair">ZK/USDT:USDT</td>
+          <td data-label="Enter Tag">65  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-15 15:15</td>
+          <td data-label="Closed">2026-10-15 16:12</td>
+          <td data-label="Profit" class="profit-pos">+1.01%</td>
+          <td data-label="Exit Reason">exit_profit_long_rebuy_t_0_1_m ( 65 )</td>
+        </tr>
+        <tr>
+          <td data-label="Pair">TRIA/USDT:USDT</td>
+          <td data-label="Enter Tag">63  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-10-15 02:45</td>
+          <td data-label="Closed">2026-10-15 15:03</td>
+          <td data-label="Profit" class="profit-pos">+0.62%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_d_0_2 ( 63 )</td>
+        </tr>
         <tr>
           <td data-label="Pair">OP/USDT:USDT</td>
           <td data-label="Enter Tag">2  <span class="muted">(Normal)</span></td>
@@ -2174,7 +2214,7 @@
       <h3>DCA / Rebuy Activity (open trades)</h3>
       <div class="table-scroll">
       <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
-      <tr><td colspan="4" class="muted">No open trades</td></tr>
+      <tr><td data-label="Pair">ZK/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr>
       </table>
       </div>
     </div>
@@ -2183,7 +2223,7 @@
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Trades With Logged Features</div>
-          <div class="value">41</div>
+          <div class="value">42</div>
         </div>
         <div class="stat-card">
           <div class="label">Labeled (Closed)</div>
@@ -2192,29 +2232,29 @@
         </div>
         <div class="stat-card">
           <div class="label">Unlabeled (Open)</div>
-          <div class="value">0</div>
+          <div class="value">1</div>
         </div>
       </div>
       <div class="two-col" style="margin-top:16px;">
         <div>
           <p class="muted" style="font-size:0.8rem;margin-bottom:4px;">Feature health check (non-null rate)</p>
-          <table><tr><th>Feature</th><th>Coverage</th></tr><tr><td data-label="Feature">rsi_14</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">btc_rsi_14</td><td data-label="Coverage" class="profit-pos">95%</td></tr><tr><td data-label="Feature">ema_20</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">adx_14</td><td data-label="Coverage" class="profit-pos">95%</td></tr><tr><td data-label="Feature">atr_14</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">enter_tag</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">exit_reason</td><td data-label="Coverage" class="">90%</td></tr><tr><td data-label="Feature">rsi_14_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">ema_12_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">ema_200_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">rsi_14_1d</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">ema_50_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">ema_200_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">range_pct_14_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">btc_ema_20_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">btc_roc_3_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">btc_ema_200_1d</td><td data-label="Coverage" class="">93%</td></tr></table>
+          <table><tr><th>Feature</th><th>Coverage</th></tr><tr><td data-label="Feature">rsi_14</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">btc_rsi_14</td><td data-label="Coverage" class="profit-pos">95%</td></tr><tr><td data-label="Feature">ema_20</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">adx_14</td><td data-label="Coverage" class="profit-pos">95%</td></tr><tr><td data-label="Feature">atr_14</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">enter_tag</td><td data-label="Coverage" class="profit-pos">100%</td></tr><tr><td data-label="Feature">exit_reason</td><td data-label="Coverage" class="">88%</td></tr><tr><td data-label="Feature">rsi_14_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">ema_12_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">ema_200_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">rsi_14_1d</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">ema_50_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">ema_200_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">range_pct_14_1d</td><td data-label="Coverage" class="profit-neg">0%</td></tr><tr><td data-label="Feature">btc_ema_20_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">btc_roc_3_1h</td><td data-label="Coverage" class="">93%</td></tr><tr><td data-label="Feature">btc_ema_200_1d</td><td data-label="Coverage" class="">93%</td></tr></table>
         </div>
         <div>
           <p class="muted" style="font-size:0.8rem;margin-bottom:4px;">By enter_tag (closed / total logged)</p>
-          <table><tr><th>Tag</th><th>Closed/Total</th></tr><tr><td data-label="Tag">64 </td><td data-label="Closed/Total">12/12</td></tr><tr><td data-label="Tag">2 </td><td data-label="Closed/Total">5/5</td></tr><tr><td data-label="Tag">562 </td><td data-label="Closed/Total">3/3</td></tr><tr><td data-label="Tag">163 </td><td data-label="Closed/Total">3/3</td></tr><tr><td data-label="Tag">141 </td><td data-label="Closed/Total">3/3</td></tr><tr><td data-label="Tag">6 </td><td data-label="Closed/Total">2/2</td></tr><tr><td data-label="Tag">102 </td><td data-label="Closed/Total">2/2</td></tr><tr><td data-label="Tag">4 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">41 61 63 163 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">142 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">47 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">65 </td><td data-label="Closed/Total">1/1</td></tr></table>
+          <table><tr><th>Tag</th><th>Closed/Total</th></tr><tr><td data-label="Tag">64 </td><td data-label="Closed/Total">12/12</td></tr><tr><td data-label="Tag">2 </td><td data-label="Closed/Total">5/5</td></tr><tr><td data-label="Tag">562 </td><td data-label="Closed/Total">3/3</td></tr><tr><td data-label="Tag">163 </td><td data-label="Closed/Total">3/3</td></tr><tr><td data-label="Tag">141 </td><td data-label="Closed/Total">3/3</td></tr><tr><td data-label="Tag">6 </td><td data-label="Closed/Total">2/2</td></tr><tr><td data-label="Tag">65 </td><td data-label="Closed/Total">1/2</td></tr><tr><td data-label="Tag">102 </td><td data-label="Closed/Total">2/2</td></tr><tr><td data-label="Tag">4 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">41 61 63 163 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">142 </td><td data-label="Closed/Total">1/1</td></tr><tr><td data-label="Tag">47 </td><td data-label="Closed/Total">1/1</td></tr></table>
         </div>
       </div>
     </div></div></details><details class="fold"><summary>🟠 X8 FUTURES — OKX</summary><div class="inner"><div class="card">
           <h3>Statistical Significance</h3>
           <p>Win-rate p-value (two-sided binomial vs. 50%): <b>0.0000</b> — statistically distinguishable from 50/50</p>
-          <p>95% bootstrap CI on mean profit/trade: <b>[3.50%, 7.33%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
+          <p>95% bootstrap CI on mean profit/trade: <b>[3.61%, 7.21%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
         </div>
 
 
     <div class="card">
-      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across 33 closed trades</span></h3>
-      <p>Correlation(duration, profit): <b>+0.060</b></p>
+      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across 35 closed trades</span></h3>
+      <p>Correlation(duration, profit): <b>+0.070</b></p>
       <p class="muted" style="font-size:0.85rem;">No strong linear relationship between duration and outcome — duration alone isn't a reliable signal here.</p>
       <p style="font-size:0.85rem;">Fastest closes: 0.0h, 0.1h, 0.2h &nbsp;|&nbsp; Slowest closes: 67.9h, 92.9h, 103.6h</p>
     </div>
@@ -2226,19 +2266,19 @@
       <h3>DCA / Rebuy Activity (open trades)</h3>
       <div class="table-scroll">
       <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
-      <tr><td data-label="Pair">OP/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr>
+      <tr><td colspan="4" class="muted">No open trades</td></tr>
       </table>
       </div>
     </div></div></details><details class="fold"><summary>🛡️ X8 GUARD FUTURES — OKX</summary><div class="inner"><div class="card">
           <h3>Statistical Significance</h3>
           <p>Win-rate p-value (two-sided binomial vs. 50%): <b>0.0000</b> — statistically distinguishable from 50/50</p>
-          <p>95% bootstrap CI on mean profit/trade: <b>[3.25%, 8.20%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
+          <p>95% bootstrap CI on mean profit/trade: <b>[3.02%, 7.57%]</b> — does NOT include 0 — mean profit tentatively confirmed</p>
         </div>
 
 
     <div class="card">
-      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across 21 closed trades</span></h3>
-      <p>Correlation(duration, profit): <b>+0.217</b></p>
+      <h3>Duration vs Outcome <span class="muted" style="font-weight:400;font-size:0.75rem;">— across 23 closed trades</span></h3>
+      <p>Correlation(duration, profit): <b>+0.230</b></p>
       <p class="muted" style="font-size:0.85rem;">No strong linear relationship between duration and outcome — duration alone isn't a reliable signal here.</p>
       <p style="font-size:0.85rem;">Fastest closes: 0.0h, 0.0h, 0.0h &nbsp;|&nbsp; Slowest closes: 21.5h, 46.9h, 92.9h</p>
     </div>
@@ -2250,7 +2290,7 @@
       <h3>DCA / Rebuy Activity (open trades)</h3>
       <div class="table-scroll">
       <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
-      <tr><td data-label="Pair">TRIA/USDT:USDT</td><td data-label="Entry Fills">1</td><td data-label="Extra DCA/Rebuy">0</td><td class="muted">still on original entry; rebuy logic hasn't triggered yet</td></tr>
+      <tr><td colspan="4" class="muted">No open trades</td></tr>
       </table>
       </div>
     </div></div></details>
@@ -2298,17 +2338,17 @@ new Chart(document.getElementById('reasonChart_futures'), {
 new Chart(document.getElementById('trendChart_futures'), {
   type: 'bar',
   data: {
-    labels: ["09-13 20:31", "09-13 23:01", "09-14 04:05", "09-14 06:43", "09-14 12:51", "09-14 17:18", "09-14 21:13", "09-14 21:19", "09-15 00:07", "09-15 05:37", "09-15 10:44", "09-15 15:22", "09-15 19:24", "09-15 22:35", "09-16 00:55", "09-16 05:31", "09-16 07:35", "09-16 10:32", "09-16 15:14", "09-16 19:14", "09-16 22:30", "09-17 00:59", "09-17 05:48", "09-17 17:30", "09-17 19:27", "09-17 22:33", "09-18 00:55", "09-18 05:25", "09-18 10:18", "09-18 14:43", "09-18 17:59", "09-18 20:29", "09-18 22:56", "09-19 00:50", "09-19 05:20", "09-19 10:00", "09-19 13:46", "09-19 16:56", "09-19 19:07", "09-19 21:58", "09-19 23:54", "09-20 02:32", "09-20 08:07", "09-20 13:22", "09-20 17:10", "09-20 20:02", "09-20 22:49", "09-21 00:41", "09-21 05:43", "09-21 11:32", "09-21 17:30", "09-21 20:59", "09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:25", "09-22 22:34", "09-23 01:06", "09-23 07:02", "09-23 13:09", "09-23 18:05", "09-23 21:55", "09-24 00:08", "09-24 05:40", "09-24 10:48", "09-24 15:37", "09-24 19:38", "09-24 22:52", "09-25 01:02", "09-25 06:14", "09-25 06:33", "09-25 06:53", "09-25 12:27", "09-25 17:39", "09-25 20:55", "09-25 23:43", "09-26 02:41", "09-26 08:09", "09-26 13:31", "09-26 17:30", "09-26 20:26", "09-26 23:16", "09-27 02:41", "09-27 08:40", "09-27 08:45", "09-27 08:52", "09-27 09:28", "09-27 13:03", "09-27 14:27", "09-27 18:47", "09-27 21:45", "09-28 00:09", "09-28 04:34", "09-28 06:09", "09-28 14:45", "09-28 20:57", "09-29 00:48", "09-29 06:26", "09-29 08:07", "09-29 13:35", "09-29 19:00", "09-29 22:54", "09-30 01:46", "09-30 07:45", "09-30 14:27", "09-30 19:45", "09-30 23:21", "10-01 03:16", "10-01 10:36", "10-01 17:13", "10-01 22:10", "10-02 01:54", "10-02 07:47", "10-02 14:20", "10-02 19:42", "10-02 23:27", "10-03 03:02", "10-03 07:58", "10-03 09:33", "10-03 14:29", "10-03 18:28", "10-03 21:55", "10-04 00:16", "10-04 06:32", "10-04 12:58", "10-04 17:18", "10-04 20:41", "10-04 23:44", "10-05 03:11", "10-05 11:01", "10-06 01:08", "10-06 08:21", "10-06 15:35", "10-06 20:41", "10-07 00:16", "10-07 06:44", "10-07 14:05", "10-07 19:43", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 06:52", "10-08 14:15", "10-08 20:24", "10-09 00:53", "10-09 09:31", "10-09 12:33", "10-09 21:45", "10-10 14:18", "10-10 23:11", "10-11 03:42", "10-11 10:33", "10-11 15:41", "10-11 16:31", "10-11 17:43", "10-11 20:46", "10-12 00:11", "10-12 06:55", "10-12 16:27", "10-12 23:27", "10-13 05:15", "10-13 12:11", "10-13 13:28", "10-13 20:03", "10-14 00:06", "10-14 05:46", "10-14 11:06", "10-14 13:08", "10-14 16:26", "10-14 20:26", "10-14 23:38", "10-15 02:59", "10-15 07:46", "10-15 08:08", "10-15 13:54", "10-15 15:05", "10-15 15:05"],
+    labels: ["09-13 23:01", "09-14 04:05", "09-14 06:43", "09-14 12:51", "09-14 17:18", "09-14 21:13", "09-14 21:19", "09-15 00:07", "09-15 05:37", "09-15 10:44", "09-15 15:22", "09-15 19:24", "09-15 22:35", "09-16 00:55", "09-16 05:31", "09-16 07:35", "09-16 10:32", "09-16 15:14", "09-16 19:14", "09-16 22:30", "09-17 00:59", "09-17 05:48", "09-17 17:30", "09-17 19:27", "09-17 22:33", "09-18 00:55", "09-18 05:25", "09-18 10:18", "09-18 14:43", "09-18 17:59", "09-18 20:29", "09-18 22:56", "09-19 00:50", "09-19 05:20", "09-19 10:00", "09-19 13:46", "09-19 16:56", "09-19 19:07", "09-19 21:58", "09-19 23:54", "09-20 02:32", "09-20 08:07", "09-20 13:22", "09-20 17:10", "09-20 20:02", "09-20 22:49", "09-21 00:41", "09-21 05:43", "09-21 11:32", "09-21 17:30", "09-21 20:59", "09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:25", "09-22 22:34", "09-23 01:06", "09-23 07:02", "09-23 13:09", "09-23 18:05", "09-23 21:55", "09-24 00:08", "09-24 05:40", "09-24 10:48", "09-24 15:37", "09-24 19:38", "09-24 22:52", "09-25 01:02", "09-25 06:14", "09-25 06:33", "09-25 06:53", "09-25 12:27", "09-25 17:39", "09-25 20:55", "09-25 23:43", "09-26 02:41", "09-26 08:09", "09-26 13:31", "09-26 17:30", "09-26 20:26", "09-26 23:16", "09-27 02:41", "09-27 08:40", "09-27 08:45", "09-27 08:52", "09-27 09:28", "09-27 13:03", "09-27 14:27", "09-27 18:47", "09-27 21:45", "09-28 00:09", "09-28 04:34", "09-28 06:09", "09-28 14:45", "09-28 20:57", "09-29 00:48", "09-29 06:26", "09-29 08:07", "09-29 13:35", "09-29 19:00", "09-29 22:54", "09-30 01:46", "09-30 07:45", "09-30 14:27", "09-30 19:45", "09-30 23:21", "10-01 03:16", "10-01 10:36", "10-01 17:13", "10-01 22:10", "10-02 01:54", "10-02 07:47", "10-02 14:20", "10-02 19:42", "10-02 23:27", "10-03 03:02", "10-03 07:58", "10-03 09:33", "10-03 14:29", "10-03 18:28", "10-03 21:55", "10-04 00:16", "10-04 06:32", "10-04 12:58", "10-04 17:18", "10-04 20:41", "10-04 23:44", "10-05 03:11", "10-05 11:01", "10-06 01:08", "10-06 08:21", "10-06 15:35", "10-06 20:41", "10-07 00:16", "10-07 06:44", "10-07 14:05", "10-07 19:43", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 06:52", "10-08 14:15", "10-08 20:24", "10-09 00:53", "10-09 09:31", "10-09 12:33", "10-09 21:45", "10-10 14:18", "10-10 23:11", "10-11 03:42", "10-11 10:33", "10-11 15:41", "10-11 16:31", "10-11 17:43", "10-11 20:46", "10-12 00:11", "10-12 06:55", "10-12 16:27", "10-12 23:27", "10-13 05:15", "10-13 12:11", "10-13 13:28", "10-13 20:03", "10-14 00:06", "10-14 05:46", "10-14 11:06", "10-14 13:08", "10-14 16:26", "10-14 20:26", "10-14 23:38", "10-15 02:59", "10-15 07:46", "10-15 08:08", "10-15 13:54", "10-15 15:05", "10-15 17:59", "10-15 17:59"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.34, -0.2, 1.49, 1.94, 1.94, 1.94, 1.94, 1.94, 1.94, 1.63, 2.99, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.38, 5.48, 6.34, 6.34, 6.34, 6.37, 6.3, 6.36, 6.8, 8.77, 8.77, 8.77, 8.77, 8.77, 8.77, 8.77, 8.77, -1.09, -3.47, -3.04, -1.0, -12.14, 5.89, 12.02, 11.88, 13.27, 14.99, 15.5, 15.77, 16.39, 18.54, 18.35, 16.87, 16.45, 19.18, 19.44, 19.44, 19.44, 19.61, 19.91, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 29.35, 29.35, 29.35, 29.35, 29.35, 29.35, 33.76, 32.94, 32.94, 32.94, 33.55, 32.93, 33.12, 38.05, 36.97, 33.95, 33.87, 37.12, 36.63, 35.61, 36.34, 19.94, 14.6, 43.37, 44.09, 42.43, 44.03, 45.83, 44.45, 43.07, 42.64, 42.45, 51.1, 42.42, 56.73, 56.73, 56.73, 56.73, 56.73, 56.73, 38.47, 49.48, 37.15, 62.74, 60.86, 49.36, 56.29, 64.11, 61.47, 64.66, 96.61, 95.45, 96.87, 90.51, 90.51, 90.51, 90.51, 90.51, 90.51, 97.32, 96.62, 100.8, 103.83, 106.31, 106.89, 108.06, 108.24, 108.24, 108.24, 108.24, 103.84, 105.53, 103.05, 122.81, 122.81],
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.34, -0.2, 1.49, 1.94, 1.94, 1.94, 1.94, 1.94, 1.94, 1.63, 2.99, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.31, 5.38, 5.48, 6.34, 6.34, 6.34, 6.37, 6.3, 6.36, 6.8, 8.77, 8.77, 8.77, 8.77, 8.77, 8.77, 8.77, 8.77, -1.09, -3.47, -3.04, -1.0, -12.14, 5.89, 12.02, 11.88, 13.27, 14.99, 15.5, 15.77, 16.39, 18.54, 18.35, 16.87, 16.45, 19.18, 19.44, 19.44, 19.44, 19.61, 19.91, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 20.66, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 24.51, 29.35, 29.35, 29.35, 29.35, 29.35, 29.35, 33.76, 32.94, 32.94, 32.94, 33.55, 32.93, 33.12, 38.05, 36.97, 33.95, 33.87, 37.12, 36.63, 35.61, 36.34, 19.94, 14.6, 43.37, 44.09, 42.43, 44.03, 45.83, 44.45, 43.07, 42.64, 42.45, 51.1, 42.42, 56.73, 56.73, 56.73, 56.73, 56.73, 56.73, 38.47, 49.48, 37.15, 62.74, 60.86, 49.36, 56.29, 64.11, 61.47, 64.66, 96.61, 95.45, 96.87, 90.51, 90.51, 90.51, 90.51, 90.51, 90.51, 97.32, 96.62, 100.8, 103.83, 106.31, 106.89, 108.06, 108.24, 108.24, 108.24, 108.24, 103.84, 105.53, 103.05, 122.81, 123.79, 123.83],
         borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(217,100,90,0.35)', order: 2
       }
     ]
@@ -2331,10 +2371,10 @@ Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
 new Chart(document.getElementById('equityChart_futures_x8'), {
   type: 'line',
   data: {
-    labels: ["2026-09-24 16:31", "2026-09-23 15:40", "2026-09-28 01:21", "2026-09-25 21:05", "2026-09-27 10:12", "2026-09-28 04:05", "2026-09-28 08:11", "2026-09-29 07:32", "2026-09-30 05:22", "2026-10-01 16:40", "2026-10-02 14:20", "2026-10-04 05:17", "2026-10-05 19:26", "2026-10-07 02:56", "2026-10-10 00:31", "2026-10-08 18:23", "2026-10-12 10:02", "2026-10-09 12:56", "2026-10-08 15:27", "2026-10-09 10:40", "2026-10-09 13:18", "2026-10-08 15:33", "2026-10-09 10:55", "2026-10-09 10:40", "2026-10-10 09:07", "2026-10-13 10:05", "2026-10-13 17:12", "2026-10-14 05:02", "2026-10-14 00:17", "2026-10-15 14:55", "2026-10-15 05:20", "2026-10-15 02:55", "2026-10-15 05:10"],
+    labels: ["2026-09-24 16:31", "2026-09-23 15:40", "2026-09-28 01:21", "2026-09-25 21:05", "2026-09-27 10:12", "2026-09-28 04:05", "2026-09-28 08:11", "2026-09-29 07:32", "2026-09-30 05:22", "2026-10-01 16:40", "2026-10-02 14:20", "2026-10-04 05:17", "2026-10-05 19:26", "2026-10-07 02:56", "2026-10-10 00:31", "2026-10-08 18:23", "2026-10-12 10:02", "2026-10-09 12:56", "2026-10-08 15:27", "2026-10-09 10:40", "2026-10-09 13:18", "2026-10-08 15:33", "2026-10-09 10:55", "2026-10-09 10:40", "2026-10-10 09:07", "2026-10-13 10:05", "2026-10-13 17:12", "2026-10-14 05:02", "2026-10-14 00:17", "2026-10-15 14:55", "2026-10-15 05:20", "2026-10-15 15:35", "2026-10-15 02:55", "2026-10-15 05:10", "2026-10-15 16:12"],
     datasets: [{
       label: 'Cumulative profit %',
-      data: [18.142, 18.78, 21.95, 24.228, 43.463, 46.66, 63.716, 65.661, 69.48, 71.336, 72.533, 74.06, 93.34, 95.817, 104.357, 118.57, 120.94, 122.046, 122.869, 127.617, 130.394, 131.792, 136.456, 139.866, 142.153, 146.84, 154.255, 159.731, 160.128, 169.372, 170.428, 173.438, 175.016],
+      data: [18.142, 18.78, 21.95, 24.228, 43.463, 46.66, 63.716, 65.661, 69.48, 71.336, 72.533, 74.06, 93.34, 95.817, 104.357, 118.57, 120.94, 122.046, 122.869, 127.617, 130.394, 131.792, 136.456, 139.866, 142.153, 146.84, 154.255, 159.731, 160.128, 169.372, 170.428, 180.271, 183.282, 184.859, 185.583],
       borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
       fill: true, tension: 0.2, pointRadius: 2
     }]
@@ -2352,9 +2392,9 @@ new Chart(document.getElementById('equityChart_futures_x8'), {
 new Chart(document.getElementById('reasonChart_futures_x8'), {
   type: 'doughnut',
   data: {
-    labels: ["exit_long_normal_d_6_1 ( 6 )", "exit_profit_long_rebuy_t_0_1_m ( 65 )", "exit_profit_long_rebuy_t_1_1_m ( 64 )", "exit_profit_long_rebuy_t_0_1_m ( 64 )", "exit_long_rebuy_d_6_1 ( 64 )", "exit_short_normal_u_1 ( 502 )", "exit_long_normal_d_5_1 ( 4 )", "exit_long_rebuy_e_r ( 65 )", "exit_long_rebuy_u_1 ( 61 )", "exit_profit_long_scalp_t_0_1_m ( 163 )", "exit_profit_long_rebuy_t_5_1_m ( 64 )", "exit_profit_short_rebuy_t_4_1_m ( 562 )", "exit_profit_long_tc_t_1_1_m ( 145 )", "exit_profit_long_normal_t_0_1_m ( 6 )", "exit_long_normal_u_0 ( 2 141 )", "exit_long_tc_u_1 ( 141 )", "exit_profit_long_tc_t_0_1_m ( 141 )", "exit_long_normal_u_0 ( 2 )", "exit_long_normal_u_1 ( 6 141 )", "exit_long_normal_u_1 ( 2 6 )", "exit_long_scalp_u_1 ( 163 )", "exit_long_rapid_rpd_2 ( 102 )", "exit_profit_long_rebuy_t_1_1_m ( 63 )", "exit_long_tc_d_3_1 ( 141 142 )", "exit_profit_long_tc_t_0_1_m ( 141 142 )", "exit_long_normal_u_1 ( 2 )", "exit_profit_long_normal_t_0_1_m ( 2 )"],
+    labels: ["exit_long_normal_d_6_1 ( 6 )", "exit_profit_long_rebuy_t_0_1_m ( 65 )", "exit_profit_long_rebuy_t_1_1_m ( 64 )", "exit_profit_long_rebuy_t_0_1_m ( 64 )", "exit_long_rebuy_d_6_1 ( 64 )", "exit_short_normal_u_1 ( 502 )", "exit_long_normal_d_5_1 ( 4 )", "exit_long_rebuy_e_r ( 65 )", "exit_long_rebuy_u_1 ( 61 )", "exit_profit_long_scalp_t_0_1_m ( 163 )", "exit_profit_long_rebuy_t_5_1_m ( 64 )", "exit_profit_short_rebuy_t_4_1_m ( 562 )", "exit_profit_long_tc_t_1_1_m ( 145 )", "exit_profit_long_normal_t_0_1_m ( 6 )", "exit_long_normal_u_0 ( 2 141 )", "exit_long_tc_u_1 ( 141 )", "exit_profit_long_tc_t_0_1_m ( 141 )", "exit_long_normal_u_0 ( 2 )", "exit_long_normal_u_1 ( 6 141 )", "exit_long_normal_u_1 ( 2 6 )", "exit_long_scalp_u_1 ( 163 )", "exit_long_rapid_rpd_2 ( 102 )", "exit_profit_long_rebuy_t_1_1_m ( 63 )", "exit_long_tc_d_3_1 ( 141 142 )", "exit_profit_long_tc_t_0_1_m ( 141 142 )", "exit_long_normal_d_3_1 ( 2 )", "exit_long_normal_u_1 ( 2 )", "exit_profit_long_normal_t_0_1_m ( 2 )"],
     datasets: [{
-      data: [1, 1, 1, 6, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+      data: [1, 2, 1, 6, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
       backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
     }]
   },
@@ -2368,17 +2408,17 @@ new Chart(document.getElementById('reasonChart_futures_x8'), {
 new Chart(document.getElementById('trendChart_futures_x8'), {
   type: 'bar',
   data: {
-    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:26", "09-22 22:34", "09-23 01:06", "09-23 07:02", "09-23 13:09", "09-23 18:05", "09-23 21:55", "09-24 00:08", "09-24 05:40", "09-24 10:48", "09-24 15:37", "09-24 19:39", "09-24 22:52", "09-25 01:02", "09-25 06:14", "09-25 06:33", "09-25 06:53", "09-25 12:27", "09-25 17:39", "09-25 20:55", "09-25 23:44", "09-26 02:41", "09-26 08:09", "09-26 13:31", "09-26 17:31", "09-26 20:26", "09-26 23:16", "09-27 02:41", "09-27 08:40", "09-27 08:45", "09-27 08:52", "09-27 09:28", "09-27 13:03", "09-27 14:27", "09-27 18:47", "09-27 21:45", "09-28 00:09", "09-28 04:34", "09-28 06:09", "09-28 14:45", "09-28 20:57", "09-29 00:48", "09-29 06:27", "09-29 08:07", "09-29 13:35", "09-29 19:00", "09-29 22:54", "09-30 01:46", "09-30 07:45", "09-30 14:27", "09-30 19:45", "09-30 23:21", "10-01 03:16", "10-01 10:36", "10-01 17:13", "10-01 22:10", "10-02 01:54", "10-02 07:47", "10-02 14:20", "10-02 19:42", "10-02 23:27", "10-03 03:03", "10-03 07:58", "10-03 09:34", "10-03 14:29", "10-03 18:28", "10-03 21:55", "10-04 00:16", "10-04 06:32", "10-04 12:58", "10-04 17:18", "10-04 20:41", "10-04 23:44", "10-05 03:11", "10-05 11:01", "10-06 01:08", "10-06 08:21", "10-06 15:35", "10-06 20:41", "10-07 00:16", "10-07 06:44", "10-07 14:06", "10-07 19:44", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 06:53", "10-08 14:16", "10-08 20:24", "10-09 00:53", "10-09 09:31", "10-09 12:33", "10-09 21:46", "10-10 14:18", "10-10 23:11", "10-11 03:42", "10-11 10:33", "10-11 15:41", "10-11 16:31", "10-11 17:43", "10-11 20:46", "10-12 00:11", "10-12 06:55", "10-12 16:27", "10-12 23:27", "10-13 05:15", "10-13 12:11", "10-13 13:28", "10-13 20:04", "10-14 00:07", "10-14 05:46", "10-14 11:06", "10-14 13:08", "10-14 16:26", "10-14 20:26", "10-14 23:39", "10-15 02:59", "10-15 07:47", "10-15 08:08", "10-15 13:54", "10-15 15:05", "10-15 15:05"],
+    labels: ["09-21 21:04", "09-21 21:28", "09-22 00:26", "09-22 05:40", "09-22 10:38", "09-22 15:17", "09-22 19:26", "09-22 22:34", "09-23 01:06", "09-23 07:02", "09-23 13:09", "09-23 18:05", "09-23 21:55", "09-24 00:08", "09-24 05:40", "09-24 10:48", "09-24 15:37", "09-24 19:39", "09-24 22:52", "09-25 01:02", "09-25 06:14", "09-25 06:33", "09-25 06:53", "09-25 12:27", "09-25 17:39", "09-25 20:55", "09-25 23:44", "09-26 02:41", "09-26 08:09", "09-26 13:31", "09-26 17:31", "09-26 20:26", "09-26 23:16", "09-27 02:41", "09-27 08:40", "09-27 08:45", "09-27 08:52", "09-27 09:28", "09-27 13:03", "09-27 14:27", "09-27 18:47", "09-27 21:45", "09-28 00:09", "09-28 04:34", "09-28 06:09", "09-28 14:45", "09-28 20:57", "09-29 00:48", "09-29 06:27", "09-29 08:07", "09-29 13:35", "09-29 19:00", "09-29 22:54", "09-30 01:46", "09-30 07:45", "09-30 14:27", "09-30 19:45", "09-30 23:21", "10-01 03:16", "10-01 10:36", "10-01 17:13", "10-01 22:10", "10-02 01:54", "10-02 07:47", "10-02 14:20", "10-02 19:42", "10-02 23:27", "10-03 03:03", "10-03 07:58", "10-03 09:34", "10-03 14:29", "10-03 18:28", "10-03 21:55", "10-04 00:16", "10-04 06:32", "10-04 12:58", "10-04 17:18", "10-04 20:41", "10-04 23:44", "10-05 03:11", "10-05 11:01", "10-06 01:08", "10-06 08:21", "10-06 15:35", "10-06 20:41", "10-07 00:16", "10-07 06:44", "10-07 14:06", "10-07 19:44", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 06:53", "10-08 14:16", "10-08 20:24", "10-09 00:53", "10-09 09:31", "10-09 12:33", "10-09 21:46", "10-10 14:18", "10-10 23:11", "10-11 03:42", "10-11 10:33", "10-11 15:41", "10-11 16:31", "10-11 17:43", "10-11 20:46", "10-12 00:11", "10-12 06:55", "10-12 16:27", "10-12 23:27", "10-13 05:15", "10-13 12:11", "10-13 13:28", "10-13 20:04", "10-14 00:07", "10-14 05:46", "10-14 11:06", "10-14 13:08", "10-14 16:26", "10-14 20:26", "10-14 23:39", "10-15 02:59", "10-15 07:47", "10-15 08:08", "10-15 13:54", "10-15 15:05", "10-15 17:59", "10-15 17:59"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -9.47, -12.0, -11.92, -10.02, -20.62, -2.81, 16.54, 16.4, 17.79, 19.51, 20.05, 20.29, 20.91, 21.39, 23.92, 21.14, 20.77, 23.45, 22.36, 19.83, 19.07, 19.05, 21.64, 23.36, 23.41, 24.4, 24.47, 29.17, 28.44, 28.73, 28.98, 31.42, 34.25, 34.25, 55.97, 52.12, 50.07, 50.05, 57.24, 57.24, 57.24, 57.24, 57.24, 58.47, 58.47, 58.47, 58.47, 58.47, 58.47, 59.08, 59.08, 59.08, 59.08, 59.83, 59.47, 59.47, 59.47, 58.96, 55.97, 55.77, 59.13, 58.66, 57.64, 59.97, 59.97, 59.97, 59.97, 59.97, 59.97, 59.97, 66.27, 66.27, 66.27, 66.27, 66.27, 69.51, 50.96, 47.5, 47.54, 46.93, 44.72, 43.08, 43.17, 26.88, 36.64, 24.26, 73.71, 55.96, 57.37, 74.08, 82.04, 79.31, 82.17, 114.39, 113.63, 114.93, 108.53, 110.08, 120.2, 110.32, 110.32, 110.32, 116.76, 116.76, 126.38, 129.23, 129.04, 122.52, 124.34, 109.75, 128.22, 130.4, 115.75, 94.29, 100.25, 95.81, 158.67, 158.39],
+        data: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -9.47, -12.0, -11.92, -10.02, -20.62, -2.81, 16.54, 16.4, 17.79, 19.51, 20.05, 20.29, 20.91, 21.39, 23.92, 21.14, 20.77, 23.45, 22.36, 19.83, 19.07, 19.05, 21.64, 23.36, 23.41, 24.4, 24.47, 29.17, 28.44, 28.73, 28.98, 31.42, 34.25, 34.25, 55.97, 52.12, 50.07, 50.05, 57.24, 57.24, 57.24, 57.24, 57.24, 58.47, 58.47, 58.47, 58.47, 58.47, 58.47, 59.08, 59.08, 59.08, 59.08, 59.83, 59.47, 59.47, 59.47, 58.96, 55.97, 55.77, 59.13, 58.66, 57.64, 59.97, 59.97, 59.97, 59.97, 59.97, 59.97, 59.97, 66.27, 66.27, 66.27, 66.27, 66.27, 69.51, 50.96, 47.5, 47.54, 46.93, 44.72, 43.08, 43.17, 26.88, 36.64, 24.26, 73.71, 55.96, 57.37, 74.08, 82.04, 79.31, 82.17, 114.39, 113.63, 114.93, 108.53, 110.08, 120.2, 110.32, 110.32, 110.32, 116.76, 116.76, 126.38, 129.23, 129.04, 122.52, 124.34, 109.75, 128.22, 130.4, 115.75, 94.29, 100.25, 95.81, 158.67, 166.41, 166.41],
         borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0],
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0],
         backgroundColor: 'rgba(217,100,90,0.35)', order: 2
       }
     ]
@@ -2401,10 +2441,10 @@ Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
 new Chart(document.getElementById('equityChart_futures_x8guard'), {
   type: 'line',
   data: {
-    labels: ["2026-10-09 10:30", "2026-10-12 10:02", "2026-10-09 12:52", "2026-10-08 15:25", "2026-10-09 10:40", "2026-10-09 10:58", "2026-10-08 15:28", "2026-10-09 10:58", "2026-10-08 15:28", "2026-10-09 10:40", "2026-10-08 15:39", "2026-10-09 10:40", "2026-10-13 03:43", "2026-10-13 10:03", "2026-10-13 17:12", "2026-10-14 03:26", "2026-10-14 00:17", "2026-10-15 02:36", "2026-10-15 02:36", "2026-10-15 02:43", "2026-10-15 02:35"],
+    labels: ["2026-10-09 10:30", "2026-10-12 10:02", "2026-10-09 12:52", "2026-10-08 15:25", "2026-10-09 10:40", "2026-10-09 10:58", "2026-10-08 15:28", "2026-10-09 10:58", "2026-10-08 15:28", "2026-10-09 10:40", "2026-10-08 15:39", "2026-10-09 10:40", "2026-10-13 03:43", "2026-10-13 10:03", "2026-10-13 17:12", "2026-10-14 03:26", "2026-10-14 00:17", "2026-10-15 02:36", "2026-10-15 02:36", "2026-10-15 02:43", "2026-10-15 02:35", "2026-10-15 15:03", "2026-10-15 16:12"],
     datasets: [{
       label: 'Cumulative profit %',
-      data: [18.486, 22.353, 23.046, 23.368, 28.443, 31.591, 35.092, 37.767, 38.086, 44.396, 45.118, 61.126, 81.92, 85.259, 91.256, 99.862, 100.457, 104.486, 109.311, 112.712, 115.877],
+      data: [18.486, 22.353, 23.046, 23.368, 28.443, 31.591, 35.092, 37.767, 38.086, 44.396, 45.118, 61.126, 81.92, 85.259, 91.256, 99.862, 100.457, 104.486, 109.311, 112.712, 115.877, 116.494, 117.507],
       borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
       fill: true, tension: 0.2, pointRadius: 2
     }]
@@ -2422,9 +2462,9 @@ new Chart(document.getElementById('equityChart_futures_x8guard'), {
 new Chart(document.getElementById('reasonChart_futures_x8guard'), {
   type: 'doughnut',
   data: {
-    labels: ["exit_short_rebuy_d_6_1 ( 562 )", "exit_profit_long_tc_t_1_1_m ( 145 )", "exit_profit_long_normal_t_0_1_m ( 6 )", "exit_long_normal_u_0 ( 2 141 )", "exit_long_tc_u_1 ( 141 )", "exit_long_normal_u_1 ( 6 141 )", "exit_profit_long_tc_t_0_1_m ( 141 )", "exit_long_normal_u_0 ( 2 )", "exit_long_normal_u_2 ( 2 6 )", "exit_long_tc_o_5 ( 141 143 )", "exit_long_rebuy_d_6_1 ( 64 )", "exit_long_scalp_u_1 ( 163 )", "exit_long_rapid_rpd_2 ( 102 )", "exit_profit_long_rebuy_t_2_1_m ( 63 )", "exit_profit_long_rebuy_t_0_1_m ( 64 )", "exit_long_normal_u_1 ( 2 )", "exit_long_tc_u_1 ( 141 142 )"],
+    labels: ["exit_short_rebuy_d_6_1 ( 562 )", "exit_profit_long_tc_t_1_1_m ( 145 )", "exit_profit_long_normal_t_0_1_m ( 6 )", "exit_long_normal_u_0 ( 2 141 )", "exit_long_tc_u_1 ( 141 )", "exit_long_normal_u_1 ( 6 141 )", "exit_profit_long_tc_t_0_1_m ( 141 )", "exit_long_normal_u_0 ( 2 )", "exit_long_normal_u_2 ( 2 6 )", "exit_long_tc_o_5 ( 141 143 )", "exit_long_rebuy_d_6_1 ( 64 )", "exit_long_scalp_u_1 ( 163 )", "exit_long_rapid_rpd_2 ( 102 )", "exit_profit_long_rebuy_t_2_1_m ( 63 )", "exit_profit_long_rebuy_t_0_1_m ( 64 )", "exit_long_normal_u_1 ( 2 )", "exit_long_tc_u_1 ( 141 142 )", "exit_long_rebuy_d_0_2 ( 63 )", "exit_profit_long_rebuy_t_0_1_m ( 65 )"],
     datasets: [{
-      data: [1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 3, 1],
+      data: [1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1],
       backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
     }]
   },
@@ -2438,17 +2478,17 @@ new Chart(document.getElementById('reasonChart_futures_x8guard'), {
 new Chart(document.getElementById('trendChart_futures_x8guard'), {
   type: 'bar',
   data: {
-    labels: ["10-07 19:44", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 06:53", "10-08 14:16", "10-08 20:24", "10-09 00:53", "10-09 09:31", "10-09 12:33", "10-09 21:46", "10-10 14:18", "10-10 23:11", "10-11 03:42", "10-11 10:33", "10-11 15:41", "10-11 16:31", "10-11 17:43", "10-11 20:46", "10-12 00:11", "10-12 06:55", "10-12 16:27", "10-12 23:27", "10-13 05:15", "10-13 12:11", "10-13 13:28", "10-13 20:04", "10-14 00:07", "10-14 05:46", "10-14 11:06", "10-14 13:08", "10-14 16:26", "10-14 20:26", "10-14 23:39", "10-15 02:59", "10-15 07:47", "10-15 08:08", "10-15 13:54", "10-15 15:05", "10-15 15:05"],
+    labels: ["10-07 19:44", "10-07 20:16", "10-07 20:21", "10-08 00:37", "10-08 04:55", "10-08 06:53", "10-08 14:16", "10-08 20:24", "10-09 00:53", "10-09 09:31", "10-09 12:33", "10-09 21:46", "10-10 14:18", "10-10 23:11", "10-11 03:42", "10-11 10:33", "10-11 15:41", "10-11 16:31", "10-11 17:43", "10-11 20:46", "10-12 00:11", "10-12 06:55", "10-12 16:27", "10-12 23:27", "10-13 05:15", "10-13 12:11", "10-13 13:28", "10-13 20:04", "10-14 00:07", "10-14 05:46", "10-14 11:06", "10-14 13:08", "10-14 16:26", "10-14 20:26", "10-14 23:39", "10-15 02:59", "10-15 07:47", "10-15 08:08", "10-15 13:54", "10-15 15:05", "10-15 17:59", "10-15 17:59"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [-0.03, -0.37, -0.42, -1.21, -0.93, -0.82, -16.48, 12.87, 3.24, 60.5, 35.22, 20.81, 27.4, 34.91, 32.33, 35.31, 63.8, 63.84, 65.07, 59.02, 60.35, 69.5, 61.2, 59.56, 68.01, 72.43, 72.43, 79.28, 82.19, 83.43, 83.43, 83.43, 83.43, 83.43, 83.43, 104.94, 102.74, 102.41, 99.36, 105.12, 105.12],
+        data: [-0.03, -0.37, -0.42, -1.21, -0.93, -0.82, -16.48, 12.87, 3.24, 60.5, 35.22, 20.81, 27.4, 34.91, 32.33, 35.31, 63.8, 63.84, 65.07, 59.02, 60.35, 69.5, 61.2, 59.56, 68.01, 72.43, 72.43, 79.28, 82.19, 83.43, 83.43, 83.43, 83.43, 83.43, 83.43, 104.94, 102.74, 102.41, 99.36, 105.12, 104.64, 104.64],
         borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0, 0, 0, 1, 1, 8, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
+        data: [0, 0, 0, 0, 0, 0, 0, 1, 1, 8, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
         backgroundColor: 'rgba(217,100,90,0.35)', order: 2
       }
     ]
