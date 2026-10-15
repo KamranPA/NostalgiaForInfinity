@@ -39,6 +39,8 @@ name: Sync Repo from Upstream (auto)
 # COMPAT GATE (added): before committing, .github/scripts/check_subclass_compat.py checks that
 # X7ML and X8Guard still match their (new) base files. On failure nothing is committed,
 # Telegram sends a BLOCKED notice, and the sync retries on the next run.
+# The check's stdout AND stderr are both captured (2>&1), so if the script itself
+# crashes or can't be found, the error text still reaches the Telegram message.
 #
 # WHEN YOU ADD A NEW CUSTOM FILE: it must be added in TWO places below —
 # the rsync exclude list (so it isn't overwritten) AND the `git add`
@@ -166,11 +168,12 @@ jobs:
           # Static AST check, no freqtrade needed. Hard-fails if upstream renamed/removed
           # something NostalgiaForInfinityX7ML or NostalgiaForInfinityX8Guard overrides or
           # calls. Runs on the working tree AFTER rsync, i.e. on the NEW upstream files.
+          # 2>&1 so a crash / missing script ends up in the report too (not only in the log).
           set -o pipefail
           python3 .github/scripts/check_subclass_compat.py \
             NostalgiaForInfinityX7ML.py NostalgiaForInfinityX7ML NostalgiaForInfinityX7.py NostalgiaForInfinityX7 \
             NostalgiaForInfinityX8Guard.py NostalgiaForInfinityX8Guard NostalgiaForInfinityX8.py NostalgiaForInfinityX8 \
-            | tee /tmp/compat_report.txt
+            2>&1 | tee /tmp/compat_report.txt
           {
             echo '### Subclass compatibility check'
             echo '```'
@@ -221,10 +224,18 @@ jobs:
           TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          REPORT=$(grep -E 'ERROR|==' /tmp/compat_report.txt | head -c 1500)
+          # Prefer the ERROR/summary lines; if there are none (script crashed or
+          # was not found), fall back to the last lines of whatever it printed.
+          REPORT=$(grep -E 'ERROR|==|Error|No such file|not found' /tmp/compat_report.txt 2>/dev/null | head -c 1500 || true)
+          if [ -z "$REPORT" ]; then
+            REPORT=$(tail -n 6 /tmp/compat_report.txt 2>/dev/null | head -c 1500 || true)
+          fi
+          if [ -z "$REPORT" ]; then
+            REPORT="(no output captured — check the run log)"
+          fi
           curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${CHAT_ID}" \
-            --data-urlencode "text=⛔ Upstream sync BLOCKED (nothing committed, bots stay on current files). Upstream changed something NostalgiaForInfinityX7ML / X8Guard depends on. Fix the subclass, then re-run the sync. Details: ${REPORT} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --data-urlencode "text=⛔ Upstream sync BLOCKED (nothing committed, bots stay on current files). Upstream changed something NostalgiaForInfinityX7ML / X8Guard depends on, or the check itself failed. Details: ${REPORT} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             > /dev/null || true
 
       - name: Notify Telegram — sync failed
