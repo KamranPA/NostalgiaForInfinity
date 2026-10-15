@@ -1,27 +1,35 @@
 """
 generate_dashboard_compare.py
 
-Builds docs/compare.html — a SECOND dashboard page that compares the two
-strategies head to head, per market:
+FUTURES-ONLY version (2026-10-15): the spot bots are switched off, so the
+spot comparison and the X8 spot-vs-futures overlap were removed.
 
-    SPOT:     NostalgiaForInfinityX7ML   vs   NostalgiaForInfinityX8
+Builds docs/compare.html — a SECOND dashboard page that compares the two
+strategies head to head on the futures market:
+
     FUTURES:  NostalgiaForInfinityX7ML   vs   NostalgiaForInfinityX8
 
-plus the full per-mode detail sections for the two X8 bots (the X7ML
-ones stay on the main page, index.html).
+plus the full per-mode detail section for the X8 futures bot (the X7ML
+one stays on the main page, index.html).
 
 It IMPORTS generate_dashboard.py and reuses its data-fetching and section
-builders, so the main dashboard script is left untouched (zero regression
-risk for index.html). It reads the four bots' SQLite state files
-READ-ONLY, exactly like the main script does.
+builders, so the main dashboard script is left untouched. It reads the
+bots' SQLite state files READ-ONLY, exactly like the main script does.
+
+This file is also imported by generate_dashboard_overview.py and
+generate_dashboard_guard.py (install_patches, build_x8_mode, SWAP_OPTIONS,
+EXTRA_CSS and the helper functions) — those names are kept unchanged.
+
+COMMAND-LINE NOTE: the argument list is UNCHANGED on purpose, so the
+workflow file does not need editing. The two spot sqlite arguments
+(spot_x7ml, spot_x8) are still accepted but IGNORED.
 
 FAIRNESS RULE (the important design decision)
 ---------------------------------------------
-The X7ML bots have been running longer (spot was also deliberately reset
-on 2026-09-14), the X8 bots started later. Comparing all-time numbers
-would hand X7ML a head start. So every head-to-head number on this page is
-computed ONLY from trades OPENED at/after the X8 bot's start time, for
-BOTH strategies, per market:
+The X7ML bot has been running longer, the X8 bot started later. Comparing
+all-time numbers would hand X7ML a head start. So every head-to-head
+number on this page is computed ONLY from trades OPENED at/after the X8
+bot's start time, for BOTH strategies:
 
   window start = freqtrade's own `bot_start_time` (stored in the X8 bot's
   SQLite KeyValueStore table on its very first startup and carried across
@@ -35,10 +43,6 @@ max_open_trades slots, while X8 starts with an empty wallet.
 UNREALIZED P/L NOTE: this page values open trades as
     direction * (live_price - open_rate) * amount
 (direction = -1 for shorts). This is leverage-correct in futures mode.
-The main dashboard values open trades as stake_amount * price change %,
-which in futures mode (stake_amount = margin, not position size)
-understates unrealized P/L by the leverage factor and ignores the sign of
-shorts — so futures "True Total" here can differ from index.html.
 
 SYNC-ERA SEGMENTATION
 ----------------------
@@ -49,17 +53,14 @@ This script reads each file's own git history (every commit that touched
 NostalgiaForInfinityX7.py / NostalgiaForInfinityX8.py) and uses those
 commit timestamps as era boundaries, then reports win rate / avg profit
 per era in addition to the all-window numbers above. A trade is filed
-under the era that was live at its OPEN time (the code version that
-generated the entry signal), regardless of when it later closed. This
-needs the repo checked out with full history (fetch-depth: 0) in the
-workflow that runs this script; if git isn't available or has no history
-for a file, the era table for that file silently doesn't render — nothing
-else on the page is affected.
+under the era that was live at its OPEN time. This needs the repo checked
+out with full history (fetch-depth: 0); if git isn't available or has no
+history for a file, the era table silently doesn't render.
 
-Usage:
+Usage (unchanged):
     python generate_dashboard_compare.py \\
-        <spot_x7ml.sqlite> <futures_x7ml.sqlite> \\
-        <spot_x8.sqlite> <futures_x8.sqlite> \\
+        <spot_x7ml.sqlite (ignored)> <futures_x7ml.sqlite> \\
+        <spot_x8.sqlite (ignored)> <futures_x8.sqlite> \\
         <history.sqlite> <output_html_path>
 """
 
@@ -105,7 +106,7 @@ _orig_build_ml_html = gd.build_ml_readiness_html
 
 def _cached_fetch_live_prices(pairs, exchange_id="kucoin", ccxt_options=None):
     """Same contract as gd.fetch_live_prices, but remembers prices so the
-    four bots' overlapping pairs are only fetched once per page build."""
+    bots' overlapping pairs are only fetched once per page build."""
     ex_key = (exchange_id, json.dumps(ccxt_options, sort_keys=True))
     missing = [p for p in pairs if (ex_key, p) not in _price_cache]
     if missing:
@@ -201,27 +202,17 @@ def fetch_strategy_sync_times(strategy_path, repo_dir=".", now=None):
     isn't available, the path has no history, or the repo was checked
     out shallow.
 
-    Uses COMMITTER date (%cI), not author date (%aI): the author date can
-    carry metadata inherited from wherever the change originated and is
-    not reliably "when this landed in our repo". Committer date is always
-    when the commit was actually created here, which is what era
+    Uses COMMITTER date (%cI), not author date (%aI): committer date is
+    always when the commit was actually created here, which is what era
     boundaries need.
 
     IMPORTANT: git's %cI includes the committer's real UTC offset (e.g.
     "...+03:00"), which is often NOT +00:00. This must be converted to
-    true UTC with astimezone() -- gd.to_aware_utc() is the wrong tool
-    here: it only attaches UTC to naive datetimes and passes already-
-    aware ones through unchanged (correct for this script's trade data,
-    which is always naive-UTC from SQLite, but wrong for git's offset-
-    aware timestamps). Skipping this conversion doesn't corrupt any
-    comparison (Python compares aware datetimes correctly regardless of
-    offset), but every displayed label would be off by the offset amount
-    while still being captioned "UTC" elsewhere on the page.
+    true UTC with astimezone() -- gd.to_aware_utc() only attaches UTC to
+    naive datetimes and passes already-aware ones through unchanged.
 
     As a defensive second layer, any timestamp still in the future
-    relative to `now` (after proper UTC conversion) is dropped rather
-    than shown -- this can only mask a real timestamp/clock problem,
-    never cause one."""
+    relative to `now` (after proper UTC conversion) is dropped."""
     try:
         result = subprocess.run(
             ["git", "log", "--follow", "--format=%cI", "--", strategy_path],
@@ -243,7 +234,7 @@ def fetch_strategy_sync_times(strategy_path, repo_dir=".", now=None):
             continue
         t = t.astimezone(timezone.utc) if t.tzinfo is not None else t.replace(tzinfo=timezone.utc)
         if t > now:
-            continue  # clock-skew / bad metadata guard -- see docstring
+            continue  # clock-skew / bad metadata guard
         times.append(t)
     return sorted(times)
 
@@ -783,12 +774,13 @@ def prices_for(trades, options):
 
 
 def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
+    # spot_x7 and spot_x8 are intentionally unused (spot bots are off);
+    # they stay in the signature so the workflow's command line is unchanged.
     install_patches()
     now = datetime.now(timezone.utc)
 
-    # Read the X8 start times BEFORE anything else opens these files
+    # Read the X8 start time BEFORE anything else opens the file
     # (gd.fetch_trades would create an empty file if one were missing).
-    raw_start_spot = fetch_bot_start_time(spot_x8)
     raw_start_fut = fetch_bot_start_time(fut_x8)
 
     # Sync-era boundaries: any commit that touched either strategy file is
@@ -798,55 +790,36 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
         + fetch_strategy_sync_times("NostalgiaForInfinityX8.py", now=now)
     ))
 
-    b7s = gd.build_one_mode(spot_x7, history_db_path, "spot", "🟢 X7ML SPOT — OKX",
-                            "OKX spot market · no leverage", "config_dryrun_telegram.json",
-                            live_price_exchange_id="okx", live_price_ccxt_options=None)
     b7f = gd.build_one_mode(fut_x7, history_db_path, "futures", "🟣 X7ML FUTURES — OKX",
                             "OKX perpetual swaps · isolated margin · 3x leverage (default)",
                             "config_dryrun_futures.json",
                             live_price_exchange_id="okx", live_price_ccxt_options=SWAP_OPTIONS)
-    b8s = build_x8_mode(spot_x8, history_db_path, "spot_x8", "🔵 X8 SPOT — OKX",
-                        "OKX spot market · no leverage · NostalgiaForInfinityX8",
-                        "config_dryrun_telegram_x8.json",
-                        live_price_exchange_id="okx", live_price_ccxt_options=None)
     b8f = build_x8_mode(fut_x8, history_db_path, "futures_x8", "🟠 X8 FUTURES — OKX",
                         "OKX perpetual swaps · isolated margin · 3x leverage (X8 default — verified in upstream source v18.0.61)",
                         "config_dryrun_futures_x8.json",
                         live_price_exchange_id="okx", live_price_ccxt_options=SWAP_OPTIONS)
 
-    wallet = gd.load_portfolio_config("config_dryrun_telegram_x8.json")["dry_run_wallet"]
+    wallet = gd.load_portfolio_config("config_dryrun_futures_x8.json")["dry_run_wallet"]
 
-    def market(key, title, sub, raw_start, bx7, bx8, path7, path8, options):
-        start, source = determine_window_start(raw_start, bx8["trades"])
-        if start is None:
-            html, js = build_market_block(key, title, sub, None, None, [], [], None, None, None, None, None)
-            return html, js, None
-        f7, f8 = load_fills(path7, bx7["trades"]), load_fills(path8, bx8["trades"])
-        m7 = compute_window_metrics(bx7["trades"], start, prices_for(bx7["trades"], options), f7, wallet, now)
-        m8 = compute_window_metrics(bx8["trades"], start, prices_for(bx8["trades"], options), f8, wallet, now)
-        ov = compute_entry_overlap(bx7["trades"], bx8["trades"], start)
+    title = "🟣 FUTURES — X7ML vs X8"
+    sub = "Same OKX perpetual-swap market, isolated margin, 3x leverage — only the strategy differs."
+    start, source = determine_window_start(raw_start_fut, b8f["trades"])
+    if start is None:
+        fut_html, fut_js = build_market_block("futures", title, sub, None, None, [], [],
+                                              None, None, None, None, None)
+    else:
+        f7 = load_fills(fut_x7, b7f["trades"])
+        f8 = load_fills(fut_x8, b8f["trades"])
+        m7 = compute_window_metrics(b7f["trades"], start, prices_for(b7f["trades"], SWAP_OPTIONS),
+                                    f7, wallet, now)
+        m8 = compute_window_metrics(b8f["trades"], start, prices_for(b8f["trades"], SWAP_OPTIONS),
+                                    f8, wallet, now)
+        ov = compute_entry_overlap(b7f["trades"], b8f["trades"], start)
         era_boundaries = build_era_boundaries(start, now, sync_times)
-        html, js = build_market_block(
-            key, title, sub, start, source, bx7["trades"], bx8["trades"], m7, m8, ov,
-            equity_series(bx7["trades"], start, now), equity_series(bx8["trades"], start, now),
+        fut_html, fut_js = build_market_block(
+            "futures", title, sub, start, source, b7f["trades"], b8f["trades"], m7, m8, ov,
+            equity_series(b7f["trades"], start, now), equity_series(b8f["trades"], start, now),
             era_boundaries=era_boundaries)
-        return html, js, start
-
-    spot_html, spot_js, spot_start = market(
-        "spot", "🟢 SPOT — X7ML vs X8", "Same OKX spot market, same pairlist rules, same config — only the strategy differs.",
-        raw_start_spot, b7s, b8s, spot_x7, spot_x8, None)
-    fut_html, fut_js, fut_start = market(
-        "futures", "🟣 FUTURES — X7ML vs X8", "Same OKX perpetual-swap market, isolated margin, 3x leverage — only the strategy differs.",
-        raw_start_fut, b7f, b8f, fut_x7, fut_x8, SWAP_OPTIONS)
-
-    # X8 spot vs X8 futures (long entries), from the later of the two X8 starts
-    x8_overlap_html = ""
-    if spot_start is not None and fut_start is not None:
-        ov = compute_entry_overlap(b8s["trades"], b8f["trades"], max(spot_start, fut_start), longs_only=True)
-        x8_overlap_html = overlap_html(
-            ov, "X8 spot", "X8 futures", "🔗 Signal Overlap — X8 Spot vs X8 Futures (long entries)",
-            show_results=False,
-            note="Futures-only short entries are excluded, since spot has no short side.")
 
     generated_at = now.strftime("%Y-%m-%d %H:%M:%S")
     html = f"""<!DOCTYPE html>
@@ -854,7 +827,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NFI Dry-Run Dashboard — X7ML vs X8</title>
+<title>NFI Dry-Run Dashboard — X7ML vs X8 (futures)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 {gd.PAGE_STYLES}
@@ -863,25 +836,18 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
 </head>
 <body>
 
-<h1>⚔️ NostalgiaForInfinity — X7ML vs X8</h1>
-<div class="subtitle">Generated {generated_at} UTC · dry-run (simulated) — no real funds involved · all four bots on OKX</div>
+<h1>⚔️ NostalgiaForInfinity — X7ML vs X8 (futures)</h1>
+<div class="subtitle">Generated {generated_at} UTC · dry-run (simulated) — no real funds involved · futures only (spot bots are off) · all bots on OKX</div>
 <div class="nav">
-  <a href="index.html">← Main dashboard (X7ML)</a>
-  <a href="#cmp-spot">Spot comparison</a>
+  <a href="index.html">← Main dashboard</a>
   <a href="#cmp-futures">Futures comparison</a>
   <a href="#x8-detail">X8 detail</a>
   <a href="guard.html">X8 vs X8 Guard →</a>
 </div>
 
-{spot_html}
-
 {fut_html}
 
-{x8_overlap_html}
-
 <div id="x8-detail"></div>
-{b8s['section_html']}
-
 {b8f['section_html']}
 
 <div class="subtitle">
@@ -891,9 +857,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
 </div>
 
 <script>
-{spot_js}
 {fut_js}
-{b8s['section_js']}
 {b8f['section_js']}
 </script>
 
@@ -904,9 +868,8 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, history_db_path, output_path):
         f.write(html)
     print(f"Comparison page written to {output_path}")
 
-    # Only the X8 modes are recorded here — spot/futures (X7ML) snapshots
-    # are recorded by generate_dashboard.py itself, so nothing is doubled.
-    gd.record_snapshot(history_db_path, "spot_x8", b8s["current_snapshot"])
+    # Only the X8 futures mode is recorded here — X7ML snapshots are
+    # recorded by generate_dashboard.py itself, so nothing is doubled.
     gd.record_snapshot(history_db_path, "futures_x8", b8f["current_snapshot"])
 
 
