@@ -4,53 +4,40 @@ name: Dry-Run Watchdog (safety net, internal cron)
 
 # WHY THIS EXISTS
 # ------------------------------------------------------------
-# All five dry-run workflows — dry-run-telegram-signals.yml (X7ML spot),
-# dry-run-telegram-futures.yml (X7ML futures), their X8 twins
-# dry-run-telegram-signals-x8.yml (X8 spot) / dry-run-telegram-futures-x8.yml
-# (X8 futures), and dry-run-telegram-futures-x8guard.yml (X8 Guard futures)
-# — keep themselves alive by dispatching their own next run
-# a couple minutes before each ~5h15m session ends. That self-queueing
-# chain works well, but has one gap: if a run ever crashes BEFORE it
-# reaches the point where it queues its successor (an unexpected error,
-# a runner problem, etc.), nothing restarts it — the chain just stops.
+# The futures dry-run workflows — dry-run-telegram-futures.yml (X7ML futures),
+# dry-run-telegram-futures-x8.yml (X8 futures) and
+# dry-run-telegram-futures-x8guard.yml (X8 Guard futures) — keep themselves
+# alive by dispatching their own next run a couple minutes before each
+# session ends. That self-queueing chain has one gap: if a run crashes
+# BEFORE it queues its successor, nothing restarts it.
 #
-# This workflow is that missing safety net, running natively inside
-# GitHub Actions on a schedule (no external cron-job.org or similar
-# service needed).
+# This workflow is that safety net. It checks each workflow's most recent
+# runs via the GitHub API and only dispatches a new run if NONE of the
+# recent runs are still active (in_progress / queued / waiting /
+# requested / pending), so it never stacks duplicate runs.
 #
-# WHY IT WON'T CAUSE THE INTERFERENCE THE OLD EXTERNAL CRON DID
-# ------------------------------------------------------------
-# The old external cron just blindly fired workflow_dispatch on a timer,
-# regardless of whether a run was already active. Because the dry-run
-# workflows' concurrency groups queue (rather than cancel) new dispatches,
-# every one of those blind pings queued up ANOTHER pending run behind the
-# currently-executing one — so by the time the current session's own
-# self-queue fired too, several duplicate runs could be stacked up,
-# causing rapid, unwanted restarts instead of smooth ~5h45m sessions.
+# SPOT DISABLED (2026-10-15): the two spot bots (X7ML spot
+# dry-run-telegram-signals.yml and X8 spot dry-run-telegram-signals-x8.yml)
+# are intentionally switched off while futures are being studied, so this
+# watchdog no longer checks them. To bring spot back later: re-enable the
+# two spot workflows in the Actions tab and add their check steps back here
+# (otherwise the chain won't self-heal after a crash).
 #
-# This workflow avoids that by checking each dry-run workflow's most
-# recent runs via the GitHub API FIRST. It only dispatches a new run if
-# NONE of the recent runs are still active (in_progress / queued /
-# waiting / requested / pending). If a session (or its own queued
-# successor) is already active, it does nothing this cycle.
-#
-# X8 / GUARD NOTE: the watchdog also STARTS an X8 or Guard workflow that has
-# never been run (or that has stopped) — it can't tell "never started" from
-# "crashed". So the secrets (TELEGRAM_TOKEN_SPOT_X8 / TELEGRAM_TOKEN_FUTURES_X8 /
-# TELEGRAM_TOKEN_FUTURES_X8GUARD) should exist BEFORE this file is committed;
-# otherwise each hourly cycle would dispatch a run that fails at its
+# X8 / GUARD NOTE: the watchdog also STARTS a workflow that has never been
+# run (or has stopped) — it can't tell "never started" from "crashed". So
+# the secrets (TELEGRAM_TOKEN_FUTURES_X8 / TELEGRAM_TOKEN_FUTURES_X8GUARD)
+# must exist, otherwise each cycle dispatches a run that fails at its
 # "Verify required secrets" step.
 
 on:
   schedule:
-    - cron: "0 * * * *"   # checks every hour (was 30 min) — cut back after hitting the free-tier
-                            # egress quota; still well within the ~5h45m session length as a
-                            # safety net, just slightly slower to notice a stopped run
+    - cron: "0 * * * *"   # hourly — slow enough to stay within the free-tier quota,
+                            # fast enough as a safety net for ~5h session lengths
   workflow_dispatch: {}       # for manually testing the check logic on demand
 
 concurrency:
   group: nfi-dryrun-watchdog
-  cancel-in-progress: true    # safe to cancel a stale check — it's stateless, just re-run's fine
+  cancel-in-progress: true    # safe to cancel a stale check — it's stateless
 
 permissions:
   contents: read
@@ -65,16 +52,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check and restart spot dry-run if it has stopped
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash .github/workflows/scripts/watchdog_check.sh \
-            "dry-run-telegram-signals.yml" \
-            "${{ github.repository }}" \
-            "${{ github.ref_name }}"
-
       - name: Check and restart futures dry-run if it has stopped
         continue-on-error: true
         env:
@@ -82,16 +59,6 @@ jobs:
         run: |
           bash .github/workflows/scripts/watchdog_check.sh \
             "dry-run-telegram-futures.yml" \
-            "${{ github.repository }}" \
-            "${{ github.ref_name }}"
-
-      - name: Check and restart X8 spot dry-run if it has stopped
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash .github/workflows/scripts/watchdog_check.sh \
-            "dry-run-telegram-signals-x8.yml" \
             "${{ github.repository }}" \
             "${{ github.ref_name }}"
 
