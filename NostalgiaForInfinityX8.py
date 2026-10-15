@@ -70,7 +70,7 @@ class NostalgiaForInfinityX8(IStrategy):
   INTERFACE_VERSION = 3
 
   def version(self) -> str:
-    return "v18.0.128"
+    return "v18.0.130"
 
   stoploss = -0.99
 
@@ -15923,6 +15923,8 @@ class NostalgiaForInfinityX8(IStrategy):
             & ((rsi_3_15m_gt_35) | (rsi_3_1h_gt_60) | (aroonu_14_1h_lt_75) | (aroonu_14_4h_lt_100) | (roc_9_1h_lt_10))
             # 15m & 1h down move, 4h high, 1d overbought
             & ((rsi_3_15m_gt_35) | (rsi_3_1h_gt_65) | (stochrsi_k_4h_lt_70) | (roc_9_1d_lt_100))
+            # 15m & 1h down move, 1h high, 4h overbought
+            & ((rsi_3_15m_gt_35) | (rsi_3_1h_gt_65) | (aroonu_14_1h_lt_70) | (roc_9_4h_lt_20))
             # 15m & 1h down move, 1h & 4h high
             & ((rsi_3_15m_gt_35) | (rsi_3_1h_gt_65) | (aroonu_14_1h_lt_90) | (aroonu_14_4h_lt_100))
             # 15m & 4h down move, 1h & 4h high
@@ -40270,6 +40272,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and (last_close > (last_close_max_48 * 0.90))
       and ((last_rsi_3_1h > 30.0) or (last_stochrsi_k_1h < 70.0))
       and ((last_rsi_3_1h > 40.0) or (last_aroonu_14_1h < 80.0))
+      and ((last_rsi_3_1h > 55.0) or (last_stochrsi_k_1h < 70.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_1d > 25.0) or (last_stochrsi_k_1h < 80.0))
       and ((last_stochrsi_k_1h < 80.0) or (last_stochrsi_k_1d < 90.0))
     ):
@@ -40454,6 +40457,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1d > 15.0) or (last_stochrsi_k_1h < 80.0))
       and ((last_rsi_3_1d > 30.0) or (last_aroonu_14_1h < 100.0))
       and ((last_rsi_3_1d > 30.0) or (last_aroonu_14_4h < 100.0))
+      and ((last_rsi_3_1d > 40.0) or (last_aroonu_14_15m < 80.0) or (last_aroonu_14_1h < 100.0))
       and ((last_rsi_3_1d > 50.0) or (last_stochrsi_k_1h < 80.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 55.0) or (last_aroonu_14_15m < 100.0) or (last_stochrsi_k_15m < 90.0))
       and ((last_aroonu_14_15m < 80.0) or (last_aroonu_14_1h < 100.0) or (last_roc_9_1d < 10.0))
@@ -40523,10 +40527,11 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1h > 45.0) or (last_rsi_3_4h > 45.0) or (last_rsi_3_1d > 45.0) or (last_stochrsi_k_4h < 50.0))
       and ((last_rsi_3_1h > 45.0) or (last_rsi_3_4h > 45.0) or (last_aroonu_14_4h < 60.0))
       and ((last_rsi_3_1h > 45.0) or (last_aroonu_14_4h < 80.0) or (last_roc_9_1d < 10.0))
-      and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_1h < 80.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_1h > 50.0) or (last_rsi_3_4h > 55.0) or (last_stochrsi_k_4h < 70.0))
+      and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_1h < 80.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_1h < 70.0) or (last_aroonu_14_1d < 70.0))
       and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_4h < 80.0) or (last_aroonu_14_1d < 100.0))
+      and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_4h < 80.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_4h < 90.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1h > 55.0) or (last_rsi_3_4h > 55.0) or (last_stochrsi_k_15m < 70.0))
       and ((last_rsi_3_1h > 55.0) or (last_aroonu_14_1h < 80.0) or (last_aroonu_14_4h < 80.0))
@@ -40553,15 +40558,20 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_15m < 90.0) or (last_stochrsi_k_15m < 90.0))
       and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_15m < 100.0) or (last_stochrsi_k_15m < 80.0))
       and ((last_rsi_3_4h > 60.0) or (last_stochrsi_k_15m < 70.0) or (last_stochrsi_k_1h < 70.0))
+      and ((last_rsi_3_4h > 60.0) or (last_stochrsi_k_1h < 60.0) or (last_stochrsi_k_1h < 90.0))
       and ((last_rsi_3_1d > 30.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 35.0) or (last_stochrsi_k_15m < 90.0))
       and ((last_rsi_3_1d > 35.0) or (last_stochrsi_k_1h < 90.0))
       and ((last_rsi_3_1d > 35.0) or (last_stochrsi_k_4h < 80.0))
+      and ((last_rsi_3_1d > 40.0) or (last_aroonu_14_1h < 90.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 45.0) or (last_aroonu_14_15m < 50.0) or (last_stochrsi_k_1h < 90.0))
       and ((last_rsi_3_1d > 45.0) or (last_aroonu_14_1h < 80.0) or (last_stochrsi_k_1h < 90.0))
+      and ((last_rsi_3_1d > 45.0) or (last_aroonu_14_1d < 70.0) or (last_stochrsi_k_4h < 80.0))
       and ((last_rsi_3_1d > 45.0) or (last_stochrsi_k_1h < 70.0) or (last_stochrsi_k_4h < 80.0))
       and ((last_rsi_3_1d > 50.0) or (last_aroonu_14_15m < 60.0) or (last_aroonu_14_1h < 100.0))
+      and ((last_rsi_3_1d > 50.0) or (last_aroonu_14_4h < 90.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 50.0) or (last_stochrsi_k_15m < 90.0) or (last_roc_9_1d < 10.0))
+      and ((last_rsi_3_1d > 50.0) or (last_stochrsi_k_1h < 80.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 60.0) or (last_aroonu_14_1h < 80.0) or (last_aroonu_14_1d < 100.0))
       and ((last_rsi_14_1h < 70.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_aroonu_14_15m < 80.0) or (last_aroonu_14_1h < 80.0) or (last_aroonu_14_4h < 80.0))
@@ -40649,6 +40659,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h > 35.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_4h > 40.0) or (last_rsi_3_1d > 40.0) or (last_aroonu_14_15m < 70.0))
       and ((last_rsi_3_4h > 40.0) or (last_aroonu_14_15m < 100.0) or (last_stochrsi_k_15m < 90.0))
+      and ((last_rsi_3_4h > 40.0) or (last_aroonu_14_1h < 90.0) or (last_aroonu_14_4h < 100.0))
       and ((last_rsi_3_4h > 40.0) or (last_aroonu_14_4h < 70.0))
       and ((last_rsi_3_4h > 50.0) or (last_aroonu_14_15m < 80.0) or (last_aroonu_14_4h < 80.0))
       and ((last_rsi_3_4h > 50.0) or (last_stochrsi_k_15m < 70.0) or (last_stochrsi_k_4h < 70.0))
@@ -40656,9 +40667,10 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h > 60.0) or (last_rsi_3_1d > 60.0) or (last_stochrsi_k_1h < 80.0))
       and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_15m < 70.0) or (last_aroonu_14_1h < 70.0))
       and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_1h < 100.0) or (last_stochrsi_k_1d < 80.0))
-      and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_4h < 70.0) or (last_roc_9_1d < 20.0))
+      and ((last_rsi_3_4h > 60.0) or (last_stochrsi_k_4h < 70.0) or (last_roc_9_1d > -10.0))
       and ((last_rsi_3_4h > 65.0) or (last_aroonu_14_1h < 70.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_4h > 65.0) or (last_aroonu_14_4h < 80.0) or (last_stochrsi_k_4h < 70.0))
+      and ((last_rsi_3_4h > 65.0) or (last_stochrsi_k_4h < 70.0) or (last_roc_9_1d > -10.0))
       and ((last_rsi_3_4h > 65.0) or (last_stochrsi_k_4h < 90.0) or (last_roc_9_4h < 10.0))
       and ((last_rsi_3_1d > 10.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_1d > 20.0) or (last_aroonu_14_1d < 90.0))
@@ -40667,6 +40679,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1d > 25.0) or (last_stochrsi_k_1h < 90.0))
       and ((last_rsi_3_1d > 30.0) or (last_aroonu_14_15m < 100.0))
       and ((last_rsi_3_1d > 30.0) or (last_stochrsi_k_4h < 90.0))
+      and ((last_rsi_3_1d > 40.0) or (last_aroonu_14_1h < 90.0) or (last_aroonu_14_4h < 100.0))
       and ((last_rsi_3_1d > 50.0) or (last_stochrsi_k_4h < 90.0) or (last_stochrsi_k_1d < 70.0))
       and ((last_aroonu_14_15m < 70.0) or (last_aroonu_14_1h < 100.0) or (last_stochrsi_k_1d < 80.0))
       and ((last_aroonu_14_15m < 70.0) or (last_aroonu_14_4h < 70.0) or (last_roc_9_4h < 10.0))
@@ -41528,7 +41541,7 @@ class NostalgiaForInfinityX8(IStrategy):
       derisk_1_enable = self.system_v4_derisk_level_1_enable
       derisk_2_enable = self.system_v4_derisk_level_2_enable
       derisk_3_enable = self.system_v4_derisk_level_3_enable
-      derisk_4_enable = False
+      derisk_4_enable = self.system_v4_derisk_level_4_enable
       if is_futures_mode:
         derisk_1_threshold = self.system_v4_derisk_level_1_futures[1]
         derisk_1_stake = self.system_v4_derisk_level_1_stake_futures
@@ -41536,6 +41549,8 @@ class NostalgiaForInfinityX8(IStrategy):
         derisk_2_stake = self.system_v4_derisk_level_2_stake_futures
         derisk_3_threshold = self.system_v4_derisk_level_3_futures[1]
         derisk_3_stake = self.system_v4_derisk_level_3_stake_futures
+        derisk_4_threshold = self.system_v4_derisk_level_4_futures[1]
+        derisk_4_stake = self.system_v4_derisk_level_4_stake_futures
       else:
         derisk_1_threshold = self.system_v4_derisk_level_1_spot[1]
         derisk_1_stake = self.system_v4_derisk_level_1_stake_spot
@@ -41543,6 +41558,8 @@ class NostalgiaForInfinityX8(IStrategy):
         derisk_2_stake = self.system_v4_derisk_level_2_stake_spot
         derisk_3_threshold = self.system_v4_derisk_level_3_spot[1]
         derisk_3_stake = self.system_v4_derisk_level_3_stake_spot
+        derisk_4_threshold = self.system_v4_derisk_level_4_spot[1]
+        derisk_4_stake = self.system_v4_derisk_level_4_stake_spot
     derisk_enable = self.derisk_enable
     # ---------------------------------------------------------------------
     # De-risk level 1
@@ -42761,6 +42778,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and (last_close > (last_close_max_48 * 0.90))
       and ((last_rsi_3_1h > 30.0) or (last_stochrsi_k_1h < 70.0))
       and ((last_rsi_3_1h > 40.0) or (last_aroonu_14_1h < 80.0))
+      and ((last_rsi_3_1h > 55.0) or (last_stochrsi_k_1h < 70.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_1d > 25.0) or (last_stochrsi_k_1h < 80.0))
       and ((last_stochrsi_k_1h < 80.0) or (last_stochrsi_k_1d < 90.0))
     ):
@@ -42945,6 +42963,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1d > 15.0) or (last_stochrsi_k_1h < 80.0))
       and ((last_rsi_3_1d > 30.0) or (last_aroonu_14_1h < 100.0))
       and ((last_rsi_3_1d > 30.0) or (last_aroonu_14_4h < 100.0))
+      and ((last_rsi_3_1d > 40.0) or (last_aroonu_14_15m < 80.0) or (last_aroonu_14_1h < 100.0))
       and ((last_rsi_3_1d > 50.0) or (last_stochrsi_k_1h < 80.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 55.0) or (last_aroonu_14_15m < 100.0) or (last_stochrsi_k_15m < 90.0))
       and ((last_aroonu_14_15m < 80.0) or (last_aroonu_14_1h < 100.0) or (last_roc_9_1d < 10.0))
@@ -43014,10 +43033,11 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1h > 45.0) or (last_rsi_3_4h > 45.0) or (last_rsi_3_1d > 45.0) or (last_stochrsi_k_4h < 50.0))
       and ((last_rsi_3_1h > 45.0) or (last_rsi_3_4h > 45.0) or (last_aroonu_14_4h < 60.0))
       and ((last_rsi_3_1h > 45.0) or (last_aroonu_14_4h < 80.0) or (last_roc_9_1d < 10.0))
-      and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_1h < 80.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_1h > 50.0) or (last_rsi_3_4h > 55.0) or (last_stochrsi_k_4h < 70.0))
+      and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_1h < 80.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_1h < 70.0) or (last_aroonu_14_1d < 70.0))
       and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_4h < 80.0) or (last_aroonu_14_1d < 100.0))
+      and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_4h < 80.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1h > 50.0) or (last_aroonu_14_4h < 90.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1h > 55.0) or (last_rsi_3_4h > 55.0) or (last_stochrsi_k_15m < 70.0))
       and ((last_rsi_3_1h > 55.0) or (last_aroonu_14_1h < 80.0) or (last_aroonu_14_4h < 80.0))
@@ -43044,15 +43064,20 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_15m < 90.0) or (last_stochrsi_k_15m < 90.0))
       and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_15m < 100.0) or (last_stochrsi_k_15m < 80.0))
       and ((last_rsi_3_4h > 60.0) or (last_stochrsi_k_15m < 70.0) or (last_stochrsi_k_1h < 70.0))
+      and ((last_rsi_3_4h > 60.0) or (last_stochrsi_k_1h < 60.0) or (last_stochrsi_k_1h < 90.0))
       and ((last_rsi_3_1d > 30.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 35.0) or (last_stochrsi_k_15m < 90.0))
       and ((last_rsi_3_1d > 35.0) or (last_stochrsi_k_1h < 90.0))
       and ((last_rsi_3_1d > 35.0) or (last_stochrsi_k_4h < 80.0))
+      and ((last_rsi_3_1d > 40.0) or (last_aroonu_14_1h < 90.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 45.0) or (last_aroonu_14_15m < 50.0) or (last_stochrsi_k_1h < 90.0))
       and ((last_rsi_3_1d > 45.0) or (last_aroonu_14_1h < 80.0) or (last_stochrsi_k_1h < 90.0))
+      and ((last_rsi_3_1d > 45.0) or (last_aroonu_14_1d < 70.0) or (last_stochrsi_k_4h < 80.0))
       and ((last_rsi_3_1d > 45.0) or (last_stochrsi_k_1h < 70.0) or (last_stochrsi_k_4h < 80.0))
       and ((last_rsi_3_1d > 50.0) or (last_aroonu_14_15m < 60.0) or (last_aroonu_14_1h < 100.0))
+      and ((last_rsi_3_1d > 50.0) or (last_aroonu_14_4h < 90.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 50.0) or (last_stochrsi_k_15m < 90.0) or (last_roc_9_1d < 10.0))
+      and ((last_rsi_3_1d > 50.0) or (last_stochrsi_k_1h < 80.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_1d > 60.0) or (last_aroonu_14_1h < 80.0) or (last_aroonu_14_1d < 100.0))
       and ((last_rsi_14_1h < 70.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_aroonu_14_15m < 80.0) or (last_aroonu_14_1h < 80.0) or (last_aroonu_14_4h < 80.0))
@@ -43140,6 +43165,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h > 35.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_4h > 40.0) or (last_rsi_3_1d > 40.0) or (last_aroonu_14_15m < 70.0))
       and ((last_rsi_3_4h > 40.0) or (last_aroonu_14_15m < 100.0) or (last_stochrsi_k_15m < 90.0))
+      and ((last_rsi_3_4h > 40.0) or (last_aroonu_14_1h < 90.0) or (last_aroonu_14_4h < 100.0))
       and ((last_rsi_3_4h > 40.0) or (last_aroonu_14_4h < 70.0))
       and ((last_rsi_3_4h > 50.0) or (last_aroonu_14_15m < 80.0) or (last_aroonu_14_4h < 80.0))
       and ((last_rsi_3_4h > 50.0) or (last_stochrsi_k_15m < 70.0) or (last_stochrsi_k_4h < 70.0))
@@ -43147,9 +43173,10 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h > 60.0) or (last_rsi_3_1d > 60.0) or (last_stochrsi_k_1h < 80.0))
       and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_15m < 70.0) or (last_aroonu_14_1h < 70.0))
       and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_1h < 100.0) or (last_stochrsi_k_1d < 80.0))
-      and ((last_rsi_3_4h > 60.0) or (last_aroonu_14_4h < 70.0) or (last_roc_9_1d < 20.0))
+      and ((last_rsi_3_4h > 60.0) or (last_stochrsi_k_4h < 70.0) or (last_roc_9_1d > -10.0))
       and ((last_rsi_3_4h > 65.0) or (last_aroonu_14_1h < 70.0) or (last_stochrsi_k_4h < 90.0))
       and ((last_rsi_3_4h > 65.0) or (last_aroonu_14_4h < 80.0) or (last_stochrsi_k_4h < 70.0))
+      and ((last_rsi_3_4h > 65.0) or (last_stochrsi_k_4h < 70.0) or (last_roc_9_1d > -10.0))
       and ((last_rsi_3_4h > 65.0) or (last_stochrsi_k_4h < 90.0) or (last_roc_9_4h < 10.0))
       and ((last_rsi_3_1d > 10.0) or (last_stochrsi_k_4h < 70.0))
       and ((last_rsi_3_1d > 20.0) or (last_aroonu_14_1d < 90.0))
@@ -43158,6 +43185,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1d > 25.0) or (last_stochrsi_k_1h < 90.0))
       and ((last_rsi_3_1d > 30.0) or (last_aroonu_14_15m < 100.0))
       and ((last_rsi_3_1d > 30.0) or (last_stochrsi_k_4h < 90.0))
+      and ((last_rsi_3_1d > 40.0) or (last_aroonu_14_1h < 90.0) or (last_aroonu_14_4h < 100.0))
       and ((last_rsi_3_1d > 50.0) or (last_stochrsi_k_4h < 90.0) or (last_stochrsi_k_1d < 70.0))
       and ((last_aroonu_14_15m < 70.0) or (last_aroonu_14_1h < 100.0) or (last_stochrsi_k_1d < 80.0))
       and ((last_aroonu_14_15m < 70.0) or (last_aroonu_14_4h < 70.0) or (last_roc_9_4h < 10.0))
@@ -54674,6 +54702,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and (last_close < (last_close_min_48 * 1.10))
       and ((last_rsi_3_1h < 70.0) or (last_stochrsi_k_1h > 30.0))
       and ((last_rsi_3_1h < 60.0) or (last_aroonu_14_1h > 20.0))
+      and ((last_rsi_3_1h < 45.0) or (last_stochrsi_k_1h > 30.0) or (last_stochrsi_k_4h > 30.0))
       and ((last_rsi_3_1d < 75.0) or (last_stochrsi_k_1h > 20.0))
       and ((last_stochrsi_k_1h > 20.0) or (last_stochrsi_k_1d > 10.0))
     ):
@@ -54858,6 +54887,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1d < 85.0) or (last_stochrsi_k_1h > 20.0))
       and ((last_rsi_3_1d < 70.0) or (last_aroonu_14_1h > 0.0))
       and ((last_rsi_3_1d < 70.0) or (last_aroonu_14_4h > 0.0))
+      and ((last_rsi_3_1d < 60.0) or (last_aroonu_14_15m > 20.0) or (last_aroonu_14_1h > 0.0))
       and ((last_rsi_3_1d < 50.0) or (last_stochrsi_k_1h > 20.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 45.0) or (last_aroonu_14_15m > 0.0) or (last_stochrsi_k_15m > 10.0))
       and ((last_aroonu_14_15m > 20.0) or (last_aroonu_14_1h > 0.0) or (last_roc_9_1d > -10.0))
@@ -54932,6 +54962,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1h < 50.0) or (last_rsi_3_4h < 45.0) or (last_stochrsi_k_4h > 30.0))
       and ((last_rsi_3_1h < 50.0) or (last_aroonu_14_1h > 30.0) or (last_aroonu_14_1d > 30.0))
       and ((last_rsi_3_1h < 50.0) or (last_aroonu_14_4h > 20.0) or (last_aroonu_14_1d > 0.0))
+      and ((last_rsi_3_1h < 50.0) or (last_aroonu_14_4h > 20.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1h < 50.0) or (last_aroonu_14_4h > 10.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1h < 45.0) or (last_rsi_3_4h < 45.0) or (last_stochrsi_k_15m > 30.0))
       and ((last_rsi_3_1h < 45.0) or (last_aroonu_14_1h > 20.0) or (last_aroonu_14_4h > 20.0))
@@ -54958,15 +54989,20 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_15m > 10.0) or (last_stochrsi_k_15m > 10.0))
       and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_15m > 0.0) or (last_stochrsi_k_15m > 20.0))
       and ((last_rsi_3_4h < 40.0) or (last_stochrsi_k_15m > 30.0) or (last_stochrsi_k_1h > 30.0))
+      and ((last_rsi_3_4h < 40.0) or (last_stochrsi_k_1h > 40.0) or (last_stochrsi_k_1h > 10.0))
       and ((last_rsi_3_1d < 70.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 65.0) or (last_stochrsi_k_15m > 10.0))
       and ((last_rsi_3_1d < 65.0) or (last_stochrsi_k_1h > 10.0))
       and ((last_rsi_3_1d < 65.0) or (last_stochrsi_k_4h > 20.0))
+      and ((last_rsi_3_1d < 60.0) or (last_aroonu_14_1h > 10.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 55.0) or (last_aroonu_14_15m > 50.0) or (last_stochrsi_k_1h > 10.0))
       and ((last_rsi_3_1d < 55.0) or (last_stochrsi_k_1h > 30.0) or (last_stochrsi_k_4h > 20.0))
       and ((last_rsi_3_1d < 50.0) or (last_aroonu_14_15m > 40.0) or (last_aroonu_14_1h > 0.0))
+      and ((last_rsi_3_1d < 50.0) or (last_aroonu_14_4h > 10.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 55.0) or (last_aroonu_14_1h > 20.0) or (last_stochrsi_k_1h > 10.0))
+      and ((last_rsi_3_1d < 55.0) or (last_aroonu_14_1d > 30.0) or (last_stochrsi_k_4h > 20.0))
       and ((last_rsi_3_1d < 50.0) or (last_stochrsi_k_15m > 10.0) or (last_roc_9_1d > -10.0))
+      and ((last_rsi_3_1d < 50.0) or (last_stochrsi_k_1h > 20.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 40.0) or (last_aroonu_14_1h > 20.0) or (last_aroonu_14_1d > 0.0))
       and ((last_rsi_14_1h > 30.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_aroonu_14_15m > 20.0) or (last_aroonu_14_1h > 20.0) or (last_aroonu_14_4h > 20.0))
@@ -55055,6 +55091,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h < 65.0) or (last_stochrsi_k_4h > 30.0))
       and ((last_rsi_3_4h < 60.0) or (last_rsi_3_1d < 60.0) or (last_aroonu_14_15m > 30.0))
       and ((last_rsi_3_4h < 60.0) or (last_aroonu_14_15m > 0.0) or (last_stochrsi_k_15m > 10.0))
+      and ((last_rsi_3_4h < 60.0) or (last_aroonu_14_1h > 10.0) or (last_aroonu_14_4h > 0.0))
       and ((last_rsi_3_4h < 60.0) or (last_aroonu_14_4h > 30.0))
       and ((last_rsi_3_4h < 50.0) or (last_aroonu_14_15m > 20.0) or (last_aroonu_14_4h > 20.0))
       and ((last_rsi_3_4h < 50.0) or (last_stochrsi_k_15m > 30.0) or (last_stochrsi_k_4h > 30.0))
@@ -55062,9 +55099,10 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h < 40.0) or (last_rsi_3_1d < 40.0) or (last_stochrsi_k_1h > 20.0))
       and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_15m > 30.0) or (last_aroonu_14_1h > 30.0))
       and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_1h > 0.0) or (last_stochrsi_k_1d > 20.0))
-      and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_4h > 30.0) or (last_roc_9_1d > -20.0))
+      and ((last_rsi_3_4h < 40.0) or (last_stochrsi_k_4h > 30.0) or (last_roc_9_1d < 10.0))
       and ((last_rsi_3_4h < 35.0) or (last_aroonu_14_1h > 30.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_4h < 35.0) or (last_aroonu_14_4h > 20.0) or (last_stochrsi_k_4h > 30.0))
+      and ((last_rsi_3_4h < 35.0) or (last_stochrsi_k_4h > 30.0) or (last_roc_9_1d < 10.0))
       and ((last_rsi_3_4h < 35.0) or (last_stochrsi_k_4h > 10.0) or (last_roc_9_4h > -10.0))
       and ((last_rsi_3_1d < 90.0) or (last_stochrsi_k_4h > 30.0))
       and ((last_rsi_3_1d < 80.0) or (last_aroonu_14_1d > 10.0))
@@ -55073,6 +55111,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1d < 75.0) or (last_stochrsi_k_1h > 10.0))
       and ((last_rsi_3_1d < 70.0) or (last_aroonu_14_15m > 0.0))
       and ((last_rsi_3_1d < 70.0) or (last_stochrsi_k_4h > 10.0))
+      and ((last_rsi_3_1d < 60.0) or (last_aroonu_14_1h > 10.0) or (last_aroonu_14_4h > 0.0))
       and ((last_rsi_3_1d < 50.0) or (last_stochrsi_k_4h > 10.0) or (last_stochrsi_k_1d > 30.0))
       and ((last_aroonu_14_15m > 30.0) or (last_aroonu_14_1h > 0.0) or (last_stochrsi_k_1d > 20.0))
       and ((last_aroonu_14_15m > 30.0) or (last_aroonu_14_4h > 30.0) or (last_roc_9_4h > -10.0))
@@ -56801,6 +56840,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and (last_close < (last_close_min_48 * 1.10))
       and ((last_rsi_3_1h < 70.0) or (last_stochrsi_k_1h > 30.0))
       and ((last_rsi_3_1h < 60.0) or (last_aroonu_14_1h > 20.0))
+      and ((last_rsi_3_1h < 45.0) or (last_stochrsi_k_1h > 30.0) or (last_stochrsi_k_4h > 30.0))
       and ((last_rsi_3_1d < 75.0) or (last_stochrsi_k_1h > 20.0))
       and ((last_stochrsi_k_1h > 20.0) or (last_stochrsi_k_1d > 10.0))
     ):
@@ -56985,6 +57025,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1d < 85.0) or (last_stochrsi_k_1h > 20.0))
       and ((last_rsi_3_1d < 70.0) or (last_aroonu_14_1h > 0.0))
       and ((last_rsi_3_1d < 70.0) or (last_aroonu_14_4h > 0.0))
+      and ((last_rsi_3_1d < 60.0) or (last_aroonu_14_15m > 20.0) or (last_aroonu_14_1h > 0.0))
       and ((last_rsi_3_1d < 50.0) or (last_stochrsi_k_1h > 20.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 45.0) or (last_aroonu_14_15m > 0.0) or (last_stochrsi_k_15m > 10.0))
       and ((last_aroonu_14_15m > 20.0) or (last_aroonu_14_1h > 0.0) or (last_roc_9_1d > -10.0))
@@ -57059,6 +57100,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1h < 50.0) or (last_rsi_3_4h < 45.0) or (last_stochrsi_k_4h > 30.0))
       and ((last_rsi_3_1h < 50.0) or (last_aroonu_14_1h > 30.0) or (last_aroonu_14_1d > 30.0))
       and ((last_rsi_3_1h < 50.0) or (last_aroonu_14_4h > 20.0) or (last_aroonu_14_1d > 0.0))
+      and ((last_rsi_3_1h < 50.0) or (last_aroonu_14_4h > 20.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1h < 50.0) or (last_aroonu_14_4h > 10.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1h < 45.0) or (last_rsi_3_4h < 45.0) or (last_stochrsi_k_15m > 30.0))
       and ((last_rsi_3_1h < 45.0) or (last_aroonu_14_1h > 20.0) or (last_aroonu_14_4h > 20.0))
@@ -57085,15 +57127,20 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_15m > 10.0) or (last_stochrsi_k_15m > 10.0))
       and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_15m > 0.0) or (last_stochrsi_k_15m > 20.0))
       and ((last_rsi_3_4h < 40.0) or (last_stochrsi_k_15m > 30.0) or (last_stochrsi_k_1h > 30.0))
+      and ((last_rsi_3_4h < 40.0) or (last_stochrsi_k_1h > 40.0) or (last_stochrsi_k_1h > 10.0))
       and ((last_rsi_3_1d < 70.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 65.0) or (last_stochrsi_k_15m > 10.0))
       and ((last_rsi_3_1d < 65.0) or (last_stochrsi_k_1h > 10.0))
       and ((last_rsi_3_1d < 65.0) or (last_stochrsi_k_4h > 20.0))
+      and ((last_rsi_3_1d < 60.0) or (last_aroonu_14_1h > 10.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 55.0) or (last_aroonu_14_15m > 50.0) or (last_stochrsi_k_1h > 10.0))
       and ((last_rsi_3_1d < 55.0) or (last_stochrsi_k_1h > 30.0) or (last_stochrsi_k_4h > 20.0))
       and ((last_rsi_3_1d < 50.0) or (last_aroonu_14_15m > 40.0) or (last_aroonu_14_1h > 0.0))
+      and ((last_rsi_3_1d < 50.0) or (last_aroonu_14_4h > 10.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 55.0) or (last_aroonu_14_1h > 20.0) or (last_stochrsi_k_1h > 10.0))
+      and ((last_rsi_3_1d < 55.0) or (last_aroonu_14_1d > 30.0) or (last_stochrsi_k_4h > 20.0))
       and ((last_rsi_3_1d < 50.0) or (last_stochrsi_k_15m > 10.0) or (last_roc_9_1d > -10.0))
+      and ((last_rsi_3_1d < 50.0) or (last_stochrsi_k_1h > 20.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_1d < 40.0) or (last_aroonu_14_1h > 20.0) or (last_aroonu_14_1d > 0.0))
       and ((last_rsi_14_1h > 30.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_aroonu_14_15m > 20.0) or (last_aroonu_14_1h > 20.0) or (last_aroonu_14_4h > 20.0))
@@ -57182,6 +57229,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h < 65.0) or (last_stochrsi_k_4h > 30.0))
       and ((last_rsi_3_4h < 60.0) or (last_rsi_3_1d < 60.0) or (last_aroonu_14_15m > 30.0))
       and ((last_rsi_3_4h < 60.0) or (last_aroonu_14_15m > 0.0) or (last_stochrsi_k_15m > 10.0))
+      and ((last_rsi_3_4h < 60.0) or (last_aroonu_14_1h > 10.0) or (last_aroonu_14_4h > 0.0))
       and ((last_rsi_3_4h < 60.0) or (last_aroonu_14_4h > 30.0))
       and ((last_rsi_3_4h < 50.0) or (last_aroonu_14_15m > 20.0) or (last_aroonu_14_4h > 20.0))
       and ((last_rsi_3_4h < 50.0) or (last_stochrsi_k_15m > 30.0) or (last_stochrsi_k_4h > 30.0))
@@ -57189,9 +57237,10 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_4h < 40.0) or (last_rsi_3_1d < 40.0) or (last_stochrsi_k_1h > 20.0))
       and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_15m > 30.0) or (last_aroonu_14_1h > 30.0))
       and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_1h > 0.0) or (last_stochrsi_k_1d > 20.0))
-      and ((last_rsi_3_4h < 40.0) or (last_aroonu_14_4h > 30.0) or (last_roc_9_1d > -20.0))
+      and ((last_rsi_3_4h < 40.0) or (last_stochrsi_k_4h > 30.0) or (last_roc_9_1d < 10.0))
       and ((last_rsi_3_4h < 35.0) or (last_aroonu_14_1h > 30.0) or (last_stochrsi_k_4h > 10.0))
       and ((last_rsi_3_4h < 35.0) or (last_aroonu_14_4h > 20.0) or (last_stochrsi_k_4h > 30.0))
+      and ((last_rsi_3_4h < 35.0) or (last_stochrsi_k_4h > 30.0) or (last_roc_9_1d < 10.0))
       and ((last_rsi_3_4h < 35.0) or (last_stochrsi_k_4h > 10.0) or (last_roc_9_4h > -10.0))
       and ((last_rsi_3_1d < 90.0) or (last_stochrsi_k_4h > 30.0))
       and ((last_rsi_3_1d < 80.0) or (last_aroonu_14_1d > 10.0))
@@ -57200,6 +57249,7 @@ class NostalgiaForInfinityX8(IStrategy):
       and ((last_rsi_3_1d < 75.0) or (last_stochrsi_k_1h > 10.0))
       and ((last_rsi_3_1d < 70.0) or (last_aroonu_14_15m > 0.0))
       and ((last_rsi_3_1d < 70.0) or (last_stochrsi_k_4h > 10.0))
+      and ((last_rsi_3_1d < 60.0) or (last_aroonu_14_1h > 10.0) or (last_aroonu_14_4h > 0.0))
       and ((last_rsi_3_1d < 50.0) or (last_stochrsi_k_4h > 10.0) or (last_stochrsi_k_1d > 30.0))
       and ((last_aroonu_14_15m > 30.0) or (last_aroonu_14_1h > 0.0) or (last_stochrsi_k_1d > 20.0))
       and ((last_aroonu_14_15m > 30.0) or (last_aroonu_14_4h > 30.0) or (last_roc_9_4h > -10.0))
