@@ -1,10 +1,12 @@
 """
 generate_dashboard_overview.py
 
+FUTURES-ONLY version (2026-10-15): the spot bots are switched off, so the
+overview now shows only the 3 futures bots: X7ML, X8, X8 Guard.
+
 TWO pages from one run:
 
-  MAIN page (output_html_path) -- ONLY the essentials, for all 5 bots:
-     SPOT: X7ML, X8   |   FUTURES: X7ML, X8, X8 Guard
+  MAIN page (output_html_path) -- ONLY the essentials, for the 3 futures bots:
      per bot = headline stats grid, Capital Efficiency card,
                Equity Curve, True Total & Stuck Trades chart.
 
@@ -20,10 +22,14 @@ technique compare.py uses) and splitting at a marker.
 It does NOT write history snapshots (the other scripts already do), so
 running it never double-records anything.
 
+COMMAND-LINE NOTE: the argument list is UNCHANGED on purpose, so the
+workflow file does not need editing. The two spot sqlite arguments
+(spot_x7ml, spot_x8) are still accepted but IGNORED.
+
 Usage:
     python generate_dashboard_overview.py \\
-        <spot_x7ml.sqlite> <futures_x7ml.sqlite> \\
-        <spot_x8.sqlite> <futures_x8.sqlite> <futures_x8guard.sqlite> \\
+        <spot_x7ml.sqlite (ignored)> <futures_x7ml.sqlite> \\
+        <spot_x8.sqlite (ignored)> <futures_x8.sqlite> <futures_x8guard.sqlite> \\
         <history.sqlite> <main_html_path> [<details_html_path>]
 """
 
@@ -100,16 +106,11 @@ def slim_top(top):
 
 
 def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, details_path=None):
+    # spot_x7 and spot_x8 are intentionally unused (spot bots are off).
     gc.install_patches()
     swap = gc.SWAP_OPTIONS
 
     jobs = [
-        ("spot", gd.build_one_mode, (spot_x7, history_db, "spot", "🟢 X7ML SPOT — OKX",
-            "OKX spot market · no leverage", "config_dryrun_telegram.json"),
-            dict(live_price_exchange_id="okx", live_price_ccxt_options=None)),
-        ("spot", gc.build_x8_mode, (spot_x8, history_db, "spot_x8", "🔵 X8 SPOT — OKX",
-            "OKX spot market · no leverage · NostalgiaForInfinityX8", "config_dryrun_telegram_x8.json"),
-            dict(live_price_exchange_id="okx", live_price_ccxt_options=None)),
         ("futures", gd.build_one_mode, (fut_x7, history_db, "futures", "🟣 X7ML FUTURES — OKX",
             "OKX perpetual swaps · isolated margin · 3x leverage (default)", "config_dryrun_futures.json"),
             dict(live_price_exchange_id="okx", live_price_ccxt_options=swap)),
@@ -123,7 +124,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
             "config_dryrun_futures_x8guard.json"),
             dict(live_price_exchange_id="okx", live_price_ccxt_options=swap)))
 
-    tops = {"spot": "", "futures": ""}
+    tops = {"futures": ""}
     details, analytics, fulls, js = "", "", "", ""
     for group, builder, args, kwargs in jobs:
         try:
@@ -161,7 +162,6 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 <div class="topbar">
   <div class="brand">NFI <span>dry-run</span></div>
   <nav>
-    <a href="#grp-spot">Spot</a>
     <a href="#grp-futures">Futures</a>
   </nav>
   <span class="gen-time">generated {now} UTC</span>
@@ -169,11 +169,8 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 </div>
 
 <main>
-<div class="disclaimer">Dry-run (simulated) — no real funds involved · all bots on OKX ·
+<div class="disclaimer">Dry-run (simulated) — no real funds involved · futures only (spot bots are off) · all bots on OKX ·
   <a href="compare.html">X7ML vs X8</a> · <a href="guard.html">X8 vs Guard</a> · <a href="details.html">Trade details &amp; ML</a></div>
-
-<h2 class="group-title" id="grp-spot">🟢 SPOT</h2>
-{tops['spot']}
 
 <h2 class="group-title" id="grp-futures">🟣 FUTURES</h2>
 {tops['futures']}
