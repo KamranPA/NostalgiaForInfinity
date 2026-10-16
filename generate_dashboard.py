@@ -68,6 +68,29 @@ all numeric columns, sticky table headers, a real top nav instead of a
 plain subtitle line) instead of the generic dark-SaaS/GitHub-clone look
 the page started with. Purely CSS/markup — no computation logic changed.
 
+LIVE UNREALIZED P/L (2026-10-16): the page is still BUILT hourly, but a
+small script embedded in it (LIVE_JS below) now re-prices the open
+trades in the visitor's browser every ~15 s from OKX's public tickers
+endpoint and updates "Unrealized P/L (open)", "True Total" and each open
+trade's live price / unrealized figure. The list of open trades, their
+amounts and the realized profit are still the hourly snapshot (a trade
+opened/closed/rebought since the last build is not reflected), and the
+formula is the same as the static one (no fees / funding). If OKX can't
+be reached from the browser the page just keeps the hourly numbers and
+says so in the badge. Because every other dashboard script (overview,
+compare, guard) builds its sections through build_mode_section(), they
+all get this for free — no change needed in them.
+
+FUTURES-ONLY CLASSIC PAGE (2026-10-16): the spot bots are switched off, so
+this page (published as classic.html) now shows ONLY the X7ML futures bot:
+the Spot-vs-Futures comparison table, the Signal Overlap card, the spot
+section and the spot history snapshot were dropped, and the stale
+"Spot: KuCoin" wording was fixed (everything is OKX). The command line is
+UNCHANGED so the workflow needs no edit: the <spot_sqlite_path> argument is
+still accepted but IGNORED. The older helper functions (comparison bar,
+signal overlap) stay in the file untouched because other dashboard scripts
+import this module.
+
 Usage:
     python generate_dashboard.py <spot_sqlite_path> <futures_sqlite_path> <history_sqlite_path> <output_html_path>
 """
@@ -941,6 +964,102 @@ PAGE_STYLES = """
 """
 
 
+# ----------------------------------------------------------------------
+# Live unrealized P/L (browser-side re-pricing of the open trades)
+# ----------------------------------------------------------------------
+# Plain string (NOT an f-string) so the JS braces need no escaping. It is
+# appended to every mode's section_js; the guard variable makes sure only
+# ONE timer runs per page no matter how many modes/bots the page holds.
+# Each mode registers its open trades in window.__nfiLive[mode_id] (see
+# build_mode_section), and this code reads them all at tick time.
+
+LIVE_JS = """
+(function () {
+  try {
+    if (window.__nfiLiveStarted) { return; }
+    window.__nfiLiveStarted = true;
+    var REFRESH_MS = 15000;
+
+    function inst(pair) {
+      var swap = pair.indexOf(':') !== -1;
+      var base = pair.split(':')[0].replace('/', '-');
+      return { type: swap ? 'SWAP' : 'SPOT', id: swap ? base + '-SWAP' : base };
+    }
+    function fmt(v, d) { return (v >= 0 ? '+' : '') + v.toFixed(d); }
+    function cls(v) { return v >= 0 ? 'profit-pos' : 'profit-neg'; }
+    function el(id) { return document.getElementById(id); }
+    function setBadge(mode, ok, text) {
+      var b = el('live-badge-' + mode);
+      if (!b) { return; }
+      b.textContent = text;
+      b.style.color = ok ? '#4fae7a' : '';
+    }
+    async function fetchTickers(type) {
+      var r = await fetch('https://www.okx.com/api/v5/market/tickers?instType=' + type, { cache: 'no-store' });
+      var j = await r.json();
+      var m = {};
+      (j.data || []).forEach(function (d) { m[d.instId] = parseFloat(d.last); });
+      return m;
+    }
+    async function tick() {
+      if (document.hidden) { return; }
+      var all = window.__nfiLive || {};
+      var modes = Object.keys(all);
+      var needed = {};
+      modes.forEach(function (m) {
+        all[m].trades.forEach(function (t) { needed[inst(t.pair).type] = true; });
+      });
+      var prices = {};
+      try {
+        var types = Object.keys(needed);
+        for (var i = 0; i < types.length; i++) {
+          prices[types[i]] = await fetchTickers(types[i]);
+        }
+      } catch (e) {
+        modes.forEach(function (m) {
+          setBadge(m, false, 'static (updated hourly) - live prices unavailable');
+        });
+        return;
+      }
+      var now = new Date().toISOString().substr(11, 8);
+      modes.forEach(function (m) {
+        var d = all[m];
+        var unreal = 0;
+        var missing = 0;
+        d.trades.forEach(function (t) {
+          var k = inst(t.pair);
+          var px = prices[k.type] ? prices[k.type][k.id] : undefined;
+          if (!px || !isFinite(px) || !t.open_rate) { missing++; return; }
+          var dir = t.short ? -1 : 1;
+          var u = dir * (px - t.open_rate) * t.amount;
+          unreal += u;
+          var lp = el('lp-' + m + '-' + t.id);
+          var lu = el('lu-' + m + '-' + t.id);
+          if (lp) { lp.textContent = String(parseFloat(px.toPrecision(6))); }
+          if (lu) {
+            lu.innerHTML = '<span class="' + cls(u) + '">' +
+              fmt(t.stake ? (u / t.stake) * 100 : 0, 2) + '% (' + fmt(u, 2) + ' USDT)</span>';
+          }
+        });
+        var ue = el('live-unreal-' + m);
+        var te = el('live-total-' + m);
+        if (ue) { ue.className = 'value ' + cls(unreal); ue.textContent = fmt(unreal, 2) + ' USDT'; }
+        if (te) {
+          var tot = d.realized + unreal;
+          te.className = 'value ' + cls(tot);
+          te.textContent = fmt(tot, 2) + ' USDT';
+        }
+        setBadge(m, true, 'LIVE ' + now + ' UTC - trade list as of ' + d.generated +
+          (missing ? ' - ' + missing + ' without price' : ''));
+      });
+    }
+    setTimeout(tick, 0);
+    setInterval(tick, REFRESH_MS);
+  } catch (e) { /* never break the rest of the page */ }
+})();
+"""
+
+
 def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_readiness,
                         portfolio_cfg, snapshot_history, mode_id, mode_title, market_note):
     open_trades = [t for t in trades if t["is_open"]]
@@ -1076,6 +1195,8 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
         n_rebuys = max(n_entry_fills - 1, 0)
         rebuy_str = f"{n_rebuys}" if fills else '<span class="muted">n/a</span>'
 
+        # ids on the live-price and unrealized cells let the LIVE_JS script
+        # (below) refresh them in the browser without a page rebuild.
         open_rows_html += f"""
         <tr>
           <td data-label="Pair">{esc(t['pair'])}</td>
@@ -1085,8 +1206,8 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
           <td data-label="Rebuys">{rebuy_str}</td>
           <td data-label="Capital Locked">{stake:.2f} USDT</td>
           <td data-label="Open Rate">{t['open_rate']:.6g}</td>
-          <td data-label="Live Price">{live_str}</td>
-          <td data-label="Unrealized P/L">{unreal_str}</td>
+          <td data-label="Live Price" id="lp-{mode_id}-{t['id']}">{live_str}</td>
+          <td data-label="Unrealized P/L" id="lu-{mode_id}-{t['id']}">{unreal_str}</td>
         </tr>"""
 
     true_total_abs = realized_abs + open_unrealized_abs_total
@@ -1121,7 +1242,8 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
 
     capital_eff_html = f"""
     <div class="card">
-      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span></h3>
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span>
+        <span id="live-badge-{mode_id}" class="muted" style="font-weight:400;font-size:0.72rem;margin-left:8px;">static (updated hourly)</span></h3>
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Realized Profit</div>
@@ -1130,12 +1252,12 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
         </div>
         <div class="stat-card">
           <div class="label">Unrealized P/L (open)</div>
-          <div class="value {'profit-pos' if open_unrealized_abs_total >= 0 else 'profit-neg'}">{open_unrealized_abs_total:+.2f} USDT</div>
+          <div id="live-unreal-{mode_id}" class="value {'profit-pos' if open_unrealized_abs_total >= 0 else 'profit-neg'}">{open_unrealized_abs_total:+.2f} USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">{open_capital_locked_total:.2f} USDT currently locked in open trades</div>
         </div>
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
-          <div class="value {'profit-pos' if true_total_abs >= 0 else 'profit-neg'}">{true_total_abs:+.2f} USDT</div>
+          <div id="live-total-{mode_id}" class="value {'profit-pos' if true_total_abs >= 0 else 'profit-neg'}">{true_total_abs:+.2f} USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
         </div>
         <div class="stat-card">
@@ -1156,7 +1278,8 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
         fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
         compared fairly, and it's why "Total Profit" alone can look fine while several slots
-        are quietly stuck.
+        are quietly stuck. Unrealized P/L and True Total are re-priced live in the browser
+        (see the badge above); the trade list and realized profit are the hourly snapshot.
       </p>
     </div>"""
 
@@ -1391,6 +1514,30 @@ new Chart(document.getElementById('{trend_id}'), {{
 ''' if has_trend_history else ''}
 """
 
+    # Register this mode's open trades for the live re-pricing script and
+    # append the (guarded, once-per-page) script itself. Kept out of the
+    # f-string above so no brace escaping is needed.
+    live_payload = {
+        "realized": round(realized_abs, 4),
+        "generated": now_utc.strftime("%Y-%m-%d %H:%M UTC"),
+        "trades": [
+            {
+                "id": t["id"],
+                "pair": t["pair"],
+                "short": bool(t["is_short"]),
+                "open_rate": to_float(t["open_rate"]),
+                "amount": to_float(t["amount"]),
+                "stake": to_float(t["stake_amount"]),
+            }
+            for t in open_trades
+        ],
+    }
+    section_js += (
+        "\nwindow.__nfiLive = window.__nfiLive || {};\n"
+        "window.__nfiLive[" + json.dumps(mode_id) + "] = " + json.dumps(live_payload) + ";\n"
+        + LIVE_JS
+    )
+
     compare = {
         "mode_title": mode_title,
         "open_trades": len(open_trades),
@@ -1557,31 +1704,70 @@ def build_one_mode(sqlite_path, history_db_path, mode_id, mode_title, market_not
     return bundle
 
 
+def build_futures_html(futures_bundle, generated_at):
+    """Futures-only classic page (spot bots are off)."""
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFI Dry-Run Dashboard — X7ML Futures (classic)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+{PAGE_STYLES}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">NFI <span>dry-run</span></div>
+  <nav>
+    <a href="index.html">Overview</a>
+    <a href="#futures">Futures</a>
+  </nav>
+  <span class="gen-time">generated {generated_at} UTC</span>
+  <a class="compare-link" href="compare.html">X7ML vs X8 →</a>
+</div>
+
+<main>
+<div class="disclaimer">Dry-run (simulated) — no real funds involved · futures only (spot bots are off) · OKX market data</div>
+
+{futures_bundle['section_html']}
+
+<div class="subtitle">
+  Small sample sizes can look great or terrible by chance. Entries cancelled before filling (limit-order timeouts) aren't counted here — only trades that actually opened.
+</div>
+</main>
+
+<script>
+{futures_bundle['section_js']}
+</script>
+
+</body>
+</html>"""
+    return html
+
+
 def main(spot_sqlite_path: str, futures_sqlite_path: str, history_db_path: str, output_path: str):
-    spot_bundle = build_one_mode(
-        spot_sqlite_path, history_db_path, "spot", "SPOT — OKX",
-        "OKX spot market · no leverage",
-        "config_dryrun_telegram.json",
-        live_price_exchange_id="okx", live_price_ccxt_options=None,
-    )
+    # spot_sqlite_path is intentionally unused (spot bots are off); it stays
+    # in the signature so the workflow's command line is unchanged.
     futures_bundle = build_one_mode(
-        futures_sqlite_path, history_db_path, "futures", "FUTURES — OKX",
+        futures_sqlite_path, history_db_path, "futures", "🟣 X7ML FUTURES — OKX",
         "OKX perpetual swaps · isolated margin · 3x leverage (default)",
         "config_dryrun_futures.json",
         live_price_exchange_id="okx", live_price_ccxt_options={"defaultType": "swap"},
     )
 
-    overlap = compute_signal_overlap(spot_bundle["trades"], futures_bundle["trades"])
-    signal_overlap_html = build_signal_overlap_html(overlap)
-
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    html = build_combined_html(spot_bundle, futures_bundle, generated_at, signal_overlap_html)
+    html = build_futures_html(futures_bundle, generated_at)
 
     with open(output_path, "w") as f:
         f.write(html)
-    print(f"Combined dashboard written to {output_path}")
+    print(f"Futures dashboard written to {output_path}")
 
-    record_snapshot(history_db_path, "spot", spot_bundle["current_snapshot"])
     record_snapshot(history_db_path, "futures", futures_bundle["current_snapshot"])
 
 
