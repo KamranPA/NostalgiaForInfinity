@@ -34,6 +34,12 @@ run-name: >-
 #   Peak memory / wall time of the backtest are written to the Job Summary
 #   (use them to size longer windows).
 #
+# Strategies: X (= X1), X2 ... X8, X7ML and X8Guard. Each needs its .py file in the
+# repo root or in user_data/strategies/. Older ones (X..X6) have no
+# NFI_SAFE_PARAMETERS list, so nfi_overrides / stale_max_daily_range_pct /
+# derisk_hold_short are most likely IGNORED there (the post-backtest check
+# reports it). If an old strategy has no futures support, use market=spot.
+#
 # Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
 # applied to the whole window (freqtrade can't rebuild historical pairlists).
 
@@ -48,6 +54,12 @@ on:
           - NostalgiaForInfinityX8Guard
           - NostalgiaForInfinityX7ML
           - NostalgiaForInfinityX7
+          - NostalgiaForInfinityX6
+          - NostalgiaForInfinityX5
+          - NostalgiaForInfinityX4
+          - NostalgiaForInfinityX3
+          - NostalgiaForInfinityX2
+          - NostalgiaForInfinityX
         default: NostalgiaForInfinityX8
       market:
         description: 'Market'
@@ -156,17 +168,16 @@ jobs:
           FULL_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${REF_IN}" --jq .sha)
           echo "ref '$REF_IN' resolved to $FULL_SHA"
           git fetch --no-tags --depth=1 origin "$FULL_SHA"
-          for f in \
-            NostalgiaForInfinityX7.py NostalgiaForInfinityX7ML.py NostalgiaForInfinityX8.py \
-            NostalgiaForInfinityX8Guard.py \
-            user_data/strategies/NostalgiaForInfinityX7.py \
-            user_data/strategies/NostalgiaForInfinityX7ML.py \
-            user_data/strategies/NostalgiaForInfinityX8.py \
-            user_data/strategies/NostalgiaForInfinityX8Guard.py; do
-            if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
-              git checkout FETCH_HEAD -- "$f"
-              echo "taken from $REF_IN: $f"
-            fi
+          for n in NostalgiaForInfinityX NostalgiaForInfinityX2 NostalgiaForInfinityX3 \
+                   NostalgiaForInfinityX4 NostalgiaForInfinityX5 NostalgiaForInfinityX6 \
+                   NostalgiaForInfinityX7 NostalgiaForInfinityX7ML NostalgiaForInfinityX8 \
+                   NostalgiaForInfinityX8Guard; do
+            for f in "${n}.py" "user_data/strategies/${n}.py"; do
+              if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
+                git checkout FETCH_HEAD -- "$f"
+                echo "taken from $REF_IN: $f"
+              fi
+            done
           done
           echo "strategy_ref=$(git rev-parse FETCH_HEAD)" >> "$GITHUB_ENV"
 
@@ -221,35 +232,33 @@ jobs:
           mkdir -p user_data/strategies user_data/logs user_data/data/okx user_data/backtest_results
           STRATEGY="${STRATEGY_IN:-NostalgiaForInfinityX8}"
 
-          # X7 base file: needed for X7 itself and for the ML subclass.
-          if [ -e user_data/strategies/NostalgiaForInfinityX7.py ]; then
-            echo "X7 file already present at destination -- skipping copy."
-          else
-            cp NostalgiaForInfinityX7.py user_data/strategies/
-          fi
-
-          if [ "$STRATEGY" = "NostalgiaForInfinityX7ML" ]; then
-            if [ -e user_data/strategies/NostalgiaForInfinityX7ML.py ]; then
-              echo "ML file already present at destination -- skipping copy."
+          # copy_strategy NAME: put NAME.py into user_data/strategies/ (skip if already
+          # there; take it from the repo root otherwise; fail if it exists nowhere).
+          copy_strategy() {
+            local n="$1"
+            if [ -e "user_data/strategies/${n}.py" ]; then
+              echo "${n}.py already present at destination -- skipping copy."
+            elif [ -e "${n}.py" ]; then
+              cp "${n}.py" user_data/strategies/
+              echo "copied ${n}.py from repo root."
             else
-              cp NostalgiaForInfinityX7ML.py user_data/strategies/
+              echo "::error::${n}.py not found in the repo root or user_data/strategies/"
+              exit 1
             fi
-          fi
+          }
 
-          if [ "$STRATEGY" = "NostalgiaForInfinityX8" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8Guard" ]; then
-            if [ -e user_data/strategies/NostalgiaForInfinityX8.py ]; then
-              echo "X8 file already present at destination -- skipping copy."
-            else
-              cp NostalgiaForInfinityX8.py user_data/strategies/
-            fi
-          fi
+          # X7 base file: kept for every run (as before); needed by X7 and the ML subclass.
+          copy_strategy NostalgiaForInfinityX7
 
+          # The selected strategy itself (X, X2 ... X8, X7ML, X8Guard).
+          copy_strategy "$STRATEGY"
+
+          # Parents of the thin subclasses.
           if [ "$STRATEGY" = "NostalgiaForInfinityX8Guard" ]; then
-            if [ -e user_data/strategies/NostalgiaForInfinityX8Guard.py ]; then
-              echo "Guard file already present at destination -- skipping copy."
-            else
-              cp NostalgiaForInfinityX8Guard.py user_data/strategies/
-            fi
+            copy_strategy NostalgiaForInfinityX8
+          fi
+          if [ "$STRATEGY" = "NostalgiaForInfinityX7ML" ]; then
+            copy_strategy NostalgiaForInfinityX7
           fi
 
           # Base config for the selected market.
@@ -397,8 +406,8 @@ jobs:
           if requested:
               # Validate keys against the strategy's own NFI_SAFE_PARAMETERS list.
               base = os.environ.get("base_strategy", "NostalgiaForInfinityX8")
-              family_file = ("NostalgiaForInfinityX8.py" if base.startswith("NostalgiaForInfinityX8")
-                             else "NostalgiaForInfinityX7.py")
+              # Parent strategy file: strip the Guard / ML subclass suffix.
+              family_file = re.sub(r"(Guard|ML)$", "", base) + ".py"
               src_path = os.path.join("user_data", "strategies", family_file)
               safe = set()
               try:
@@ -417,8 +426,10 @@ jobs:
                           f"{family_file} and would be ignored: {bad}"
                       )
               else:
-                  print("::warning::Could not parse NFI_SAFE_PARAMETERS; key validation skipped "
-                        "(the post-backtest check will still report ignored keys).")
+                  print("::warning::Could not parse NFI_SAFE_PARAMETERS in "
+                        f"{family_file}; key validation skipped. Older strategies (X..X6) "
+                        "usually have no override mechanism, so the overrides are probably "
+                        "IGNORED (the post-backtest check will report it).")
 
               params = dict(cfg.get("nfi_parameters") or {})
               params.update(requested)
