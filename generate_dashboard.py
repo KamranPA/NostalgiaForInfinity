@@ -91,6 +91,12 @@ still accepted but IGNORED. The older helper functions (comparison bar,
 signal overlap) stay in the file untouched because other dashboard scripts
 import this module.
 
+SLIPPAGE SENSITIVITY (2026-10-17): new card under Capital Efficiency for every
+bot. Slippage is a % of each order's VALUE, so cost = total traded notional x
+slippage % (not a % of profit). It shows cost and the profit left at 0.05% /
+0.10% / 0.20% per order plus the break-even slippage. It is an estimate, not a
+measurement; dry-run fills are idealised.
+
 Usage:
     python generate_dashboard.py <spot_sqlite_path> <futures_sqlite_path> <history_sqlite_path> <output_html_path>
 """
@@ -1060,8 +1066,117 @@ LIVE_JS = """
 """
 
 
+SLIPPAGE_LEVELS = (0.0005, 0.001, 0.002)   # 0.05% (optimistic), 0.10% (base), 0.20% (pessimistic)
+
+
+def build_slippage_html(all_fill_rows, trades, realized_abs, true_total_abs):
+    """Slippage sensitivity card. Slippage is a % of EACH ORDER'S VALUE, so
+    the cost is (total traded notional) x (slippage %), NOT a % of profit.
+    This is a flat-percentage ESTIMATE, not a measured fill difference:
+    dry-run fills are idealised (no queue position, no partial fills, no
+    market impact), so real costs can only be learned from real fills.
+
+    Realized profit is charged for the orders of CLOSED trades only; True
+    Total is charged for every filled order (the exit of a still-open trade
+    has not happened yet, so its exit slippage is not included)."""
+    if not all_fill_rows:
+        return """
+    <div class="card">
+      <h3>Slippage Sensitivity</h3>
+      <p class="muted">Orders table not available/readable this run — skipped.</p>
+    </div>"""
+
+    is_open = {t["id"]: t["is_open"] for t in trades}
+    notional_closed = 0.0
+    notional_open = 0.0
+    n_orders = 0
+    for r in all_fill_rows:
+        tid = r["ft_trade_id"]
+        if tid not in is_open:
+            continue
+        cost = to_float(r["cost"])
+        if cost <= 0:
+            cost = to_float(r["average"]) * to_float(r["filled"])
+        cost = abs(cost)
+        if cost <= 0:
+            continue
+        n_orders += 1
+        if is_open[tid]:
+            notional_open += cost
+        else:
+            notional_closed += cost
+
+    n_closed = sum(1 for t in trades if not t["is_open"])
+    notional_total = notional_closed + notional_open
+    if notional_total <= 0:
+        return """
+    <div class="card">
+      <h3>Slippage Sensitivity</h3>
+      <p class="muted">No filled orders with a cost yet — nothing to estimate.</p>
+    </div>"""
+
+    def signed(v):
+        cls = "profit-pos" if v >= 0 else "profit-neg"
+        return f'<span class="{cls}">{v:+.2f} USDT</span>'
+
+    rows = ""
+    for s_ in SLIPPAGE_LEVELS:
+        cost_closed = notional_closed * s_
+        cost_total = notional_total * s_
+        rows += f"""<tr>
+          <td data-label="Slippage per order">{s_*100:.2f}%</td>
+          <td data-label="Cost (closed trades)">{cost_closed:.2f} USDT</td>
+          <td data-label="Realized after slippage">{signed(realized_abs - cost_closed)}</td>
+          <td data-label="True Total after slippage">{signed(true_total_abs - cost_total)}</td>
+        </tr>"""
+
+    if notional_closed > 0 and realized_abs > 0:
+        breakeven = f"{realized_abs / notional_closed * 100:.3f}%"
+    elif notional_closed > 0:
+        breakeven = "already at or below zero before slippage"
+    else:
+        breakeven = "—"
+    per_trade = (notional_closed / n_closed) if n_closed else 0.0
+    cost_per_trade_01 = per_trade * 0.001
+
+    return f"""
+    <div class="card">
+      <h3>Slippage Sensitivity <span class="muted" style="font-weight:400;font-size:0.75rem;">— estimate: flat % of every order's value, not a measured fill difference</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Traded Notional (closed trades)</div>
+          <div class="value">{notional_closed:,.0f} USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">{n_orders} filled orders overall ({notional_total:,.0f} USDT incl. open trades)</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Break-even Slippage</div>
+          <div class="value">{breakeven}</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">per order, before realized profit hits zero</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Cost per Closed Trade @ 0.10%</div>
+          <div class="value">{cost_per_trade_01:.2f} USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">{per_trade:,.0f} USDT traded per closed trade</div>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-top:16px;">
+      <table>
+        <tr><th>Slippage per order</th><th>Cost (closed trades)</th><th>Realized after slippage</th><th>True Total after slippage</th></tr>
+        {rows}
+      </table>
+      </div>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        Cost = traded notional x slippage % (entries, rebuys and exits all count) — not a % of profit.
+        True Total after slippage charges every filled order; the exit of a still-open trade is not
+        included yet. 0.05% / 0.10% / 0.20% are rough optimistic / base / pessimistic guesses for
+        mid-size OKX perpetuals; panic exits on thin coins can be worse.
+      </p>
+    </div>"""
+
+
 def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_readiness,
-                        portfolio_cfg, snapshot_history, mode_id, mode_title, market_note):
+                        portfolio_cfg, snapshot_history, mode_id, mode_title, market_note,
+                        all_fill_rows=None):
     open_trades = [t for t in trades if t["is_open"]]
     closed_trades = [t for t in trades if not t["is_open"]]
     closed_with_profit = [t for t in closed_trades if t["close_profit"] is not None]
@@ -1283,6 +1398,8 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
       </p>
     </div>"""
 
+    slippage_html = build_slippage_html(all_fill_rows, trades, realized_abs, true_total_abs)
+
     max_open_trades = portfolio_cfg.get("max_open_trades", 8)
     dry_run_wallet = portfolio_cfg.get("dry_run_wallet", 1000.0)
     slots_used = len(open_trades)
@@ -1372,6 +1489,8 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
 </div>
 
 {capital_eff_html}
+
+{slippage_html}
 
 {portfolio_html}
 
@@ -1699,6 +1818,7 @@ def build_one_mode(sqlite_path, history_db_path, mode_id, mode_title, market_not
     bundle = build_mode_section(
         trades, live_prices, entry_fills, fills_by_trade, ml_readiness,
         portfolio_cfg, snapshot_history, mode_id, mode_title, market_note,
+        all_fill_rows=all_fill_rows if isinstance(all_fill_rows, list) else None,
     )
     bundle["trades"] = trades  # kept for cross-bot analyses (e.g. signal overlap) in main()
     return bundle
