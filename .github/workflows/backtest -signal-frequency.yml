@@ -2,7 +2,7 @@ name: Backtest Signal Frequency
 
 run-name: >-
   Backtest ${{ inputs.strategy }} ${{ inputs.market }} ${{ inputs.direction }}
-  end=${{ inputs.end_date || 'today' }} ref=${{ inputs.ref || 'main' }}${{ inputs.derisk_hold_short != 'default' && format(' derisk_short={0}', inputs.derisk_hold_short) || '' }}${{ inputs.stale_max_daily_range_pct != '' && format(' stale_range={0}', inputs.stale_max_daily_range_pct) || '' }}${{ inputs.nfi_overrides != '' && ' +overrides' || '' }}${{ inputs.export_signals == 'yes' && ' +signals' || '' }}${{ inputs.breakdown != 'none' && format(' breakdown={0}', inputs.breakdown) || '' }} days=${{ inputs.test_days }}
+  end=${{ inputs.end_date || 'today' }} ref=${{ inputs.ref || 'main' }}${{ inputs.derisk_hold_short != 'default' && format(' derisk_short={0}', inputs.derisk_hold_short) || '' }}${{ inputs.stale_max_daily_range_pct != '' && format(' stale_range={0}', inputs.stale_max_daily_range_pct) || '' }}${{ inputs.nfi_overrides != '' && ' +overrides' || '' }}${{ inputs.guard_parameters != '' && format(' guard={0}', inputs.guard_parameters) || '' }}${{ inputs.export_signals == 'yes' && ' +signals' || '' }}${{ inputs.breakdown != 'none' && format(' breakdown={0}', inputs.breakdown) || '' }} days=${{ inputs.test_days }}
 
 # Manual backtest of the NFI strategies on OKX data.
 #
@@ -34,11 +34,15 @@ run-name: >-
 #   Peak memory / wall time of the backtest are written to the Job Summary
 #   (use them to size longer windows).
 #
-# Strategies: X (= X1), X2 ... X8, X7ML and X8Guard. Each needs its .py file in the
-# repo root or in user_data/strategies/. Older ones (X..X6) have no
+# Strategies: X (= X1), X2 ... X8, X7ML, X8Guard and X8Cap. Each needs its .py file in
+# the repo root or in user_data/strategies/. Older ones (X..X6) have no
 # NFI_SAFE_PARAMETERS list, so nfi_overrides / stale_max_daily_range_pct /
 # derisk_hold_short are most likely IGNORED there (the post-backtest check
 # reports it). If an old strategy has no futures support, use market=spot.
+#
+# X8Cap = X8 plus ONE extra field, guard_max_entries (cap on the total number of
+# entry orders per trade; 0 = off, default 4). Set it with guard_parameters, e.g.
+# {"guard_max_entries": 3}. The run title shows the guard_parameters value.
 #
 # Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
 # applied to the whole window (freqtrade can't rebuild historical pairlists).
@@ -52,6 +56,7 @@ on:
         options:
           - NostalgiaForInfinityX8
           - NostalgiaForInfinityX8Guard
+          - NostalgiaForInfinityX8Cap
           - NostalgiaForInfinityX7ML
           - NostalgiaForInfinityX7
           - NostalgiaForInfinityX6
@@ -108,7 +113,7 @@ on:
         type: string
         default: ''
       guard_parameters:
-        description: 'X8Guard only: JSON object, e.g. {"guard_max_stake_multiple": 4} (empty = Guard defaults)'
+        description: 'X8Guard / X8Cap only: JSON object, e.g. {"guard_max_stake_multiple": 4} or {"guard_max_entries": 3} (empty = defaults)'
         type: string
         default: ''
       export_signals:
@@ -171,7 +176,7 @@ jobs:
           for n in NostalgiaForInfinityX NostalgiaForInfinityX2 NostalgiaForInfinityX3 \
                    NostalgiaForInfinityX4 NostalgiaForInfinityX5 NostalgiaForInfinityX6 \
                    NostalgiaForInfinityX7 NostalgiaForInfinityX7ML NostalgiaForInfinityX8 \
-                   NostalgiaForInfinityX8Guard; do
+                   NostalgiaForInfinityX8Guard NostalgiaForInfinityX8Cap; do
             for f in "${n}.py" "user_data/strategies/${n}.py"; do
               if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
                 git checkout FETCH_HEAD -- "$f"
@@ -250,11 +255,11 @@ jobs:
           # X7 base file: kept for every run (as before); needed by X7 and the ML subclass.
           copy_strategy NostalgiaForInfinityX7
 
-          # The selected strategy itself (X, X2 ... X8, X7ML, X8Guard).
+          # The selected strategy itself (X, X2 ... X8, X7ML, X8Guard, X8Cap).
           copy_strategy "$STRATEGY"
 
           # Parents of the thin subclasses.
-          if [ "$STRATEGY" = "NostalgiaForInfinityX8Guard" ]; then
+          if [ "$STRATEGY" = "NostalgiaForInfinityX8Guard" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8Cap" ]; then
             copy_strategy NostalgiaForInfinityX8
           fi
           if [ "$STRATEGY" = "NostalgiaForInfinityX7ML" ]; then
@@ -295,15 +300,22 @@ jobs:
       - name: Strategy diagnostics (version, commit, bad-trade flags)
         run: |
           F="user_data/strategies/${base_strategy}.py"
-          FP="user_data/strategies/${base_strategy/Guard/}.py"
+          # parent file of a thin subclass: strip a trailing Guard / Cap
+          PARENT_NAME="${base_strategy%Guard}"
+          PARENT_NAME="${PARENT_NAME%Cap}"
+          FP="user_data/strategies/${PARENT_NAME}.py"
           {
             echo "repo HEAD:      $(git rev-parse HEAD)"
             echo "strategy ref:   ${strategy_ref:-<same as HEAD>}"
             echo "strategy file:  $F"
             echo "file sha256:    $(sha256sum "$F" | cut -d' ' -f1)"
-            if [ "$base_strategy" = "NostalgiaForInfinityX8Guard" ]; then
+            if [ "$base_strategy" = "NostalgiaForInfinityX8Guard" ] || [ "$base_strategy" = "NostalgiaForInfinityX8Cap" ]; then
               echo "parent X8 sha:  $(sha256sum user_data/strategies/NostalgiaForInfinityX8.py | cut -d' ' -f1)"
               echo "parent version: $(grep -A1 'def version' user_data/strategies/NostalgiaForInfinityX8.py | grep return | tr -d ' ')"
+            fi
+            if [ "$base_strategy" = "NostalgiaForInfinityX8Cap" ]; then
+              echo "cap field in file: $(grep -n -m1 '^  guard_max_entries' "$F" | tr -s ' ')"
+              echo "cap override requested (guard_parameters): ${GUARD_IN:-<none, class default>}"
             fi
             echo "version():"
             grep -n -A2 "def version" "$FP" | head -5 || true
@@ -406,8 +418,8 @@ jobs:
           if requested:
               # Validate keys against the strategy's own NFI_SAFE_PARAMETERS list.
               base = os.environ.get("base_strategy", "NostalgiaForInfinityX8")
-              # Parent strategy file: strip the Guard / ML subclass suffix.
-              family_file = re.sub(r"(Guard|ML)$", "", base) + ".py"
+              # Parent strategy file: strip the Guard / Cap / ML subclass suffix.
+              family_file = re.sub(r"(Guard|ML|Cap)$", "", base) + ".py"
               src_path = os.path.join("user_data", "strategies", family_file)
               safe = set()
               try:
@@ -437,8 +449,8 @@ jobs:
 
           graw = os.environ.get("GUARD_IN", "").strip()
           if graw:
-              if not os.environ.get("base_strategy", "").endswith("Guard"):
-                  print("::warning::guard_parameters given but strategy is not an X8Guard -- ignored by the strategy.")
+              if not os.environ.get("base_strategy", "").endswith(("Guard", "Cap")):
+                  print("::warning::guard_parameters given but strategy is not an X8Guard / X8Cap -- ignored by the strategy.")
               try:
                   gp = json.loads(graw)
               except json.JSONDecodeError as e:
