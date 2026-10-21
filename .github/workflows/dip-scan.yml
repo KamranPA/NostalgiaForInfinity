@@ -1,0 +1,54 @@
+# SAVE THIS FILE AS: .github/workflows/dip-scan.yml
+# ONE-SHOT, read-only. Counts sharp 5m dips (RSI(3) < 10 / < 20) per UTC day on the
+# futures pairs, plus BTC daily range. Needs dip_scan.py in the repo root.
+# No backtest, no bot is touched. Output: the log, the job summary, artifact "dip-scan".
+name: Dip scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      backtest_run_id:
+        description: "Run ID of the backtest whose pairlist to use (full run ID)"
+        required: true
+        default: "39408554091"
+      start_date:
+        description: "Start date, YYYYMMDD (UTC)"
+        required: true
+        default: "20261006"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install ccxt pandas numpy
+
+      - name: Get pairlist (optional)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.backtest_run_id }}
+        run: |
+          mkdir -p /tmp/dip/pl /tmp/dip/out
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "pairlist-$RUN_ID" -D /tmp/dip/pl \
+            || echo "no pairlist artifact; script will use top 100 pairs by volume"
+
+      - name: Scan
+        env:
+          START: ${{ inputs.start_date }}
+        run: python dip_scan.py --pairs-dir /tmp/dip/pl --start "$START" --out /tmp/dip/out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dip-scan
+          path: /tmp/dip/out
