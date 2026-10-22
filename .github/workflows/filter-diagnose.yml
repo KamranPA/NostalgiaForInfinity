@@ -1,0 +1,228 @@
+# SAVE THIS FILE AS: .github/workflows/filter-diagnose.yml
+# ONE-SHOT, read-only diagnostic. Runs a normal backtest with the subclass
+# NostalgiaForInfinityX8Diag (same signals as X8) and reports which long-entry
+# sub-condition blocked the entries after the "block start" time.
+# Needs in the repo root: NostalgiaForInfinityX8Diag.py, filter_diag_report.py
+# Use the SAME pairs_run_id / test_days / end_date as the 20-day backtest you want to explain:
+# then the OKX data cache of that run is reused and nothing is downloaded.
+# Output: the log, the Job Summary, artifact "filter-diag".
+name: Filter diagnose
+
+on:
+  workflow_dispatch:
+    inputs:
+      pairs_run_id:
+        description: "Run ID of the backtest whose pairlist to reuse"
+        required: true
+        default: "39408554091"
+      test_days:
+        description: "Test window length in days"
+        required: true
+        default: "20"
+      end_date:
+        description: "Window end YYYYMMDD (UTC)"
+        required: true
+        default: "20261020"
+      block_start:
+        description: "Start of the no-entry period (UTC)"
+        required: true
+        default: "2026-10-15 03:00"
+      ref_start:
+        description: "Start of the reference period with entries (UTC)"
+        required: true
+        default: "2026-10-06 00:00"
+
+permissions:
+  contents: read
+  actions: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      market: futures
+      GH_TOKEN: ${{ github.token }}
+      PAIRS_RUN_IN: ${{ inputs.pairs_run_id }}
+      DAYS_IN: ${{ inputs.test_days }}
+      END_IN: ${{ inputs.end_date }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install TA-Lib system library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl
+          OK=0
+          for URL in \
+            "https://downloads.sourceforge.net/project/ta-lib/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz" \
+            "http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz" \
+            "https://sourceforge.net/projects/ta-lib/files/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz/download"; do
+            echo "Trying $URL"
+            rm -f ta-lib-0.4.0-src.tar.gz
+            if curl -fL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 \
+                 -o ta-lib-0.4.0-src.tar.gz "$URL" \
+               && tar -tzf ta-lib-0.4.0-src.tar.gz > /dev/null 2>&1; then
+              OK=1
+              break
+            fi
+          done
+          if [ "$OK" = "1" ]; then
+            tar -xzf ta-lib-0.4.0-src.tar.gz
+            cd ta-lib
+            ./configure --prefix=/usr
+            make
+            sudo make install
+            cd ..
+          else
+            echo "::warning::Could not download the TA-Lib C source; relying on the pip wheel."
+          fi
+
+      - name: Install Freqtrade + dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install freqtrade pandas numpy
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Prepare user_data
+        run: |
+          mkdir -p user_data/strategies user_data/logs user_data/data/okx user_data/backtest_results user_data/diag
+          for n in NostalgiaForInfinityX7 NostalgiaForInfinityX8 NostalgiaForInfinityX8Diag; do
+            if [ -e "user_data/strategies/${n}.py" ]; then
+              echo "${n}.py already in user_data/strategies"
+            elif [ -e "${n}.py" ]; then
+              cp "${n}.py" user_data/strategies/
+              echo "copied ${n}.py from repo root"
+            else
+              echo "::error::${n}.py not found in the repo root or user_data/strategies/"
+              exit 1
+            fi
+          done
+          cp config_dryrun_futures.json user_data/live_config.json
+          {
+            echo "file sha256 X8:   $(sha256sum user_data/strategies/NostalgiaForInfinityX8.py | cut -c1-12)"
+            echo "version():        $(grep -A1 'def version' user_data/strategies/NostalgiaForInfinityX8.py | grep return | tr -d ' ')"
+          } | tee user_data/logs/diagnostics.txt
+
+      - name: Compute date range
+        id: dates
+        run: |
+          TEST_DAYS="$DAYS_IN"
+          if ! [[ "$TEST_DAYS" =~ ^[0-9]+$ ]]; then echo "::error::test_days must be a number"; exit 1; fi
+          if ! [[ "$END_IN" =~ ^[0-9]{8}$ ]]; then echo "::error::end_date must be YYYYMMDD"; exit 1; fi
+          TEST_START=$(date -u -d "${END_IN} - ${TEST_DAYS} days" +%Y%m%d)
+          DOWNLOAD_START=$(date -u -d "${END_IN} - 400 days" +%Y%m%d)
+          SHORT_DOWNLOAD_START=$(date -u -d "${END_IN} - $((TEST_DAYS + 60)) days" +%Y%m%d)
+          DIAG_END=$(date -u -d "${END_IN}" +"%Y-%m-%d 00:00")
+          {
+            echo "test_days=$TEST_DAYS"
+            echo "test_start=$TEST_START"
+            echo "test_end=$END_IN"
+            echo "download_start=$DOWNLOAD_START"
+            echo "short_download_start=$SHORT_DOWNLOAD_START"
+            echo "diag_end=$DIAG_END"
+          } >> "$GITHUB_OUTPUT"
+          echo "Test window: $TEST_START - $END_IN ($TEST_DAYS days); diag end: $DIAG_END"
+
+      - name: Pairlist snapshot from the earlier run
+        run: |
+          gh run download "$PAIRS_RUN_IN" --repo "$GITHUB_REPOSITORY" --name "pairlist-$PAIRS_RUN_IN" --dir user_data/_pl
+          cp user_data/_pl/pairlist_snapshot.json user_data/pairlist_snapshot.json
+          python3 -c "import json;p=json.load(open('user_data/pairlist_snapshot.json'));print(len(p),'pairs')"
+
+      - name: Build backtest config
+        run: |
+          python3 << 'PYEOF'
+          import json
+          cfg = json.load(open("user_data/live_config.json"))
+          pairs = json.load(open("user_data/pairlist_snapshot.json"))
+          if not isinstance(pairs, list) or not pairs:
+              raise SystemExit(f"pairlist snapshot has no usable pair list: {pairs!r}")
+          cfg["exchange"]["pair_whitelist"] = pairs
+          cfg["pairlists"] = [{"method": "StaticPairList"}]
+          cfg["telegram"] = {"enabled": False, "token": "", "chat_id": ""}
+          json.dump(cfg, open("user_data/config.json", "w"), indent=2)
+          print(f"config built with {len(pairs)} pairs")
+          PYEOF
+
+      - name: Restore OKX data cache
+        id: datacache
+        uses: actions/cache@v4
+        with:
+          path: user_data/data
+          key: okx-data-${{ env.market }}-${{ steps.dates.outputs.test_end }}-${{ steps.dates.outputs.test_days }}-${{ hashFiles('user_data/pairlist_snapshot.json') }}
+
+      - name: Download OKX historical data (only on cache miss)
+        if: steps.datacache.outputs.cache-hit != 'true'
+        run: |
+          freqtrade download-data \
+            --config user_data/config.json \
+            --exchange okx \
+            --timerange "${{ steps.dates.outputs.download_start }}-${{ steps.dates.outputs.test_end }}" \
+            --timeframes 1h 4h 1d \
+            --erase
+          freqtrade download-data \
+            --config user_data/config.json \
+            --exchange okx \
+            --timerange "${{ steps.dates.outputs.short_download_start }}-${{ steps.dates.outputs.test_end }}" \
+            --timeframes 5m 15m
+
+      - name: Download BTC informative data
+        run: |
+          freqtrade download-data \
+            --config user_data/config.json \
+            --exchange okx \
+            --pairs "BTC/USDT:USDT" \
+            --timerange "${{ steps.dates.outputs.download_start }}-${{ steps.dates.outputs.test_end }}" \
+            --timeframes 1h 4h 1d
+          test -n "$(find user_data/data -name 'BTC_USDT*4h*' | head -1)" \
+            || { echo "::error::BTC 4h data is missing after download"; exit 1; }
+
+      - name: Run diagnostic backtest
+        env:
+          DIAG_BLOCK_START: ${{ inputs.block_start }}
+          DIAG_REF_START: ${{ inputs.ref_start }}
+          DIAG_END: ${{ steps.dates.outputs.diag_end }}
+          DIAG_OUT: ${{ github.workspace }}/user_data/diag
+        run: |
+          freqtrade backtesting \
+            --config user_data/config.json \
+            --strategy NostalgiaForInfinityX8Diag \
+            --strategy-path user_data/strategies \
+            --timerange "${{ steps.dates.outputs.test_start }}-${{ steps.dates.outputs.test_end }}" \
+            --timeframe 5m \
+            --export none \
+            2> >(tee user_data/logs/backtest_stderr.log >&2) \
+            | tee user_data/logs/backtest.log
+          echo "diag files written: $(ls user_data/diag | wc -l)"
+
+      - name: Report
+        run: |
+          python filter_diag_report.py \
+            --diag-dir user_data/diag \
+            --strategy user_data/strategies/NostalgiaForInfinityX8.py \
+            --block-start "${{ inputs.block_start }}" \
+            --end "${{ steps.dates.outputs.diag_end }}" \
+            --ref-start "${{ inputs.ref_start }}" \
+            --out user_data/logs | tee user_data/logs/report_console.txt
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: filter-diag
+          path: |
+            user_data/diag
+            user_data/logs
+          if-no-files-found: ignore
+          retention-days: 30
