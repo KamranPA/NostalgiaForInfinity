@@ -1,18 +1,19 @@
 """
 generate_dashboard_overview.py
 
-FUTURES-ONLY version (2026-10-15): the spot bots are switched off, so the
-overview now shows only the 3 futures bots: X7ML, X8, X8 Guard.
+FUTURES-ONLY version, WITHOUT X7ML (2026-10-25): the spot bots are off and
+the team migrated from X7ML to X8, so the overview now shows only the
+2 futures bots: X8 and X8 Guard.
 
 TWO pages from one run:
 
-  MAIN page (output_html_path) -- ONLY the essentials, for the 3 futures bots:
+  MAIN page (output_html_path) -- ONLY the essentials, for the 2 futures bots:
      per bot = headline stats grid, Capital Efficiency card,
                Equity Curve, True Total & Stuck Trades chart.
 
   DETAILS page (optional 8th arg) -- everything else, collapsed per bot:
      trade tables, tag/pair performance, significance, duration,
-     clustering, DCA, ML readiness.
+     clustering, DCA.
 
 It IMPORTS generate_dashboard.py and generate_dashboard_compare.py and
 reuses their builders; neither file is edited. The existing section HTML
@@ -24,11 +25,12 @@ running it never double-records anything.
 
 COMMAND-LINE NOTE: the argument list is UNCHANGED on purpose, so the
 workflow file does not need editing. The two spot sqlite arguments
-(spot_x7ml, spot_x8) are still accepted but IGNORED.
+(spot_x7ml, spot_x8) and the X7ML futures argument (futures_x7ml) are still
+accepted but IGNORED.
 
 Usage:
     python generate_dashboard_overview.py \\
-        <spot_x7ml.sqlite (ignored)> <futures_x7ml.sqlite> \\
+        <spot_x7ml.sqlite (ignored)> <futures_x7ml.sqlite (ignored)> \\
         <spot_x8.sqlite (ignored)> <futures_x8.sqlite> <futures_x8guard.sqlite> \\
         <history.sqlite> <main_html_path> [<details_html_path>]
 """
@@ -106,14 +108,12 @@ def slim_top(top):
 
 
 def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, details_path=None):
-    # spot_x7 and spot_x8 are intentionally unused (spot bots are off).
+    # spot_x7, fut_x7 and spot_x8 are intentionally unused
+    # (spot bots are off; X7ML was retired on 2026-10-25).
     gc.install_patches()
     swap = gc.SWAP_OPTIONS
 
     jobs = [
-        ("futures", gd.build_one_mode, (fut_x7, history_db, "futures", "🟣 X7ML FUTURES — OKX",
-            "OKX perpetual swaps · isolated margin · 3x leverage (default)", "config_dryrun_futures.json"),
-            dict(live_price_exchange_id="okx", live_price_ccxt_options=swap)),
         ("futures", gc.build_x8_mode, (fut_x8, history_db, "futures_x8", "🟠 X8 FUTURES — OKX",
             "OKX perpetual swaps · isolated margin · 3x leverage", "config_dryrun_futures_x8.json"),
             dict(live_price_exchange_id="okx", live_price_ccxt_options=swap)),
@@ -169,10 +169,10 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 </div>
 
 <main>
-<div class="disclaimer">Dry-run (simulated) — no real funds involved · futures only (spot bots are off) · all bots on OKX ·
-  <a href="compare.html">X7ML vs X8</a> · <a href="guard.html">X8 vs Guard</a> · <a href="details.html">Trade details &amp; ML</a></div>
+<div class="disclaimer">Dry-run (simulated) — no real funds involved · futures only (spot bots are off, X7ML retired) · all bots on OKX ·
+  <a href="guard.html">X8 vs Guard</a> · <a href="details.html">Trade details &amp; analytics</a></div>
 
-<h2 class="group-title" id="grp-futures">🟣 FUTURES</h2>
+<h2 class="group-title" id="grp-futures">🟠 FUTURES</h2>
 {tops['futures']}
 
 <div class="subtitle">Small sample sizes can look great or terrible by chance.</div>
@@ -206,7 +206,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 <body>
 <div class="topbar">
   <div class="brand">NFI <span>dry-run</span></div>
-  <nav><a href="#summary">Full summary</a><a href="#details">Trade details</a><a href="#ml">ML &amp; analytics</a></nav>
+  <nav><a href="#summary">Full summary</a><a href="#details">Trade details</a><a href="#analytics">Analytics</a></nav>
   <span class="gen-time">generated {now} UTC</span>
   <a class="compare-link" href="index.html">← Main</a>
 </div>
@@ -217,8 +217,8 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 <h2 class="group-title" id="details">Trade details</h2>
 <div class="subtitle">Open / closed trades, tag and pair performance — tap a bot to expand.</div>
 {details}
-<h2 class="group-title" id="ml">ML data &amp; analytics</h2>
-<div class="subtitle">ML readiness (X7ML only), significance, duration, clustering, DCA activity.</div>
+<h2 class="group-title" id="analytics">Analytics</h2>
+<div class="subtitle">Significance, duration, clustering, DCA activity.</div>
 {analytics}
 </main>
 <script>
