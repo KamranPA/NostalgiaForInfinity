@@ -4,9 +4,8 @@ name: Dry-Run Watchdog (safety net, internal cron)
 
 # WHY THIS EXISTS
 # ------------------------------------------------------------
-# The futures dry-run workflows — dry-run-telegram-futures.yml (X7ML futures),
-# dry-run-telegram-futures-x8.yml (X8 futures) and
-# dry-run-telegram-futures-x8guard.yml (X8 Guard futures) — keep themselves
+# The futures dry-run workflows — dry-run-telegram-futures-x8.yml (X8 futures)
+# and dry-run-telegram-futures-x8guard.yml (X8 Guard futures) — keep themselves
 # alive by dispatching their own next run a couple minutes before each
 # session ends. That self-queueing chain has one gap: if a run crashes
 # BEFORE it queues its successor, nothing restarts it.
@@ -16,12 +15,15 @@ name: Dry-Run Watchdog (safety net, internal cron)
 # recent runs are still active (in_progress / queued / waiting /
 # requested / pending), so it never stacks duplicate runs.
 #
+# X7ML RETIRED (2026-10-25): X7ML futures (dry-run-telegram-futures.yml) is
+# intentionally switched off (migration to X8), so this watchdog no longer
+# checks it. Keep that workflow DISABLED in the Actions tab; otherwise nothing
+# here would restart it anyway. To bring it back later: enable the workflow
+# and add its check step back here.
+#
 # SPOT DISABLED (2026-10-15): the two spot bots (X7ML spot
 # dry-run-telegram-signals.yml and X8 spot dry-run-telegram-signals-x8.yml)
-# are intentionally switched off while futures are being studied, so this
-# watchdog no longer checks them. To bring spot back later: re-enable the
-# two spot workflows in the Actions tab and add their check steps back here
-# (otherwise the chain won't self-heal after a crash).
+# are intentionally switched off, so this watchdog does not check them.
 #
 # X8 / GUARD NOTE: the watchdog also STARTS a workflow that has never been
 # run (or has stopped) — it can't tell "never started" from "crashed". So
@@ -51,16 +53,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Check and restart futures dry-run if it has stopped
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash .github/workflows/scripts/watchdog_check.sh \
-            "dry-run-telegram-futures.yml" \
-            "${{ github.repository }}" \
-            "${{ github.ref_name }}"
 
       - name: Check and restart X8 futures dry-run if it has stopped
         continue-on-error: true
