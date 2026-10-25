@@ -2,28 +2,27 @@
 # (in .github/workflows/, alongside the other workflow files)
 name: NFI Dashboard
 
-# Reads ALL FIVE bots' live trading state directly from their SQLite state
-# branches:
-#   X7ML spot      -> state-spot            (tradesv3.dryrun.sqlite)
-#   X7ML futures   -> state-futures         (tradesv3.dryrun_futures.sqlite)
-#   X8 spot        -> state-spot-x8         (tradesv3.dryrun_x8.sqlite)
+# 2026-10-25: X7ML is retired and the spot bots are off. The PUBLISHED pages are
+# now only the two futures bots, X8 and X8 Guard:
 #   X8 futures     -> state-futures-x8      (tradesv3.dryrun_futures_x8.sqlite)
 #   X8 Guard fut.  -> state-futures-x8guard (tradesv3.dryrun_futures_x8guard.sqlite)
-# (the same files the dry-run-*.yml workflows persist across restarts)
-# instead of a Postgres database.
 #
-# FIVE PAGES are produced:
-#   docs/index.html    — MAIN dashboard: only stats grid, Capital Efficiency,
-#                        Equity Curve and True Total & Stuck for all 5 bots
+# PUBLISHED pages (committed to docs/):
+#   docs/index.html    — MAIN dashboard: stats grid, Capital Efficiency,
+#                        Equity Curve and True Total & Stuck for X8 and X8 Guard
 #                        (generate_dashboard_overview.py)
-#   docs/details.html  — trade tables + ML/analytics for all bots (same script)
-#   docs/classic.html  — the old full X7ML page (generate_dashboard.py,
-#                        unchanged; it still runs because it records the
-#                        spot/futures history snapshots)
-#   docs/compare.html  — X7ML vs X8 head-to-head (generate_dashboard_compare.py)
+#   docs/details.html  — trade tables + analytics (same script)
 #   docs/guard.html    — X8 vs X8 Guard head-to-head (generate_dashboard_guard.py)
-# Every page except index.html is built with continue-on-error so a problem
-# in one can never stop the others from updating.
+#
+# NOT published any more (old X7ML pages): the classic and compare scripts still
+# RUN, but write to /tmp, so docs/classic.html and docs/compare.html are no
+# longer updated. They are kept running only because they also record the
+# history snapshots (trend charts) that the other pages read; once you confirm
+# the history of X8/Guard is recorded by the guard/overview scripts alone,
+# these two steps and the X7ML/spot fetches can be deleted.
+#
+# Every page except classic is built with continue-on-error so a problem in
+# one can never stop the others from updating.
 #
 # This workflow's OWN read/write is to a separate branch
 # (dashboard-history) that holds nothing but the trend-chart history.
@@ -57,29 +56,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install numpy ccxt
 
-      - name: Fetch SQLite state of all five bots
+      - name: Fetch SQLite state of the bots
         run: |
           mkdir -p /tmp/dashboard_data
 
+          # Old X7ML + spot states: still fetched (they stay frozen at their last
+          # save) only because the history-recording scripts below take them as inputs.
           git fetch origin state-spot 2>/dev/null && \
             git show origin/state-spot:tradesv3.dryrun.sqlite > /tmp/dashboard_data/spot.sqlite 2>/dev/null && \
-            echo "Spot (X7ML) state found ($(du -h /tmp/dashboard_data/spot.sqlite | cut -f1))." || \
-            echo "No spot (X7ML) state yet (bot may not have completed a session yet) — dashboard will show it as empty."
+            echo "Spot (X7ML) state found (frozen)." || \
+            echo "No spot (X7ML) state."
 
           git fetch origin state-futures 2>/dev/null && \
             git show origin/state-futures:tradesv3.dryrun_futures.sqlite > /tmp/dashboard_data/futures.sqlite 2>/dev/null && \
-            echo "Futures (X7ML) state found ($(du -h /tmp/dashboard_data/futures.sqlite | cut -f1))." || \
-            echo "No futures (X7ML) state yet (bot may not have completed a session yet) — dashboard will show it as empty."
+            echo "Futures (X7ML) state found (frozen)." || \
+            echo "No futures (X7ML) state."
 
           git fetch origin state-spot-x8 2>/dev/null && \
             git show origin/state-spot-x8:tradesv3.dryrun_x8.sqlite > /tmp/dashboard_data/spot_x8.sqlite 2>/dev/null && \
-            echo "Spot (X8) state found ($(du -h /tmp/dashboard_data/spot_x8.sqlite | cut -f1))." || \
-            echo "No spot (X8) state yet (first hourly checkpoint not pushed yet) — comparison page will show it as empty."
+            echo "Spot (X8) state found (frozen)." || \
+            echo "No spot (X8) state."
 
           git fetch origin state-futures-x8 2>/dev/null && \
             git show origin/state-futures-x8:tradesv3.dryrun_futures_x8.sqlite > /tmp/dashboard_data/futures_x8.sqlite 2>/dev/null && \
             echo "Futures (X8) state found ($(du -h /tmp/dashboard_data/futures_x8.sqlite | cut -f1))." || \
-            echo "No futures (X8) state yet (first hourly checkpoint not pushed yet) — comparison page will show it as empty."
+            echo "No futures (X8) state yet (first hourly checkpoint not pushed yet)."
 
           git fetch origin state-futures-x8guard 2>/dev/null && \
             git show origin/state-futures-x8guard:tradesv3.dryrun_futures_x8guard.sqlite > /tmp/dashboard_data/futures_x8guard.sqlite 2>/dev/null && \
@@ -93,16 +94,17 @@ jobs:
             echo "Existing dashboard history found ($(du -h /tmp/dashboard_data/history.sqlite | cut -f1))." || \
             echo "No dashboard history yet — trend chart will start fresh from this run."
 
-      - name: Generate combined dashboard (X7ML spot + futures)
+      - name: Run old combined dashboard (history only, output NOT published)
+        continue-on-error: true
         run: |
           mkdir -p docs
           python generate_dashboard.py \
             /tmp/dashboard_data/spot.sqlite \
             /tmp/dashboard_data/futures.sqlite \
             /tmp/dashboard_data/history.sqlite \
-            docs/classic.html
+            /tmp/dashboard_data/classic_unpublished.html
 
-      - name: Generate X7ML vs X8 comparison page
+      - name: Run X7ML vs X8 page (history only, output NOT published)
         continue-on-error: true
         run: |
           python generate_dashboard_compare.py \
@@ -111,7 +113,7 @@ jobs:
             /tmp/dashboard_data/spot_x8.sqlite \
             /tmp/dashboard_data/futures_x8.sqlite \
             /tmp/dashboard_data/history.sqlite \
-            docs/compare.html
+            /tmp/dashboard_data/compare_unpublished.html
 
       - name: Generate X8 vs X8 Guard page
         continue-on-error: true
@@ -141,10 +143,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/classic.html
           [ -f docs/index.html ] && git add docs/index.html || true
           [ -f docs/details.html ] && git add docs/details.html || true
-          [ -f docs/compare.html ] && git add docs/compare.html || true
           [ -f docs/guard.html ] && git add docs/guard.html || true
           git diff --cached --quiet && echo "No dashboard changes to commit." || \
             (git commit -m "Update dashboard $(date -u +%Y-%m-%dT%H:%M:%SZ)" --quiet && git push origin HEAD:${{ github.ref_name }})
