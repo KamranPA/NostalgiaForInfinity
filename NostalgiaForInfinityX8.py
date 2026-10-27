@@ -70,7 +70,7 @@ class NostalgiaForInfinityX8(IStrategy):
   INTERFACE_VERSION = 3
 
   def version(self) -> str:
-    return "v18.0.160"
+    return "v18.0.161"
 
   stoploss = -0.99
 
@@ -731,10 +731,14 @@ class NostalgiaForInfinityX8(IStrategy):
 
   system_v4_max_stake = 1.0  # ratio of first entry
   system_v4_stake_multiplier = 1.0
+  system_v4_grind_entry_before_derisk_enable = False
+  system_v4_grind_entry_before_derisk_distance = 0.02  # unleveraged price move from the grind average
 
   # Bad-trade exits. Enable for new v4 trades without changing older open trades.
   system_v4_bad_trade_exit_enable = True
   legacy_system_bad_trade_exit_enable = False
+  # Also assess a losing residual when realized gains keep the whole trade nonnegative.
+  inclusive_bad_trade_exit_enable = False
   bad_trade_controller_structure_break_exit_enable = True
   bad_trade_controller_structure_break_ema_gap_pct = 35.0
   bad_trade_controller_structure_break_min_adverse_move_pct = 25.0
@@ -1200,6 +1204,7 @@ class NostalgiaForInfinityX8(IStrategy):
       "max_slippage",
       "system_v4_bad_trade_exit_enable",
       "legacy_system_bad_trade_exit_enable",
+      "inclusive_bad_trade_exit_enable",
       "bad_trade_controller_structure_break_exit_enable",
       "bad_trade_controller_structure_break_ema_gap_pct",
       "bad_trade_controller_structure_break_min_adverse_move_pct",
@@ -1781,6 +1786,20 @@ class NostalgiaForInfinityX8(IStrategy):
     bound = self.bad_trade_controller_capitulation_add_gate_mfi_14_4h
     return (mfi_14_4h > 100.0 - bound) if is_short else (mfi_14_4h < bound)
 
+  def _grind_entry_before_derisk(
+    self, is_short: bool, rate: float, grind_open_rate: float, derisk_threshold: float, use_derisk: bool
+  ) -> bool:
+    if not (self.system_v4_grind_entry_before_derisk_enable and use_derisk and grind_open_rate > 0.0):
+      return False
+    distance = self.system_v4_grind_entry_before_derisk_distance
+    if is_short:
+      in_range = grind_open_rate * (1 - derisk_threshold - distance) <= rate < grind_open_rate * (1 - derisk_threshold)
+    else:
+      in_range = grind_open_rate * (1 + derisk_threshold) < rate <= grind_open_rate * (1 + derisk_threshold + distance)
+    if in_range:
+      self._grind_entry_tag = "g_pre_derisk"
+    return in_range
+
   def trade_order_state(self, trade: "Trade") -> tuple:
     orders = trade.orders
 
@@ -1996,7 +2015,9 @@ class NostalgiaForInfinityX8(IStrategy):
       if system_version == self.system_v4_name
       else self.legacy_system_bad_trade_exit_enable
     )
-    if bad_trade_exit_enable and profit_stake < 0.0:
+    if bad_trade_exit_enable and (
+      profit_stake < 0.0 or (self.inclusive_bad_trade_exit_enable and current_profit < 0.0)
+    ):
       bad_trade_exit_reason = self._bad_trade_controller_exit_reason(
         trade, current_time, current_rate, last_candle, filled_entries
       )
@@ -14552,9 +14573,9 @@ class NostalgiaForInfinityX8(IStrategy):
           # Logic
           long_entry_logic.append(
             # the 1d is rising and not floored — a 15m pullback inside a falling daily is a knife
-            (roc_9_1d > 0.0)
-            & (stochrsi_k_1d > 50.0)
-            & (rsi_14_1d > 50.0)
+            (roc_9_1d_gt_0)
+            & (stochrsi_k_1d_gt_50)
+            & (rsi_14_1d_gt_50)
             # 15m in an uptrend, price back at the 50 EMA but still above the 200
             & (ema_50_15m > ema_200_15m)
             & (close <= (ema_50_15m * 1.002))
@@ -14562,6 +14583,10 @@ class NostalgiaForInfinityX8(IStrategy):
             # a market-order bubble, and the buyers are the ones making it
             & (volume > large_bubble_thr)
             & (cvd_buy_vol > cvd_sell_vol)
+            # 5m not high
+            & (rsi_14 < 60.0)
+            # 5m not extended
+            & (change_pct < 0.35)
           )
 
         # Condition #61 - Rebuy mode (Long).
@@ -17773,6 +17798,8 @@ class NostalgiaForInfinityX8(IStrategy):
             & ((rsi_3_15m_gt_20) | (rsi_3_4h_gt_20) | (stochrsi_k_15m_lt_20))
             # 15m & 1h & 4h down move, 1h high
             & ((rsi_3_15m_gt_20) | (rsi_3_1h_gt_45) | (rsi_3_4h_gt_45) | (stochrsi_k_1h_lt_80))
+            # 15m & 1h & 4h down move, 4h downtrend
+            & ((rsi_3_15m_gt_25) | (rsi_3_1h_gt_25) | (rsi_3_4h_gt_25) | (roc_9_4h_gt_neg_40))
             # 15m & 1d down move, 1d high, 1h downtrend
             & ((rsi_3_15m_gt_20) | (rsi_3_1d_gt_25) | (aroonu_14_1d_lt_80) | (roc_9_1h_gt_neg_20))
             # 15m & 1h down move, 1h still high
@@ -23568,6 +23595,8 @@ class NostalgiaForInfinityX8(IStrategy):
             & ((stochrsi_k_1h_lt_70) | (stochrsi_k_4h_lt_10) | (aroonu_14_1d_lt_30))
             # 1h & 1d high, 1d down move
             & ((stochrsi_k_1h_lt_80) | (rsi_3_1d_gt_40) | (stochrsi_k_1d_lt_60))
+            # 1h money inflow
+            & (mfi_14_1h < 65.0)
             # 4h down move, 1d high & downtrend
             & ((rsi_3_4h_gt_10) | (aroonu_14_1d_lt_75) | (roc_9_1d_gt_neg_10))
             # 4h down move & still high, 1d high
@@ -23586,6 +23615,8 @@ class NostalgiaForInfinityX8(IStrategy):
             & ((rsi_3_4h_gt_40) | (stochrsi_k_4h_lt_50) | (rsi_3_1d_gt_60))
             # 4h & 1d down move, 1d still not low enough
             & ((rsi_3_4h_gt_50) | (rsi_3_1d_gt_40) | (stochrsi_k_1d_lt_20))
+            # 4h up move
+            & (rsi_3_4h_lt_70)
             # an ignition taken into 4h distribution: money leaving, the stochastic on the floor and no 4h momentum
             & ((cmf_20_4h > -0.2) | (stochrsi_k_4h > 10.0) | (rsi_3_4h > 35.0))
             # 4h still not low enough & high, 1d downtrend
@@ -27823,7 +27854,10 @@ class NostalgiaForInfinityX8(IStrategy):
             & (stochrsi_k_gt_80)
             & (willr_84_1h > -30.0)
             & (stochrsi_k_1h_gt_80)
-            & (bbb_20_2_0_1h > 20.0)
+            & (bbb_20_2_0_1h > 8.0)
+            # 4h downtrend not extreme, 1d range calm
+            & (minus_di_14_4h < 30.0)
+            & (range_pct_14_1d < 22.0)
             & (close_min_48 <= (close * 0.90))
           )
 
@@ -32648,6 +32682,8 @@ class NostalgiaForInfinityX8(IStrategy):
           # Logic
           short_entry_logic.append(
             (close < ema_200)
+            # 15m not low, 1h not narrow, 1h not oversold, 1d deep down move
+            & ((stochk_14_3_3_15m < 40.0) | (bbb_20_2_0_1h < 7.0) | (willr_14_1h < -70.0) | (roc_9_1d_gt_neg_20))
             # don't short a breakdown when the daily cycle already sits low (bounce zone)
             & (stochrsi_k_1d < 45.0)
             # the 4h has to be in on it: no recent 4h high behind the break
@@ -43412,7 +43448,16 @@ class NostalgiaForInfinityX8(IStrategy):
       and (grind_1_sub_grind_count < grind_1_max_sub_grinds)
       and (grind_1_sub_grind_count == 0 or (grind_1_distance_ratio < grind_1_sub_thresholds[grind_1_sub_grind_count]))
       and is_not_trade_max_stake_v4
-      and long_grind_entry_signal()
+      and (
+        long_grind_entry_signal()
+        or self._grind_entry_before_derisk(
+          False,
+          exit_rate,
+          grind_1_current_open_rate,
+          grind_1_derisk_grinds,
+          self.system_v4_grind_1_use_derisk,
+        )
+      )
     ):
       buy_amount = slice_amount * grind_1_stakes[grind_1_sub_grind_count] / trade_leverage
       if buy_amount < (min_stake * 1.5):
@@ -43530,7 +43575,16 @@ class NostalgiaForInfinityX8(IStrategy):
       and (grind_2_sub_grind_count < grind_2_max_sub_grinds)
       and (grind_2_sub_grind_count == 0 or (grind_2_distance_ratio < grind_2_sub_thresholds[grind_2_sub_grind_count]))
       and is_not_trade_max_stake_v4
-      and long_grind_entry_signal()
+      and (
+        long_grind_entry_signal()
+        or self._grind_entry_before_derisk(
+          False,
+          exit_rate,
+          grind_2_current_open_rate,
+          grind_2_derisk_grinds,
+          self.system_v4_grind_2_use_derisk,
+        )
+      )
     ):
       buy_amount = slice_amount * grind_2_stakes[grind_2_sub_grind_count] / trade_leverage
       if buy_amount < (min_stake * 1.5):
@@ -43648,7 +43702,16 @@ class NostalgiaForInfinityX8(IStrategy):
       and (grind_3_sub_grind_count < grind_3_max_sub_grinds)
       and (grind_3_sub_grind_count == 0 or (grind_3_distance_ratio < grind_3_sub_thresholds[grind_3_sub_grind_count]))
       and is_not_trade_max_stake_v4
-      and long_grind_entry_signal()
+      and (
+        long_grind_entry_signal()
+        or self._grind_entry_before_derisk(
+          False,
+          exit_rate,
+          grind_3_current_open_rate,
+          grind_3_derisk_grinds,
+          self.system_v4_grind_3_use_derisk,
+        )
+      )
     ):
       buy_amount = slice_amount * grind_3_stakes[grind_3_sub_grind_count] / trade_leverage
       if buy_amount < (min_stake * 1.5):
@@ -43767,7 +43830,17 @@ class NostalgiaForInfinityX8(IStrategy):
       and (grind_4_sub_grind_count < grind_4_max_sub_grinds)
       and (grind_4_sub_grind_count == 0 or (grind_4_distance_ratio < grind_4_sub_thresholds[grind_4_sub_grind_count]))
       and is_not_trade_max_stake_v4
-      and (long_grind_4_fallback_entry() or long_grind_entry_signal())
+      and (
+        long_grind_4_fallback_entry()
+        or long_grind_entry_signal()
+        or self._grind_entry_before_derisk(
+          False,
+          exit_rate,
+          grind_4_current_open_rate,
+          grind_4_derisk_grinds,
+          self.system_v4_grind_4_use_derisk,
+        )
+      )
     ):
       buy_amount = slice_amount * grind_4_stakes[grind_4_sub_grind_count] / trade_leverage
       if buy_amount < (min_stake * 1.5):
@@ -43891,6 +43964,13 @@ class NostalgiaForInfinityX8(IStrategy):
         or long_grind_5_liquidation_entry()
         or long_grind_entry_signal()
         or long_grind_5_liquidation_rescue_entry()
+        or self._grind_entry_before_derisk(
+          False,
+          exit_rate,
+          grind_5_current_open_rate,
+          grind_5_derisk_grinds,
+          self.system_v4_grind_5_use_derisk,
+        )
       )
     ):
       buy_amount = slice_amount * grind_5_stakes[grind_5_sub_grind_count] / trade_leverage
@@ -57696,7 +57776,16 @@ class NostalgiaForInfinityX8(IStrategy):
       and (grind_1_sub_grind_count < grind_1_max_sub_grinds)
       and (grind_1_sub_grind_count == 0 or (-grind_1_distance_ratio < grind_1_sub_thresholds[grind_1_sub_grind_count]))
       and is_not_trade_max_stake_v4
-      and short_grind_entry_signal()
+      and (
+        short_grind_entry_signal()
+        or self._grind_entry_before_derisk(
+          True,
+          exit_rate,
+          grind_1_current_open_rate,
+          grind_1_derisk_grinds,
+          self.system_v4_grind_1_use_derisk,
+        )
+      )
     ):
       buy_amount = slice_amount * grind_1_stakes[grind_1_sub_grind_count] / trade_leverage
       if buy_amount < (min_stake * 1.5):
@@ -57814,7 +57903,16 @@ class NostalgiaForInfinityX8(IStrategy):
       and (grind_2_sub_grind_count < grind_2_max_sub_grinds)
       and (grind_2_sub_grind_count == 0 or (-grind_2_distance_ratio < grind_2_sub_thresholds[grind_2_sub_grind_count]))
       and is_not_trade_max_stake_v4
-      and short_grind_entry_signal()
+      and (
+        short_grind_entry_signal()
+        or self._grind_entry_before_derisk(
+          True,
+          exit_rate,
+          grind_2_current_open_rate,
+          grind_2_derisk_grinds,
+          self.system_v4_grind_2_use_derisk,
+        )
+      )
     ):
       buy_amount = slice_amount * grind_2_stakes[grind_2_sub_grind_count] / trade_leverage
       if buy_amount < (min_stake * 1.5):
@@ -57932,7 +58030,16 @@ class NostalgiaForInfinityX8(IStrategy):
       and (grind_3_sub_grind_count < grind_3_max_sub_grinds)
       and (grind_3_sub_grind_count == 0 or (-grind_3_distance_ratio < grind_3_sub_thresholds[grind_3_sub_grind_count]))
       and is_not_trade_max_stake_v4
-      and short_grind_entry_signal()
+      and (
+        short_grind_entry_signal()
+        or self._grind_entry_before_derisk(
+          True,
+          exit_rate,
+          grind_3_current_open_rate,
+          grind_3_derisk_grinds,
+          self.system_v4_grind_3_use_derisk,
+        )
+      )
     ):
       buy_amount = slice_amount * grind_3_stakes[grind_3_sub_grind_count] / trade_leverage
       if buy_amount < (min_stake * 1.5):
@@ -58051,7 +58158,17 @@ class NostalgiaForInfinityX8(IStrategy):
       and (grind_4_sub_grind_count < grind_4_max_sub_grinds)
       and (grind_4_sub_grind_count == 0 or (-grind_4_distance_ratio < grind_4_sub_thresholds[grind_4_sub_grind_count]))
       and is_not_trade_max_stake_v4
-      and (short_grind_4_fallback_entry() or short_grind_entry_signal())
+      and (
+        short_grind_4_fallback_entry()
+        or short_grind_entry_signal()
+        or self._grind_entry_before_derisk(
+          True,
+          exit_rate,
+          grind_4_current_open_rate,
+          grind_4_derisk_grinds,
+          self.system_v4_grind_4_use_derisk,
+        )
+      )
     ):
       buy_amount = slice_amount * grind_4_stakes[grind_4_sub_grind_count] / trade_leverage
       if buy_amount < (min_stake * 1.5):
@@ -58175,6 +58292,13 @@ class NostalgiaForInfinityX8(IStrategy):
         or short_grind_5_liquidation_entry()
         or short_grind_entry_signal()
         or short_grind_5_liquidation_rescue_entry()
+        or self._grind_entry_before_derisk(
+          True,
+          exit_rate,
+          grind_5_current_open_rate,
+          grind_5_derisk_grinds,
+          self.system_v4_grind_5_use_derisk,
+        )
       )
     ):
       buy_amount = slice_amount * grind_5_stakes[grind_5_sub_grind_count] / trade_leverage
