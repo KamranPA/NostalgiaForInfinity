@@ -1,0 +1,116 @@
+# SAVE THIS FILE AS: .github/workflows/upstream-x8-watch.yml
+# (in .github/workflows/, alongside the other workflow files)
+name: Upstream X8 watch (notify only)
+
+# Watches the NostalgiaForInfinityX8.py file in the ORIGINAL repo (iterativv/NostalgiaForInfinity)
+# and sends a Telegram message whenever its latest version changes.
+# It compares the latest upstream version with the version it saw LAST TIME (not with this
+# fork), so you get exactly one message per upstream change.
+#
+# READ-ONLY for the bots: it never touches the strategy file, configs or any running bot.
+# Its only write is one tiny file (x8_last_seen.txt) on its own branch, upstream-watch.
+# First run: it just stores the current upstream version and tells you monitoring started.
+#
+# Needs the same Telegram secrets the other workflows use: TELEGRAM_TOKEN, TELEGRAM_CHAT_ID.
+
+on:
+  schedule:
+    - cron: "30 4 * * *"   # once a day, 04:30 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: upstream-x8-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # only to push the small state file to the upstream-watch branch
+
+env:
+  UPSTREAM_REPO: iterativv/NostalgiaForInfinity
+  UPSTREAM_BRANCH: main
+  WATCH_FILE: NostalgiaForInfinityX8.py
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check upstream and notify if changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -uo pipefail
+
+          # ---- last seen state (3 lines: version, commit sha, commit date) ----
+          LAST_VER=""; LAST_SHA=""; LAST_DATE=""
+          git fetch origin upstream-watch 2>/dev/null || true
+          if git show-ref --verify --quiet refs/remotes/origin/upstream-watch; then
+            STATE=$(git show origin/upstream-watch:x8_last_seen.txt 2>/dev/null || true)
+            LAST_VER=$(echo "$STATE" | sed -n 1p)
+            LAST_SHA=$(echo "$STATE" | sed -n 2p)
+            LAST_DATE=$(echo "$STATE" | sed -n 3p)
+          fi
+
+          # ---- newest upstream commit that touched the file ----
+          LATEST=$(gh api "repos/${UPSTREAM_REPO}/commits?sha=${UPSTREAM_BRANCH}&path=${WATCH_FILE}&per_page=1" \
+                     --jq '.[0] | .sha + " " + .commit.committer.date') || { echo "::error::GitHub API call failed"; exit 1; }
+          NEW_SHA=$(echo "$LATEST" | cut -d' ' -f1)
+          NEW_DATE=$(echo "$LATEST" | cut -d' ' -f2)
+          if [ -z "$NEW_SHA" ] || [ "$NEW_SHA" = "null" ]; then
+            echo "::error::could not read the latest upstream commit"; exit 1
+          fi
+
+          # ---- version string inside that exact commit ----
+          NEW_VER=$(curl -fsSL "https://raw.githubusercontent.com/${UPSTREAM_REPO}/${NEW_SHA}/${WATCH_FILE}" \
+                      | grep -m1 -A1 "def version" | grep -o 'v[0-9][0-9.]*' | head -1 || true)
+          [ -z "$NEW_VER" ] && NEW_VER="(version not found)"
+          echo "upstream: $NEW_VER @ ${NEW_SHA:0:8} ($NEW_DATE); last seen: ${LAST_VER:-none}"
+
+          send() {
+            [ -z "${TOKEN:-}" ] && { echo "no Telegram token; message not sent"; return 0; }
+            curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${CHAT_ID}" \
+              --data-urlencode "text=$1" > /dev/null || true
+          }
+
+          CHANGED=0
+          if [ -z "$LAST_SHA" ]; then
+            send "👁️ Upstream X8 watch started. Current upstream: ${NEW_VER}. You will get one message each time it changes. Nothing in the repo or the bots is touched."
+            CHANGED=1
+          elif [ "$NEW_SHA" != "$LAST_SHA" ]; then
+            COMMITS=$(gh api "repos/${UPSTREAM_REPO}/commits?sha=${UPSTREAM_BRANCH}&path=${WATCH_FILE}&since=${LAST_DATE}&per_page=12" \
+                        --jq '.[] | select(.sha != "'"$LAST_SHA"'") | "- " + (.commit.message | split("\n")[0])' 2>/dev/null | head -c 900 || true)
+            STATS=$(gh api "repos/${UPSTREAM_REPO}/compare/${LAST_SHA}...${NEW_SHA}" \
+                      --jq '.files[] | select(.filename == "'"$WATCH_FILE"'") | "+" + (.additions|tostring) + " / -" + (.deletions|tostring) + " lines"' 2>/dev/null || true)
+            send "🆕 Upstream X8 changed: ${LAST_VER:-?} → ${NEW_VER}${STATS:+ (${STATS})}.
+          ${COMMITS:-(no commit titles found)}
+          Compare: https://github.com/${UPSTREAM_REPO}/compare/${LAST_SHA:0:12}...${NEW_SHA:0:12}
+          Backtest it before using it. Nothing was changed in your repo."
+            CHANGED=1
+          else
+            echo "No change since last check."
+          fi
+
+          # ---- remember the new state on its own branch ----
+          if [ "$CHANGED" = "1" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            if git show-ref --verify --quiet refs/remotes/origin/upstream-watch; then
+              git checkout -B upstream-watch origin/upstream-watch --quiet
+            else
+              git checkout --orphan upstream-watch --quiet
+              git rm -rf . > /dev/null 2>&1 || true
+            fi
+            printf '%s\n%s\n%s\n' "$NEW_VER" "$NEW_SHA" "$NEW_DATE" > x8_last_seen.txt
+            git add x8_last_seen.txt
+            git commit -m "upstream X8 seen: ${NEW_VER} ${NEW_SHA:0:8}" --quiet || true
+            git push origin upstream-watch --quiet
+            echo "State saved."
+          fi
