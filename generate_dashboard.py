@@ -97,6 +97,20 @@ slippage % (not a % of profit). It shows cost and the profit left at 0.05% /
 0.10% / 0.20% per order plus the break-even slippage. It is an estimate, not a
 measurement; dry-run fills are idealised.
 
+FIX (2026-11-06): "True Total" ignored the profit/loss ALREADY REALIZED by
+partial exits (grind / derisk exits) of trades that are still open. Those
+amounts live in the trades table's `realized_profit` column (the "Realized
+Profit" line of Telegram /status). The old formula was
+    True Total = closed-trade profit + unrealized P/L of the remaining amount
+so a trade that had been cut down to a tiny remainder looked almost
+harmless (e.g. +0.07 USDT) while it had really lost ~100+ USDT. Now:
+    True Total = closed-trade profit + realized_profit of open trades
+                 + unrealized P/L of the remaining amount
+fetch_trades() reads realized_profit when the column exists (older
+freqtrade databases without it fall back to 0). The in-browser live
+re-pricing script uses the same corrected base. Snapshots already stored
+in the history file keep their old (too optimistic) True Total values.
+
 Usage:
     python generate_dashboard.py <spot_sqlite_path> <futures_sqlite_path> <history_sqlite_path> <output_html_path>
 """
@@ -139,15 +153,18 @@ def fetch_trades(db_path: str):
         return []
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    # realized_profit = profit/loss already booked by partial exits (grind /
+    # derisk) of a still-open trade. Older freqtrade databases don't have the
+    # column, so fall back to the old query (realized_profit then reads as 0).
+    cols = ("id, pair, is_open, is_short, enter_tag, exit_reason, "
+            "open_date, close_date, open_rate, close_rate, "
+            "amount, stake_amount, close_profit, close_profit_abs")
     try:
         cur = conn.cursor()
-        cur.execute("""
-            SELECT id, pair, is_open, is_short, enter_tag, exit_reason,
-                   open_date, close_date, open_rate, close_rate,
-                   amount, stake_amount, close_profit, close_profit_abs
-            FROM trades
-            ORDER BY open_date ASC
-        """)
+        try:
+            cur.execute(f"SELECT {cols}, realized_profit FROM trades ORDER BY open_date ASC")
+        except sqlite3.OperationalError:
+            cur.execute(f"SELECT {cols} FROM trades ORDER BY open_date ASC")
         rows = [dict(r) for r in cur.fetchall()]
     except sqlite3.OperationalError as e:
         print(f"  (could not read trades from {db_path}: {e})")
@@ -1325,7 +1342,10 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
           <td data-label="Unrealized P/L" id="lu-{mode_id}-{t['id']}">{unreal_str}</td>
         </tr>"""
 
-    true_total_abs = realized_abs + open_unrealized_abs_total
+    # FIX (2026-11-06): include what partial exits (grind/derisk) of the
+    # still-open trades have ALREADY realized (trades.realized_profit).
+    open_realized_abs = sum(to_float(t.get("realized_profit")) for t in open_trades)
+    true_total_abs = realized_abs + open_realized_abs + open_unrealized_abs_total
     total_capital_days = closed_capital_days + open_capital_days
     blended_rate_per_capital_day = (true_total_abs / total_capital_days) if total_capital_days > 0 else None
 
@@ -1366,6 +1386,11 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
         </div>
         <div class="stat-card">
+          <div class="label">Realized on Open Trades</div>
+          <div class="value {'profit-pos' if open_realized_abs >= 0 else 'profit-neg'}">{open_realized_abs:+.2f} USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">already booked by partial exits (grind/derisk)</div>
+        </div>
+        <div class="stat-card">
           <div class="label">Unrealized P/L (open)</div>
           <div id="live-unreal-{mode_id}" class="value {'profit-pos' if open_unrealized_abs_total >= 0 else 'profit-neg'}">{open_unrealized_abs_total:+.2f} USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">{open_capital_locked_total:.2f} USDT currently locked in open trades</div>
@@ -1373,7 +1398,7 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
           <div id="live-total-{mode_id}" class="value {'profit-pos' if true_total_abs >= 0 else 'profit-neg'}">{true_total_abs:+.2f} USDT</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now (closed + realized on open + unrealized)</div>
         </div>
         <div class="stat-card">
           <div class="label">Stuck Trades</div>
@@ -1485,7 +1510,7 @@ def build_mode_section(trades, live_prices, entry_fills, fills_by_trade, ml_read
   <div class="stat-card"><div class="label">Win Rate</div><div class="value">{win_rate*100:.1f}%</div></div>
   <div class="stat-card"><div class="label">Total Profit (closed only)</div>
     <div class="value {'profit-pos' if total_profit_abs >= 0 else 'profit-neg'}">{total_profit_abs:+.2f} USDT</div>
-    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes unrealized — see Capital Efficiency below</div></div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes open trades — see Capital Efficiency below</div></div>
 </div>
 
 {capital_eff_html}
@@ -1637,7 +1662,9 @@ new Chart(document.getElementById('{trend_id}'), {{
     # append the (guarded, once-per-page) script itself. Kept out of the
     # f-string above so no brace escaping is needed.
     live_payload = {
-        "realized": round(realized_abs, 4),
+        # realized = closed-trade profit + profit already realized by partial
+        # exits of open trades, so the live True Total matches the static one.
+        "realized": round(realized_abs + open_realized_abs, 4),
         "generated": now_utc.strftime("%Y-%m-%d %H:%M UTC"),
         "trades": [
             {
