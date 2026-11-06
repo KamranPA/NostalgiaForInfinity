@@ -1,0 +1,62 @@
+name: btc-context
+
+# Manual run. Downloads the chosen backtest artifacts (backtest-<run id>),
+# fetches Bitcoin (and each coin's) daily candles from OKX, and writes a report
+# on how the bad trades relate to Bitcoin's trend before entry.
+# Backtest artifacts expire after ~30 days, so run this soon after the backtest.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_ids:
+        description: "Backtest run IDs, comma separated"
+        required: true
+        default: "40096127384,41976295251"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ccxt
+        run: pip install ccxt
+
+      - name: Download backtest artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_IDS: ${{ inputs.run_ids }}
+        run: |
+          mkdir -p bt
+          for id in $(echo "$RUN_IDS" | tr ',' ' '); do
+            gh run download "$id" -R "$GITHUB_REPOSITORY" -n "backtest-$id" -D "bt/$id" \
+              || echo "could not download backtest-$id (expired or wrong id?)"
+          done
+          ls -R bt | head -60
+
+      - name: Analyze
+        run: python btc_context.py bt --out btc_context_report.txt
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f btc_context_report.txt ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat btc_context_report.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-context-report
+          path: btc_context_report.txt
