@@ -1,56 +1,55 @@
 #!/usr/bin/env python3
 """
-btc_context.py
+btc_context.py  (hourly version)
 
-Question it answers: did the BAD trades (deep grinders / big losers) tend to
-open while Bitcoin was falling or below its 200-day average, and how strongly
-did the coin move with Bitcoin before entry?
+Question: did the BAD trades (deep grinders / big losers) open while Bitcoin
+was already falling over the HOURS before entry? The strategy runs on 5-minute
+candles and a typical winner lasts about 3 hours, so daily BTC measures (like a
+daily EMA200) are far too slow. This version uses BTC 1-hour candles:
+
+  - BTC return over the previous 1 / 4 / 12 / 24 hours
+  - BTC distance below its 24-hour high
+  - BTC below its 1h EMA50 (about 2 days) and 1h EMA200 (about 8 days)
+
+Only hourly candles that were COMPLETED before the entry are used, so there is
+no look-ahead. The last completed hour can be up to 1 hour old for an entry
+that happens late in the hour (the hourly resolution is the limit here).
 
 INPUT
   <root>/<run_id>/...   = what `gh run download <run_id> --name backtest-<run_id>`
                           produces (it contains backtest_results/*.zip).
-  Bitcoin daily closes   = downloaded from OKX with ccxt (BTC/USDT:USDT, 1d),
-                          or a CSV passed with --btc-csv (Date + Close columns,
-                          e.g. Yahoo Finance "BTC-USD" history).
+  BTC 1h closes          = downloaded from OKX with ccxt (BTC/USDT:USDT, 1h),
+                          or a CSV passed with --btc-csv (timestamp + close).
 
-WHAT IT MEASURES (per LONG trade, using only candles COMPLETED before the entry
-day, so there is no look-ahead):
-  - BTC return over the previous 3 / 7 days
-  - BTC above / below its 200-day EMA
-  - correlation + beta of the coin's daily returns vs BTC over the previous
-    60 days (optional, needs the coin's daily candles; skipped with --no-coin-corr)
-
-A trade is called BAD when it lost more than 5 USDT or needed 5+ entries
-(grind/rebuy fills); GOOD when it made money with fewer than 5 entries.
-Samples are small (about a dozen bad trades per window): read the output as
-a hint, not as proof.
+A trade is BAD when it lost more than 5 USDT or needed 5+ entries (grind/rebuy
+fills); GOOD when it made money with fewer than 5 entries. Samples are small
+(roughly a dozen bad trades per window): treat results as a hint, not proof.
 
 USAGE
   python btc_context.py bt --out report.txt
-  python btc_context.py bt --btc-csv btc.csv --no-coin-corr --out report.txt
+  python btc_context.py bt --btc-csv btc_1h.csv --out report.txt
 """
 
 import argparse
 import csv
 import glob
 import json
-import math
 import os
 import statistics as st
 import sys
 import time
 import zipfile
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
-DAY = 86400
+HOUR = 3600
 BAD_LOSS_USDT = -5.0
 BAD_MIN_ENTRIES = 5
 
 # Trades that are open right now on the live bots (UTC), for context only.
 LIVE_TRADES = [
-    ("HUMA/USDT:USDT", "2026-11-04 14:00"),
-    ("SNXX/USDT:USDT", "2026-11-04 15:45"),
-    ("SOXL/USDT:USDT", "2026-10-29 23:00"),
+    ("HUMA", "2026-11-04 14:00"),
+    ("SNXX", "2026-11-04 15:45"),
+    ("SOXL", "2026-10-29 23:00"),
 ]
 
 
@@ -94,14 +93,16 @@ def load_run(run_dir):
 
 
 # ----------------------------------------------------------------------
-# Daily candles
+# BTC hourly candles
 # ----------------------------------------------------------------------
 
-def day_floor(ts):
-    return ts - (ts % DAY)
+def hour_floor(ts):
+    return ts - (ts % HOUR)
 
 
 def read_btc_csv(path):
+    """CSV with a timestamp/date column first and a 'close' column. Accepts
+    'YYYY-MM-DD HH:MM[:SS]' or epoch seconds/milliseconds."""
     series = {}
     with open(path, newline="") as f:
         rows = list(csv.reader(f))
@@ -110,21 +111,26 @@ def read_btc_csv(path):
     for r in rows[1:]:
         if len(r) <= ci or not r[0].strip():
             continue
+        raw = r[0].strip()
         try:
-            d = datetime.fromisoformat(r[0].strip()[:10]).replace(tzinfo=timezone.utc)
-            series[int(d.timestamp())] = float(r[ci].replace(",", ""))
+            if raw.replace(".", "", 1).isdigit():
+                v = float(raw)
+                ts = int(v / 1000) if v > 1e11 else int(v)
+            else:
+                ts = int(datetime.fromisoformat(raw.replace("T", " ")[:19]).replace(tzinfo=timezone.utc).timestamp())
+            series[hour_floor(ts)] = float(r[ci].replace(",", ""))
         except ValueError:
             continue
     return series
 
 
-def fetch_daily(exchange, symbol, since_ts, until_ts):
-    """{day_start_ts: close}. Paginates forward; stops when nothing new."""
+def fetch_hourly(exchange, symbol, since_ts, until_ts, max_calls=400):
+    """{hour_start_ts: close}. Paginates forward, 100 candles per call."""
     series = {}
     since = since_ts * 1000
-    for _ in range(40):
+    for _ in range(max_calls):
         try:
-            candles = exchange.fetch_ohlcv(symbol, "1d", since=since, limit=100)
+            candles = exchange.fetch_ohlcv(symbol, "1h", since=since, limit=100)
         except Exception as e:
             print(f"  (fetch_ohlcv failed for {symbol}: {e})", file=sys.stderr)
             break
@@ -132,20 +138,15 @@ def fetch_daily(exchange, symbol, since_ts, until_ts):
             break
         new = 0
         for ts, _o, _h, _l, c, _v in candles:
-            d = int(ts / 1000)
-            if d not in series:
-                series[d] = float(c)
+            h = int(ts / 1000)
+            if h not in series:
+                series[h] = float(c)
                 new += 1
         last = int(candles[-1][0] / 1000)
         if new == 0 or last >= until_ts:
             break
-        since = (last + DAY) * 1000
+        since = (last + HOUR) * 1000
     return series
-
-
-def sorted_series(series):
-    days = sorted(series)
-    return days, [series[d] for d in days]
 
 
 def ema(values, span):
@@ -159,51 +160,36 @@ def ema(values, span):
 
 class Btc:
     def __init__(self, series):
-        self.days, self.closes = sorted_series(series)
-        self.index = {d: i for i, d in enumerate(self.days)}
+        self.hours = sorted(series)
+        self.closes = [series[h] for h in self.hours]
+        self.index = {h: i for i, h in enumerate(self.hours)}
+        self.ema50 = ema(self.closes, 50)
         self.ema200 = ema(self.closes, 200)
 
     def last_completed(self, ts):
-        """Index of the last daily candle that closed before `ts`."""
-        target = day_floor(ts) - DAY
-        # walk back to the nearest available day (gaps / weekends safe)
+        """Index of the last hourly candle that CLOSED at or before `ts`."""
+        target = hour_floor(ts) - HOUR
         for back in range(0, 6):
-            i = self.index.get(target - back * DAY)
+            i = self.index.get(target - back * HOUR)
             if i is not None:
                 return i
         return None
 
     def context(self, ts):
         i = self.last_completed(ts)
-        if i is None:
+        if i is None or i < 24:
             return None
         c = self.closes
-        r3 = c[i] / c[i - 3] - 1 if i >= 3 else None
-        r7 = c[i] / c[i - 7] - 1 if i >= 7 else None
-        below = (c[i] < self.ema200[i]) if i >= 199 else None
-        return {"r3": r3, "r7": r7, "below_ema": below, "idx": i}
-
-
-def corr_beta(coin, btc, i_btc, window=60):
-    """Correlation and beta of the coin's daily returns vs BTC's over the
-    `window` days up to BTC index i_btc (matched on the same day)."""
-    if not coin or i_btc is None or i_btc < window:
-        return None, None
-    rc, rb = [], []
-    for k in range(i_btc - window + 1, i_btc + 1):
-        d0, d1 = btc.days[k - 1], btc.days[k]
-        if d0 in coin and d1 in coin and coin[d0] > 0:
-            rc.append(coin[d1] / coin[d0] - 1)
-            rb.append(btc.closes[k] / btc.closes[k - 1] - 1)
-    if len(rc) < 30:
-        return None, None
-    mc, mb = st.fmean(rc), st.fmean(rb)
-    cov = sum((a - mc) * (b - mb) for a, b in zip(rc, rb)) / (len(rc) - 1)
-    vc = st.pvariance(rc) * len(rc) / (len(rc) - 1)
-    vb = st.pvariance(rb) * len(rb) / (len(rb) - 1)
-    if vc <= 0 or vb <= 0:
-        return None, None
-    return cov / math.sqrt(vc * vb), cov / vb
+        hi24 = max(c[i - 23:i + 1])
+        return {
+            "r1": c[i] / c[i - 1] - 1,
+            "r4": c[i] / c[i - 4] - 1,
+            "r12": c[i] / c[i - 12] - 1,
+            "r24": c[i] / c[i - 24] - 1,
+            "dd24": c[i] / hi24 - 1,
+            "below50": (c[i] < self.ema50[i]) if i >= 50 else None,
+            "below200": (c[i] < self.ema200[i]) if i >= 200 else None,
+        }
 
 
 # ----------------------------------------------------------------------
@@ -211,7 +197,7 @@ def corr_beta(coin, btc, i_btc, window=60):
 # ----------------------------------------------------------------------
 
 def pct(x):
-    return "n/a" if x is None else f"{x * 100:+.1f}%"
+    return "n/a" if x is None else f"{x * 100:+.2f}%"
 
 
 def med(values):
@@ -227,10 +213,10 @@ def classify(t):
     return "other"
 
 
-def bucket_table(trades, key_fn, labels):
+def bucket_rows(trades, buckets):
     rows = []
-    for label, pred in labels:
-        sel = [t for t in trades if t.get("ctx") and pred(t)]
+    for label, pred in buckets:
+        sel = [t for t in trades if t["ctx"] and pred(t["ctx"])]
         bad = sum(1 for t in sel if t["cls"] == "bad")
         prof = sum(t["profit"] for t in sel)
         rate = f"{bad / len(sel) * 100:.0f}%" if sel else "-"
@@ -238,12 +224,15 @@ def bucket_table(trades, key_fn, labels):
     return rows
 
 
+def flag(v):
+    return "n/a" if v is None else ("below" if v else "above")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root", help="folder with one sub-folder per downloaded run id")
     ap.add_argument("--out", default="btc_context_report.txt")
-    ap.add_argument("--btc-csv", help="BTC daily CSV (Date,...,Close) instead of downloading")
-    ap.add_argument("--no-coin-corr", action="store_true")
+    ap.add_argument("--btc-csv", help="BTC hourly CSV instead of downloading from OKX")
     args = ap.parse_args()
 
     runs = {}
@@ -257,44 +246,60 @@ def main():
         sys.exit(1)
 
     all_ts = [t["open_ts"] for tr in runs.values() for t in tr]
-    start = day_floor(min(all_ts)) - 320 * DAY      # enough history for EMA200
+    live_ts = [int(datetime.strptime(w, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc).timestamp())
+               for _, w in LIVE_TRADES]
+    start = hour_floor(min(all_ts + live_ts)) - 15 * 24 * HOUR   # warm-up for EMA200 (1h)
     now = int(time.time())
 
-    exchange = None
-    if not args.btc_csv or not args.no_coin_corr:
+    if args.btc_csv:
+        series = read_btc_csv(args.btc_csv)
+    else:
         import ccxt
         exchange = ccxt.okx({"enableRateLimit": True, "options": {"defaultType": "swap"}})
-
-    if args.btc_csv:
-        btc_series = read_btc_csv(args.btc_csv)
-    else:
-        btc_series = fetch_daily(exchange, "BTC/USDT:USDT", start, now)
-    if len(btc_series) < 250:
-        print(f"Only {len(btc_series)} BTC daily candles - not enough (need ~250+).")
+        series = fetch_hourly(exchange, "BTC/USDT:USDT", start, now)
+    if len(series) < 500:
+        print(f"Only {len(series)} BTC hourly candles - not enough.")
         sys.exit(1)
-    btc = Btc(btc_series)
-    lines = [f"BTC daily candles: {len(btc.days)}  "
-             f"({datetime.fromtimestamp(btc.days[0], timezone.utc):%Y-%m-%d} -> "
-             f"{datetime.fromtimestamp(btc.days[-1], timezone.utc):%Y-%m-%d})", ""]
+    btc = Btc(series)
 
-    coin_cache = {}
+    first_h, last_h = btc.hours[0], btc.hours[-1]
+    expected = (last_h - first_h) // HOUR + 1
+    lines = [f"BTC 1h candles: {len(btc.hours)} of ~{expected} expected  "
+             f"({datetime.fromtimestamp(first_h, timezone.utc):%Y-%m-%d %H:%M} -> "
+             f"{datetime.fromtimestamp(last_h, timezone.utc):%Y-%m-%d %H:%M} UTC)", ""]
 
-    def coin_series(pair):
-        if args.no_coin_corr or exchange is None:
-            return None
-        if pair not in coin_cache:
-            coin_cache[pair] = fetch_daily(exchange, pair, start, now)
-        return coin_cache[pair]
+    r4_buckets = [
+        ("BTC 4h below -1.5%", lambda c: c["r4"] < -0.015),
+        ("BTC 4h -1.5% .. -0.5%", lambda c: -0.015 <= c["r4"] < -0.005),
+        ("BTC 4h -0.5% .. +0.5%", lambda c: -0.005 <= c["r4"] <= 0.005),
+        ("BTC 4h above +0.5%", lambda c: c["r4"] > 0.005),
+    ]
+    r24_buckets = [
+        ("BTC 24h below -3%", lambda c: c["r24"] < -0.03),
+        ("BTC 24h -3% .. -1%", lambda c: -0.03 <= c["r24"] < -0.01),
+        ("BTC 24h -1% .. +1%", lambda c: -0.01 <= c["r24"] <= 0.01),
+        ("BTC 24h above +1%", lambda c: c["r24"] > 0.01),
+    ]
+    ema_buckets = [
+        ("BTC below 1h EMA50", lambda c: c["below50"] is True),
+        ("BTC above 1h EMA50", lambda c: c["below50"] is False),
+        ("BTC below 1h EMA200", lambda c: c["below200"] is True),
+        ("BTC above 1h EMA200", lambda c: c["below200"] is False),
+    ]
+    r1_buckets = [
+        ("BTC fell >0.5% last hour", lambda c: c["r1"] < -0.005),
+        ("BTC otherwise", lambda c: c["r1"] >= -0.005),
+    ]
 
     for run_id, trades in runs.items():
         longs = [t for t in trades if not t["short"]]
         first = min(t["open_ts"] for t in trades)
         last = max(t["open_ts"] for t in trades)
-        i0, i1 = btc.last_completed(first), btc.last_completed(last)
         lines.append("=" * 78)
         lines.append(f"RUN {run_id}: {len(trades)} trades ({len(longs)} long), "
                      f"{datetime.fromtimestamp(first, timezone.utc):%Y-%m-%d} -> "
                      f"{datetime.fromtimestamp(last, timezone.utc):%Y-%m-%d}")
+        i0, i1 = btc.last_completed(first), btc.last_completed(last)
         if i0 is not None and i1 is not None:
             lines.append(f"BTC over the window: {pct(btc.closes[i1] / btc.closes[i0] - 1)}")
         lines.append("")
@@ -302,67 +307,52 @@ def main():
         for t in longs:
             t["ctx"] = btc.context(t["open_ts"])
             t["cls"] = classify(t)
-            if t["ctx"]:
-                cs = coin_series(t["pair"])
-                t["corr"], t["beta"] = corr_beta(cs, btc, t["ctx"]["idx"])
-            else:
-                t["corr"] = t["beta"] = None
-
-        bad = [t for t in longs if t["cls"] == "bad"]
-        good = [t for t in longs if t["cls"] == "good"]
-        lines.append(f"Long trades: bad {len(bad)} (loss > {-BAD_LOSS_USDT:.0f} USDT or "
-                     f"{BAD_MIN_ENTRIES}+ entries), good {len(good)}")
+        usable = [t for t in longs if t["ctx"]]
+        bad = [t for t in usable if t["cls"] == "bad"]
+        good = [t for t in usable if t["cls"] == "good"]
+        lines.append(f"Long trades with BTC context: {len(usable)}  |  bad {len(bad)} "
+                     f"(loss > {-BAD_LOSS_USDT:.0f} USDT or {BAD_MIN_ENTRIES}+ entries)  |  good {len(good)}")
         for name, grp in (("bad", bad), ("good", good)):
-            c = [t["ctx"] for t in grp if t["ctx"]]
-            lines.append(f"  {name:<5} median BTC 3d {pct(med([x['r3'] for x in c]))}   "
-                         f"7d {pct(med([x['r7'] for x in c]))}   "
-                         f"below EMA200: {sum(1 for x in c if x['below_ema'])}/"
-                         f"{sum(1 for x in c if x['below_ema'] is not None)}"
-                         + ("" if args.no_coin_corr else
-                            f"   corr60 {med([t['corr'] for t in grp]) if med([t['corr'] for t in grp]) is None else round(med([t['corr'] for t in grp]), 2)}"
-                            f"   beta {med([t['beta'] for t in grp]) if med([t['beta'] for t in grp]) is None else round(med([t['beta'] for t in grp]), 2)}"))
+            c = [t["ctx"] for t in grp]
+            below50 = [x["below50"] for x in c if x["below50"] is not None]
+            lines.append(f"  {name:<5} median BTC 1h {pct(med([x['r1'] for x in c]))}  "
+                         f"4h {pct(med([x['r4'] for x in c]))}  12h {pct(med([x['r12'] for x in c]))}  "
+                         f"24h {pct(med([x['r24'] for x in c]))}  below24hHigh {pct(med([x['dd24'] for x in c]))}  "
+                         f"below EMA50(1h): {sum(1 for v in below50 if v)}/{len(below50)}")
         lines.append("")
-        lines.append("By BTC 7-day return before entry:")
-        lines += bucket_table(longs, None, [
-            ("BTC 7d below -10%", lambda t: t["ctx"]["r7"] is not None and t["ctx"]["r7"] < -0.10),
-            ("BTC 7d -10% .. -3%", lambda t: t["ctx"]["r7"] is not None and -0.10 <= t["ctx"]["r7"] < -0.03),
-            ("BTC 7d -3% .. +3%", lambda t: t["ctx"]["r7"] is not None and -0.03 <= t["ctx"]["r7"] <= 0.03),
-            ("BTC 7d above +3%", lambda t: t["ctx"]["r7"] is not None and t["ctx"]["r7"] > 0.03),
-        ])
-        lines.append("By BTC vs its 200-day EMA:")
-        lines += bucket_table(longs, None, [
-            ("BTC below EMA200", lambda t: t["ctx"]["below_ema"] is True),
-            ("BTC above EMA200", lambda t: t["ctx"]["below_ema"] is False),
-        ])
+        lines.append("By BTC 4-hour return before entry:")
+        lines += bucket_rows(usable, r4_buckets)
+        lines.append("By BTC 24-hour return before entry:")
+        lines += bucket_rows(usable, r24_buckets)
+        lines.append("By BTC last-hour move:")
+        lines += bucket_rows(usable, r1_buckets)
+        lines.append("By BTC vs hourly EMAs:")
+        lines += bucket_rows(usable, ema_buckets)
         lines.append("")
         lines.append("Worst 8 long trades:")
-        for t in sorted(longs, key=lambda t: t["profit"])[:8]:
-            c = t["ctx"] or {}
+        for t in sorted(usable, key=lambda t: t["profit"])[:8]:
+            c = t["ctx"]
             lines.append(f"  {t['pair'].split('/')[0]:<8} tag {t['tag']:<5} {t['profit']:+8.1f} USDT  "
                          f"{t['n_entries']:>3} entries {t['days']:5.1f}d  "
-                         f"BTC3d {pct(c.get('r3'))} 7d {pct(c.get('r7'))} "
-                         f"belowEMA200={c.get('below_ema')}"
-                         + ("" if args.no_coin_corr else
-                            f"  corr60={None if t['corr'] is None else round(t['corr'], 2)}"))
+                         f"BTC 1h {pct(c['r1'])} 4h {pct(c['r4'])} 24h {pct(c['r24'])} "
+                         f"EMA50 {flag(c['below50'])} EMA200 {flag(c['below200'])}")
         lines.append("")
 
     lines.append("=" * 78)
-    lines.append("TRADES OPEN ON THE LIVE BOTS (context at entry)")
-    for pair, when in LIVE_TRADES:
+    lines.append("TRADES OPEN ON THE LIVE BOTS (BTC context at entry)")
+    for name, when in LIVE_TRADES:
         ts = int(datetime.strptime(when, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc).timestamp())
         c = btc.context(ts)
         if not c:
-            lines.append(f"  {pair} {when}: no BTC data for that date (CSV/ccxt ends earlier)")
+            lines.append(f"  {name} {when}: no BTC data for that time")
             continue
-        extra = ""
-        if not args.no_coin_corr:
-            corr, beta = corr_beta(coin_series(pair), btc, c["idx"])
-            extra = f"  corr60={None if corr is None else round(corr, 2)} beta={None if beta is None else round(beta, 2)}"
-        lines.append(f"  {pair.split('/')[0]:<6} {when}  BTC3d {pct(c['r3'])} 7d {pct(c['r7'])} "
-                     f"belowEMA200={c['below_ema']}{extra}")
+        lines.append(f"  {name:<6} {when}  BTC 1h {pct(c['r1'])} 4h {pct(c['r4'])} 12h {pct(c['r12'])} "
+                     f"24h {pct(c['r24'])}  below24hHigh {pct(c['dd24'])}  "
+                     f"EMA50 {flag(c['below50'])} EMA200 {flag(c['below200'])}")
     lines.append("")
-    lines.append("Reminder: small samples. 'bad' is about a dozen trades per window, so a pattern here "
-                 "is a hint to test with a filter backtest, not a proven rule.")
+    lines.append("Reminder: small samples ('bad' is a handful of trades per window). A pattern here "
+                 "is a hint to test with a filter backtest, not a proven rule. Hourly candles are the "
+                 "finest resolution used; very fast 5-minute shocks inside an hour are not visible.")
 
     text = "\n".join(lines)
     with open(args.out, "w") as f:
