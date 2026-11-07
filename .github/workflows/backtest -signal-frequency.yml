@@ -34,7 +34,7 @@ run-name: >-
 #   Peak memory / wall time of the backtest are written to the Job Summary
 #   (use them to size longer windows).
 #
-# Strategies: X (= X1), X2 ... X8, X7ML, X8Guard, X8Cap and X8ShortBand. Each needs its .py
+# Strategies: X (= X1), X2 ... X8, X7ML, X8Guard, X8Cap, X8ShortBand and X8Cut. Each needs its .py
 # file in the repo root or in user_data/strategies/. Older ones (X..X6) have no
 # NFI_SAFE_PARAMETERS list, so nfi_overrides / stale_max_daily_range_pct /
 # derisk_hold_short are most likely IGNORED there (the post-backtest check
@@ -50,6 +50,13 @@ run-name: >-
 # {"band_z": 1.645, "band_horizon_days": 1, "band_near": 0.2}. The Job Summary shows how
 # many short signal candles it blocked. File: NostalgiaForInfinityX8ShortBand.py
 #
+# X8Cut (EXPERIMENT, research only) = X8 + a rule that CLOSES THE WHOLE POSITION of a
+# deep grinder and then locks the pair for a few days. Everything is off by default
+# (then it behaves exactly like X8). Tune it with guard_parameters, e.g.
+# {"cut_entries": 3} or {"cut_age_hours": 72, "cut_adverse_pct": 12, "cut_lock_days": 3}.
+# Cut trades carry the exit reason cut_entries_<N> or cut_age_<H>h_<D>pct; the Job
+# Summary lists how many cuts happened. File: NostalgiaForInfinityX8Cut.py
+#
 # Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
 # applied to the whole window (freqtrade can't rebuild historical pairlists).
 
@@ -64,6 +71,7 @@ on:
           - NostalgiaForInfinityX8Guard
           - NostalgiaForInfinityX8Cap
           - NostalgiaForInfinityX8ShortBand
+          - NostalgiaForInfinityX8Cut
           - NostalgiaForInfinityX7ML
           - NostalgiaForInfinityX7
           - NostalgiaForInfinityX6
@@ -120,7 +128,7 @@ on:
         type: string
         default: ''
       guard_parameters:
-        description: 'X8Guard / X8Cap / X8ShortBand only: JSON object, e.g. {"guard_max_entries": 3} or {"band_near": 0.2, "band_horizon_days": 1} (empty = defaults)'
+        description: 'X8Guard / X8Cap / X8ShortBand / X8Cut only: JSON object, e.g. {"guard_max_entries": 3}, {"band_near": 0.2} or {"cut_entries": 3} (empty = defaults)'
         type: string
         default: ''
       export_signals:
@@ -184,7 +192,7 @@ jobs:
                    NostalgiaForInfinityX4 NostalgiaForInfinityX5 NostalgiaForInfinityX6 \
                    NostalgiaForInfinityX7 NostalgiaForInfinityX7ML NostalgiaForInfinityX8 \
                    NostalgiaForInfinityX8Guard NostalgiaForInfinityX8Cap \
-                   NostalgiaForInfinityX8ShortBand; do
+                   NostalgiaForInfinityX8ShortBand NostalgiaForInfinityX8Cut; do
             for f in "${n}.py" "user_data/strategies/${n}.py"; do
               if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
                 git checkout FETCH_HEAD -- "$f"
@@ -263,11 +271,11 @@ jobs:
           # X7 base file: kept for every run (as before); needed by X7 and the ML subclass.
           copy_strategy NostalgiaForInfinityX7
 
-          # The selected strategy itself (X, X2 ... X8, X7ML, X8Guard, X8Cap, X8ShortBand).
+          # The selected strategy itself (X, X2 ... X8, X7ML, X8Guard, X8Cap, X8ShortBand, X8Cut).
           copy_strategy "$STRATEGY"
 
           # Parents of the thin subclasses.
-          if [ "$STRATEGY" = "NostalgiaForInfinityX8Guard" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8Cap" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8ShortBand" ]; then
+          if [ "$STRATEGY" = "NostalgiaForInfinityX8Guard" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8Cap" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8ShortBand" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8Cut" ]; then
             copy_strategy NostalgiaForInfinityX8
           fi
           if [ "$STRATEGY" = "NostalgiaForInfinityX7ML" ]; then
@@ -308,17 +316,18 @@ jobs:
       - name: Strategy diagnostics (version, commit, bad-trade flags)
         run: |
           F="user_data/strategies/${base_strategy}.py"
-          # parent file of a thin subclass: strip a trailing Guard / Cap / ShortBand
+          # parent file of a thin subclass: strip a trailing Guard / Cap / ShortBand / Cut
           PARENT_NAME="${base_strategy%Guard}"
           PARENT_NAME="${PARENT_NAME%Cap}"
           PARENT_NAME="${PARENT_NAME%ShortBand}"
+          PARENT_NAME="${PARENT_NAME%Cut}"
           FP="user_data/strategies/${PARENT_NAME}.py"
           {
             echo "repo HEAD:      $(git rev-parse HEAD)"
             echo "strategy ref:   ${strategy_ref:-<same as HEAD>}"
             echo "strategy file:  $F"
             echo "file sha256:    $(sha256sum "$F" | cut -d' ' -f1)"
-            if [ "$base_strategy" = "NostalgiaForInfinityX8Guard" ] || [ "$base_strategy" = "NostalgiaForInfinityX8Cap" ] || [ "$base_strategy" = "NostalgiaForInfinityX8ShortBand" ]; then
+            if [ "$base_strategy" = "NostalgiaForInfinityX8Guard" ] || [ "$base_strategy" = "NostalgiaForInfinityX8Cap" ] || [ "$base_strategy" = "NostalgiaForInfinityX8ShortBand" ] || [ "$base_strategy" = "NostalgiaForInfinityX8Cut" ]; then
               echo "parent X8 sha:  $(sha256sum user_data/strategies/NostalgiaForInfinityX8.py | cut -d' ' -f1)"
               echo "parent version: $(grep -A1 'def version' user_data/strategies/NostalgiaForInfinityX8.py | grep return | tr -d ' ')"
             fi
@@ -328,6 +337,9 @@ jobs:
             fi
             if [ "$base_strategy" = "NostalgiaForInfinityX8ShortBand" ]; then
               echo "band parameters requested (guard_parameters): ${GUARD_IN:-<none, class defaults>}"
+            fi
+            if [ "$base_strategy" = "NostalgiaForInfinityX8Cut" ]; then
+              echo "cut parameters requested (guard_parameters): ${GUARD_IN:-<none, everything off = plain X8>}"
             fi
             echo "version():"
             grep -n -A2 "def version" "$FP" | head -5 || true
@@ -430,8 +442,8 @@ jobs:
           if requested:
               # Validate keys against the strategy's own NFI_SAFE_PARAMETERS list.
               base = os.environ.get("base_strategy", "NostalgiaForInfinityX8")
-              # Parent strategy file: strip the Guard / Cap / ML / ShortBand subclass suffix.
-              family_file = re.sub(r"(Guard|ML|Cap|ShortBand)$", "", base) + ".py"
+              # Parent strategy file: strip the Guard / Cap / ML / ShortBand / Cut subclass suffix.
+              family_file = re.sub(r"(Guard|ML|Cap|ShortBand|Cut)$", "", base) + ".py"
               src_path = os.path.join("user_data", "strategies", family_file)
               safe = set()
               try:
@@ -461,8 +473,8 @@ jobs:
 
           graw = os.environ.get("GUARD_IN", "").strip()
           if graw:
-              if not os.environ.get("base_strategy", "").endswith(("Guard", "Cap", "ShortBand")):
-                  print("::warning::guard_parameters given but strategy is not an X8Guard / X8Cap / X8ShortBand -- ignored by the strategy.")
+              if not os.environ.get("base_strategy", "").endswith(("Guard", "Cap", "ShortBand", "Cut")):
+                  print("::warning::guard_parameters given but strategy is not an X8Guard / X8Cap / X8ShortBand / X8Cut -- ignored by the strategy.")
               try:
                   gp = json.loads(graw)
               except json.JSONDecodeError as e:
@@ -634,6 +646,33 @@ jobs:
           print(text)
           PYEOF
 
+      - name: Cut statistics (X8Cut only)
+        if: always() && inputs.strategy == 'NostalgiaForInfinityX8Cut'
+        continue-on-error: true
+        run: |
+          python3 << 'PYEOF'
+          import re
+          from collections import Counter
+          try:
+              lines = open("user_data/logs/backtest_stderr.log", errors="replace").read().splitlines()
+          except OSError:
+              lines = []
+          cuts = []
+          for l in lines:
+              m = re.search(r"\[Cut\] (\S+) reason=(\S+) entries=(\d+) age_h=([\d.]+) adverse_pct=(\S+)", l)
+              if m:
+                  cuts.append(m.groups())
+          # custom_exit is evaluated every candle until the exit fills, so one trade can log
+          # several lines; the exit reasons in the trade summary give the real number of cuts.
+          by_reason = Counter(c[1] for c in cuts)
+          pairs = sorted({c[0] for c in cuts})
+          text = (f"[Cut] log lines: {len(cuts)} (a trade can log more than once)\n"
+                  f"pairs cut: {len(pairs)} -> {', '.join(p.split('/')[0] for p in pairs)}\n"
+                  f"by reason: {dict(by_reason)}\n")
+          open("user_data/logs/cut.txt", "w").write(text)
+          print(text)
+          PYEOF
+
       - name: Summarize trades (weeks, tags, exits, long/short, worst trades)
         run: |
           python3 << 'PYEOF'
@@ -684,7 +723,7 @@ jobs:
           losers = [t for t in trades if t.get("profit_abs", 0) < 0]
           w(f"Losing trades: {len(losers)}  (sum {sum(t['profit_abs'] for t in losers):.3f} USDT)")
 
-          w("\nBy exit_reason (only non-profit exits, i.e. force_exit/stop_loss/bad_trade/...):")
+          w("\nBy exit_reason (only non-profit exits, i.e. force_exit/stop_loss/bad_trade/cut/...):")
           by_exit = defaultdict(lambda: [0, 0.0])
           for t in trades:
               r = t.get("exit_reason", "?")
@@ -692,7 +731,7 @@ jobs:
               by_exit[r][1] += t.get("profit_abs", 0)
           for r, (n, p) in sorted(by_exit.items(), key=lambda x: x[1][1]):
               if p < 0 or r in ("force_exit", "stop_loss") or "bad_trade" in r or "derisk" in r \
-                      or "structure" in r or "abandon" in r:
+                      or "structure" in r or "abandon" in r or r.startswith("cut_"):
                   w(f"  {r:50s} n={n:3d}  profit={p:10.3f}")
 
           w("\nBy enter_tag (count, profit USDT, losses) -- worst 15:")
@@ -774,6 +813,12 @@ jobs:
               echo "### ShortBand filter"
               echo '```'
               cat user_data/logs/shortband.txt
+              echo '```'
+            fi
+            if [ -f user_data/logs/cut.txt ]; then
+              echo "### Cut rule"
+              echo '```'
+              cat user_data/logs/cut.txt
               echo '```'
             fi
             if [ -f user_data/logs/diagnostics.txt ]; then
