@@ -2,26 +2,40 @@
 generate_dashboard_overview.py
 
 FUTURES-ONLY version, WITHOUT X7ML (2026-10-25): the spot bots are off and
-the team migrated from X7ML to X8, so the overview now shows only the
+the team migrated from X7ML to X8, so the overview shows only the
 2 futures bots: X8 and X8 Guard.
 
-TWO pages from one run:
+RESET OF THE NUMBERS (v2 of this script)
+----------------------------------------
+From the switch time T on, the MAIN page (output_html_path) counts both bots
+from ZERO: only trades OPENED at/after T are included in its cards and charts.
+T is read from "cut_start_date" in config_dryrun_futures_x8guard.json
+(guard_parameters) -- the SAME value the Guard strategy and guard.html use.
 
-  MAIN page (output_html_path) -- ONLY the essentials, for the 2 futures bots:
-     per bot = headline stats grid, Capital Efficiency card,
-               Equity Curve, True Total & Stuck Trades chart.
+Nothing is deleted or changed:
+  * the DETAILS page (optional 8th argument) keeps showing the full ALL-TIME
+    numbers, tables and charts exactly as before;
+  * the bots' databases and the history file are untouched; the old history
+    snapshots stay under their old mode ids (futures_x8, futures_x8guard);
+  * the reset view records its own snapshots under NEW mode ids
+    (futures_x8_since, futures_x8guard_since), so its "True Total over time"
+    chart simply starts at the reset.
 
-  DETAILS page (optional 8th arg) -- everything else, collapsed per bot:
-     trade tables, tag/pair performance, significance, duration,
-     clustering, DCA.
+Trades opened BEFORE T (still open, or closed after T) are carried over by
+both bots. They are NOT counted in the reset numbers, but are listed side by
+side in a "Carried over" card, so a difference in what each bot still holds is
+visible instead of hidden.
+
+If T is missing from the config or lies in the future, both pages behave as
+before (all-time numbers) and a note says when the reset is scheduled.
 
 It IMPORTS generate_dashboard.py and generate_dashboard_compare.py and
 reuses their builders; neither file is edited. The existing section HTML
 is re-ordered by capturing the diagnostic cards (monkeypatch, same
 technique compare.py uses) and splitting at a marker.
 
-It does NOT write history snapshots (the other scripts already do), so
-running it never double-records anything.
+It writes history snapshots ONLY for the two new "_since" mode ids; the other
+scripts keep recording the old ids, so nothing is double-recorded.
 
 COMMAND-LINE NOTE: the argument list is UNCHANGED on purpose, so the
 workflow file does not need editing. The two spot sqlite arguments
@@ -43,6 +57,7 @@ from datetime import datetime, timezone
 
 import generate_dashboard as gd
 import generate_dashboard_compare as gc
+from generate_dashboard_guard import read_guard_parameters, read_switch_time, inherited_html
 
 SPLIT = "<!--NFI_SPLIT-->"
 DIAG = (
@@ -67,7 +82,7 @@ EXTRA_CSS = """
 def build_and_split(builder, *args, **kwargs):
     """Runs a gd.build_one_mode-style builder with the diagnostic card
     builders captured, then returns (title, top_html, detail_html,
-    analytics_html, section_js)."""
+    analytics_html, section_js, bundle)."""
     cap, saved = {}, {n: getattr(gd, n) for n in DIAG}
 
     def wrap(name, ret):
@@ -95,7 +110,7 @@ def build_and_split(builder, *args, **kwargs):
     else:
         top, sig = before, ""
     analytics = sig + "".join(cap.get(n, "") for n in DIAG)
-    return b["compare"]["mode_title"], top, detail, analytics, b["section_js"]
+    return b["compare"]["mode_title"], top, detail, analytics, b["section_js"], b
 
 
 def slim_top(top):
@@ -107,40 +122,116 @@ def slim_top(top):
     return top.replace('<div class="two-col">', '<div>')
 
 
+def build_since(path, history_db, mode_id, title, note, config_path, reset=None, **kw):
+    """Same as gc.build_x8_mode, but only trades OPENED at/after `reset` are loaded
+    (gd.fetch_trades is wrapped for the duration of the call; the database is not touched)."""
+    orig = gd.fetch_trades
+
+    def filtered(db_path):
+        return [t for t in orig(db_path)
+                if t["open_date"] is not None and gd.to_aware_utc(t["open_date"]) >= reset]
+
+    gd.fetch_trades = filtered
+    try:
+        return gc.build_x8_mode(path, history_db, mode_id, title, note, config_path, **kw)
+    finally:
+        gd.fetch_trades = orig
+
+
 def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, details_path=None):
     # spot_x7, fut_x7 and spot_x8 are intentionally unused
     # (spot bots are off; X7ML was retired on 2026-10-25).
     gc.install_patches()
     swap = gc.SWAP_OPTIONS
+    now = datetime.now(timezone.utc)
 
-    jobs = [
-        ("futures", gc.build_x8_mode, (fut_x8, history_db, "futures_x8", "🟠 X8 FUTURES — OKX",
-            "OKX perpetual swaps · isolated margin · 3x leverage", "config_dryrun_futures_x8.json"),
-            dict(live_price_exchange_id="okx", live_price_ccxt_options=swap)),
-    ]
+    reset = read_switch_time(read_guard_parameters())
+    reset_active = reset is not None and reset <= now
+    reset_txt = f"{reset:%Y-%m-%d %H:%M} UTC" if reset else ""
+    base_note = "OKX perpetual swaps · isolated margin · 3x leverage"
+    guard_note = base_note + (f" · cut rule from {reset_txt}" if reset else "")
+
+    jobs = [("futures_x8", "🟠 X8 FUTURES — OKX", base_note, fut_x8, "config_dryrun_futures_x8.json")]
     if fut_guard and os.path.exists(fut_guard) and os.path.getsize(fut_guard) > 0:
-        jobs.append(("futures", gc.build_x8_mode, (fut_guard, history_db, "futures_x8guard",
-            "🛡️ X8 GUARD FUTURES — OKX", "OKX perpetual swaps · isolated margin · 3x leverage · stale_range 15",
-            "config_dryrun_futures_x8guard.json"),
-            dict(live_price_exchange_id="okx", live_price_ccxt_options=swap)))
+        jobs.append(("futures_x8guard", "🛡️ X8 GUARD FUTURES — OKX", guard_note,
+                     fut_guard, "config_dryrun_futures_x8guard.json"))
 
+    kw = dict(live_price_exchange_id="okx", live_price_ccxt_options=swap)
     tops = {"futures": ""}
-    details, analytics, fulls, js = "", "", "", ""
-    for group, builder, args, kwargs in jobs:
+    details, analytics, fulls = "", "", ""
+    js_main, js_all = "", ""
+    all_trades = {}          # mode_id -> all-time trade list (for the carried-over card)
+
+    for mode_id, title_txt, note, path, cfg_path in jobs:
         try:
-            title, top, detail, ana, section_js = build_and_split(builder, *args, **kwargs)
+            title, top_all, detail, ana, section_js_all, b_all = build_and_split(
+                gc.build_x8_mode, path, history_db, mode_id, title_txt, note, cfg_path, **kw)
         except Exception:
             traceback.print_exc()
-            tops[group] += f'<div class="card skip-note">Could not build {gd.esc(args[3])} (see workflow log).</div>'
+            tops["futures"] += f'<div class="card skip-note">Could not build {gd.esc(title_txt)} (see workflow log).</div>'
             continue
-        tops[group] += slim_top(top)
-        fulls += f'<details class="fold"><summary>{gd.esc(title)}</summary><div class="inner">{top}</div></details>'
+        all_trades[mode_id] = b_all["trades"]
+
+        # --- MAIN page block: since the reset (new trades only), else all-time ---
+        main_top, main_js = top_all, section_js_all
+        if reset_active:
+            try:
+                s_title, s_top, _d, _a, s_js, s_bundle = build_and_split(
+                    build_since, path, history_db, mode_id + "_since",
+                    title_txt.replace(" — OKX", " — since reset — OKX"),
+                    note + f" · numbers restart at {reset_txt}", cfg_path, reset=reset, **kw)
+                main_top, main_js = s_top, s_js
+                try:
+                    gd.record_snapshot(history_db, mode_id + "_since", s_bundle["current_snapshot"])
+                except Exception:
+                    traceback.print_exc()
+                    print("Warning: could not record the since-reset snapshot (page still written).")
+            except Exception:
+                traceback.print_exc()
+                tops["futures"] += (f'<div class="card skip-note">Could not build the since-reset view of '
+                                    f'{gd.esc(title_txt)} - showing all-time numbers instead (see workflow log).</div>')
+        tops["futures"] += slim_top(main_top)
+        js_main += main_js
+
+        # --- DETAILS page: always the full all-time numbers (unchanged) ---
+        fulls += f'<details class="fold"><summary>{gd.esc(title)}</summary><div class="inner">{top_all}</div></details>'
         details += f'<details class="fold"><summary>{gd.esc(title)}</summary><div class="inner">{detail}</div></details>'
         if ana.strip():
             analytics += f'<details class="fold"><summary>{gd.esc(title)}</summary><div class="inner">{ana}</div></details>'
-        js += section_js
+        js_all += section_js_all
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    # ---- reset note + carried-over card (main page only) ----
+    reset_cards = ""
+    if reset_active:
+        counts = []
+        for mode_id, label in (("futures_x8", "X8"), ("futures_x8guard", "X8 Guard")):
+            trs = all_trades.get(mode_id)
+            if trs is None:
+                continue
+            carried_open = sum(1 for t in trs if t["is_open"] and t["open_date"]
+                               and gd.to_aware_utc(t["open_date"]) < reset)
+            counts.append(f"{label}: <b>{carried_open}</b> open")
+        reset_cards = f"""
+<div class="card">
+  <h3>🔄 Numbers restart at {reset_txt}</h3>
+  <p class="muted" style="font-size:0.85rem;margin:0;">
+    Both bots are counted from zero below: only trades opened after the reset are included.
+    Trades opened earlier are carried over (list at the bottom of this section) and are not part of these
+    numbers; nothing was deleted &mdash; the full all-time numbers and trade lists are on the
+    <a href="details.html">Details page</a>. Still-open carried-over trades (they keep occupying slots): {' · '.join(counts) if counts else 'none'}.
+  </p>
+</div>"""
+        if "futures_x8" in all_trades and "futures_x8guard" in all_trades:
+            reset_cards_after = inherited_html(all_trades["futures_x8"], all_trades["futures_x8guard"], reset)
+        else:
+            reset_cards_after = ""
+    else:
+        reset_cards_after = ""
+        if reset is not None:
+            reset_cards = (f'<div class="card"><p class="muted" style="margin:0;font-size:0.85rem;">'
+                           f'The numbers will restart at {reset_txt} (not reached yet); until then this page shows all-time numbers.</p></div>')
+
+    now_txt = now.strftime("%Y-%m-%d %H:%M:%S")
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -164,22 +255,24 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
   <nav>
     <a href="#grp-futures">Futures</a>
   </nav>
-  <span class="gen-time">generated {now} UTC</span>
+  <span class="gen-time">generated {now_txt} UTC</span>
   <a class="compare-link" href="details.html">Details →</a>
 </div>
 
 <main>
 <div class="disclaimer">Dry-run (simulated) — no real funds involved · futures only (spot bots are off, X7ML retired) · all bots on OKX ·
-  <a href="guard.html">X8 vs Guard</a> · <a href="details.html">Trade details &amp; analytics</a></div>
+  <a href="guard.html">X8 vs Guard</a> · <a href="details.html">Trade details &amp; analytics (all-time)</a></div>
 
 <h2 class="group-title" id="grp-futures">🟠 FUTURES</h2>
+{reset_cards}
 {tops['futures']}
+{reset_cards_after}
 
 <div class="subtitle">Small sample sizes can look great or terrible by chance.</div>
 </main>
 
 <script>
-{js}
+{js_main}
 </script>
 
 </body>
@@ -207,12 +300,12 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 <div class="topbar">
   <div class="brand">NFI <span>dry-run</span></div>
   <nav><a href="#summary">Full summary</a><a href="#details">Trade details</a><a href="#analytics">Analytics</a></nav>
-  <span class="gen-time">generated {now} UTC</span>
+  <span class="gen-time">generated {now_txt} UTC</span>
   <a class="compare-link" href="index.html">← Main</a>
 </div>
 <main>
-<h2 class="group-title" id="summary">Full summary</h2>
-<div class="subtitle">Everything from the main page plus Portfolio Utilization and Exit Reasons — nothing is dropped.</div>
+<h2 class="group-title" id="summary">Full summary (all-time)</h2>
+<div class="subtitle">Everything since the bots started, never reset{f' (the Main page restarted its numbers at {reset_txt})' if reset_active else ''} — plus Portfolio Utilization and Exit Reasons; nothing is dropped.</div>
 {fulls}
 <h2 class="group-title" id="details">Trade details</h2>
 <div class="subtitle">Open / closed trades, tag and pair performance — tap a bot to expand.</div>
@@ -222,7 +315,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
 {analytics}
 </main>
 <script>
-{js}
+{js_all}
 </script>
 </body>
 </html>"""
