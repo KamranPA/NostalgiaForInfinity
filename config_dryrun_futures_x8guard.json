@@ -2,9 +2,12 @@
   "_COMMENT_FILE_PATH": "SAVE THIS FILE AS: config_dryrun_futures_x8guard.json — in the ROOT of your NostalgiaForInfinity repo (same folder as config_dryrun_futures_x8.json). NOT inside user_data/, NOT inside configs/.",
   "$schema": "https://schema.freqtrade.io/schema.json",
   "_COMMENT_purpose": "X8-GUARD FUTURES dry-run (OKX). Deliberately IDENTICAL to config_dryrun_futures_x8.json in every functional setting (trading_mode/margin_mode, exchange, pairlist chain, stake/wallet, max_open_trades, pricing, timeframe, telegram notification settings) so the only variable versus the pure X8 bot is the strategy class (NostalgiaForInfinityX8Guard vs NostalgiaForInfinityX8). ONLY these differ: bot_name, db_url, the Telegram bot/token used by the workflow, and the guard_parameters block. If you change ANY functional setting in one file, change it in the other too, or the comparison stops being valid. dry_run stays true — no real orders are ever placed.",
-  "_COMMENT_guard": "NostalgiaForInfinityX8Guard is a separate subclass file (never edits X8). It raises bad_trade_controller_stale_max_daily_range_pct from 7 to 15 so the 'abandon' exit can fire on volatile alts. The stake cap is switched OFF here (guard_max_stake_multiple = 0) because backtests showed it never binds. Any NFI or Guard attribute can be changed via guard_parameters without editing files.",
+  "_COMMENT_guard": "SINCE THE SWITCH the Guard is X8 plus the CUT RULE (tested in backtests as X8Cut): a trade is closed completely when it reaches 3 filled entry orders, and the pair is then locked for 14 days. Only LONG trades are cut (cut_apply_to = long). The old Guard behaviour (stale_range 15, stake cap) is gone; stale_range is back to the X8 default. cut_start_date (UTC) is the switch time: trades OPENED BEFORE it are never cut and behave exactly like on the X8 bot, so both bots carry the same inherited trades and the comparison is fair. The dashboard (guard.html) reads the SAME cut_start_date from this file, so change it only here. Set it a little AFTER the moment you deploy this file. A wrong cut_apply_to or cut_start_date value stops the bot at start-up.",
   "guard_parameters": {
-    "guard_max_stake_multiple": 0
+    "cut_entries": 3,
+    "cut_lock_days": 14,
+    "cut_apply_to": "long",
+    "cut_start_date": "2026-11-09 00:00"
   },
   "_COMMENT_restart_architecture": "Runs under its own self-queueing GitHub Actions chain (dry-run-telegram-futures-x8guard.yml). db_url below is local SQLite, persisted across restarts via its own git branch (state-futures-x8guard). Nothing is shared with the X8 or X7ML bots.",
   "_COMMENT_position_adjustment": "Same as the other bots: position_adjustment_enable=true, as the NFI strategies' Grinding/Buyback systems require it.",
