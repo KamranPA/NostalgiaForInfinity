@@ -22,9 +22,13 @@
 # (below it for a long, above it for a short). 0 = off.
 # cut_adverse_pct  adverse move for the age trigger, in percent (default 12).
 # cut_lock_days    after a cut, block new entries on that pair for this many days (default 3).
+# cut_apply_to     "both" (default) or "long". With "long" only LONG trades are ever cut; shorts keep
+# the plain X8 behaviour. Any other value stops the run with an error (on purpose).
 #
 # Exit reasons written to the trade: cut_entries_<N>  and  cut_age_<H>h_<D>pct
 # Per cut it logs:  [Cut] PAIR reason=... entries=N age_h=H adverse_pct=D
+#
+# v3: new option cut_apply_to ("long" = never cut shorts).
 #
 # v2 (2026-11-07): fixed cut_entries, which never fired in v1 (it read a freqtrade attribute that does not
 # exist, nr_of_entries, and silently defaulted to 1). The entry count now comes from the filled orders.
@@ -50,6 +54,13 @@ class NostalgiaForInfinityX8Cut(NostalgiaForInfinityX8):
       return float(gp.get(name, default))
     except (TypeError, ValueError):
       return float(default)
+
+  def _cut_apply_to(self):
+    gp = self.config.get("guard_parameters") or {}
+    value = str(gp.get("cut_apply_to", "both")).strip().lower()
+    if value not in ("both", "long"):
+      raise ValueError("cut_apply_to must be 'both' or 'long', got %r" % (value,))
+    return value
 
   def _entry_count(self, trade):
     # Number of FILLED entry orders (the first entry counts as 1). Uses the order list; falls back to
@@ -77,6 +88,9 @@ class NostalgiaForInfinityX8Cut(NostalgiaForInfinityX8):
     age_limit = self._cut_param("cut_age_hours", self.cut_age_hours)
     adverse_limit = self._cut_param("cut_adverse_pct", self.cut_adverse_pct)
     if max_entries <= 0 and age_limit <= 0:
+      return None, None
+    apply_to = self._cut_apply_to()  # always validated, so a typo fails on the first trade
+    if trade.is_short and apply_to == "long":
       return None, None
 
     n_entries = self._entry_count(trade)
