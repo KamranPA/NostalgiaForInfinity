@@ -140,7 +140,7 @@
 <body>
 
 <h1>🛡️ NostalgiaForInfinity — X8 vs X8 Guard</h1>
-<div class="subtitle">Generated 2026-11-10 12:35:36 UTC · dry-run (simulated) — no real funds involved · both bots on OKX futures</div>
+<div class="subtitle">Generated 2026-11-10 15:54:50 UTC · dry-run (simulated) — no real funds involved · both bots on OKX futures</div>
 <div class="nav">
   <a href="index.html">← Main dashboard</a>
   <a href="compare.html">X7ML vs X8</a>
@@ -152,7 +152,7 @@
 <div class="card">
   <h3>Head to head <span class="muted" style="font-weight:400;font-size:0.75rem;">— trades opened since the switch, both bots</span></h3>
   <p class="muted" style="font-size:0.8rem;margin:0 0 12px 0;">
-    Window = trades opened since <b>2026-11-09 00:00 UTC</b> (1.5 days ago; cut_start_date in the Guard config). Trades opened earlier are inherited by both bots (X8: <b>0</b>, X8 Guard: <b>0</b> still open or closed after the switch) and are left out of this table — see 'Inherited trades' below.
+    Window = trades opened since <b>2026-11-09 00:00 UTC</b> (1.7 days ago; cut_start_date in the Guard config). Trades opened earlier are inherited by both bots (X8: <b>0</b>, X8 Guard: <b>0</b> still open or closed after the switch) and are left out of this table — see 'Inherited trades' below.
   </p>
   <p style="font-size:0.85rem;margin:0 0 12px 0;">Cuts by X8 Guard since the switch: <b>0</b> (booked <b>+0.00 USDT</b>).</p>
   <p class="warn-note">⚠️ Small sample: 0 (X8) and 0 (X8 Guard) closed trades — below 30, so differences here can easily be chance.</p>
@@ -291,7 +291,7 @@
 
 <div class="card">
   <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
-  <p class="muted">Not enough history yet — this chart fills in as more dashboard runs are recorded (one point per run).</p>
+  <div class="chart-wrap"><canvas id="trendChart_futures_x8guard"></canvas></div>
 </div>
 
 
@@ -372,9 +372,9 @@
 new Chart(document.getElementById('guardEquity'), {
   type: 'scatter',
   data: { datasets: [
-    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 36.59, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
+    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 39.91, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 },
-    { label: 'X8 Guard', data: [{"x": 0.0, "y": 0.0}, {"x": 36.59, "y": 0.0}], borderColor: '#bc8cff', backgroundColor: '#bc8cff',
+    { label: 'X8 Guard', data: [{"x": 0.0, "y": 0.0}, {"x": 39.91, "y": 0.0}], borderColor: '#bc8cff', backgroundColor: '#bc8cff',
       showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 }
   ]},
   options: {
@@ -428,9 +428,40 @@ new Chart(document.getElementById('reasonChart_futures_x8guard'), {
 });
 
 
+new Chart(document.getElementById('trendChart_futures_x8guard'), {
+  type: 'bar',
+  data: {
+    labels: ["11-10 12:35", "11-10 15:54"],
+    datasets: [
+      {
+        type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
+        data: [0.0, 0.0],
+        borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+        fill: false, tension: 0.2, pointRadius: 2, order: 1
+      },
+      {
+        type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
+        data: [0, 0],
+        backgroundColor: 'rgba(217,100,90,0.35)', order: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { position: 'left', ticks: { color: '#838aa0' }, grid: { color: '#232838' },
+           title: { display: true, text: 'USDT', color: '#838aa0' } },
+      y1: { position: 'right', ticks: { color: '#838aa0', stepSize: 1 }, grid: { display: false },
+            title: { display: true, text: 'Stuck Trades', color: '#838aa0' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
 
 window.__nfiLive = window.__nfiLive || {};
-window.__nfiLive["futures_x8guard"] = {"realized": 0, "generated": "2026-11-10 12:35 UTC", "trades": []};
+window.__nfiLive["futures_x8guard"] = {"realized": 0, "generated": "2026-11-10 15:54 UTC", "trades": []};
 
 (function () {
   try {
