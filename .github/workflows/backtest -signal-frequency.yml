@@ -68,8 +68,6 @@ on:
         options:
           - NostalgiaForInfinityX8
           - NostalgiaForInfinityX8Guard
-          - NostalgiaForInfinityX8Cap
-          - NostalgiaForInfinityX8ShortBand
           - NostalgiaForInfinityX8Cut
         default: NostalgiaForInfinityX8
       test_days:
