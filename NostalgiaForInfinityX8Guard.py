@@ -150,7 +150,7 @@ class NostalgiaForInfinityX8Guard(NostalgiaForInfinityX8):
       lock_days = self._cut_param("cut_lock_days", self.cut_lock_days)
       if lock_days > 0:
         try:
-          self.lock_pair(pair, current_time + timedelta(days=lock_days), reason="cut")
+          self.lock_pair(pair, current_time + timedelta(days=lock_days), reason="cut", side="long")
         except Exception as e:  # never break the bot because of the experiment
           logger.warning("[Cut] %s could not lock pair (%r)", pair, e)
       return True
