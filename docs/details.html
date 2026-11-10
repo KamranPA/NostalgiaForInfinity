@@ -149,7 +149,7 @@
 <div class="topbar">
   <div class="brand">NFI <span>dry-run</span></div>
   <nav><a href="#summary">Full summary</a><a href="#details">Trade details</a><a href="#analytics">Analytics</a></nav>
-  <span class="gen-time">generated 2026-11-10 16:01:16 UTC</span>
+  <span class="gen-time">generated 2026-11-10 16:32:31 UTC</span>
   <a class="compare-link" href="index.html">← Main</a>
 </div>
 <main>
@@ -161,10 +161,10 @@
 
 <div class="grid">
   <div class="stat-card"><div class="label">Open Trades</div><div class="value">0</div></div>
-  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">0</div></div>
-  <div class="stat-card"><div class="label">Win Rate</div><div class="value">0.0%</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">1</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
   <div class="stat-card"><div class="label">Total Profit (closed only)</div>
-    <div class="value profit-pos">+0.00 USDT</div>
+    <div class="value profit-pos">+1.66 USDT</div>
     <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes open trades — see Capital Efficiency below</div></div>
 </div>
 
@@ -175,7 +175,7 @@
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Realized Profit</div>
-          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="value profit-pos">+1.66 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
         </div>
         <div class="stat-card">
@@ -190,22 +190,22 @@
         </div>
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
-          <div id="live-total-futures_x8" class="value profit-pos">+0.00 USDT</div>
+          <div id="live-total-futures_x8" class="value profit-pos">+1.66 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now (closed + realized on open + unrealized)</div>
         </div>
         <div class="stat-card">
           <div class="label">Stuck Trades</div>
           <div class="value ">0 / 0</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;2.0d</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;0.5d</div>
         </div>
       </div>
       <p style="margin-top:16px;margin-bottom:4px;">
-        Realized return per capital-day: <b>—</b>
-        
+        Realized return per capital-day: <b>143.3237%</b>
+        (≈ 52313.2%/yr if repeated — simple, non-compounded extrapolation)
       </p>
       <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>—</b>
-        
+        Blended return per capital-day (incl. unrealized): <b>143.3237%</b>
+        (≈ 52313.2%/yr equivalent)
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
@@ -218,8 +218,51 @@
 
 
     <div class="card">
-      <h3>Slippage Sensitivity</h3>
-      <p class="muted">Orders table not available/readable this run — skipped.</p>
+      <h3>Slippage Sensitivity <span class="muted" style="font-weight:400;font-size:0.75rem;">— estimate: flat % of every order's value, not a measured fill difference</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Traded Notional (closed trades)</div>
+          <div class="value">187 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">2 filled orders overall (187 USDT incl. open trades)</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Break-even Slippage</div>
+          <div class="value">0.888%</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">per order, before realized profit hits zero</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Cost per Closed Trade @ 0.10%</div>
+          <div class="value">0.19 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">187 USDT traded per closed trade</div>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-top:16px;">
+      <table>
+        <tr><th>Slippage per order</th><th>Cost (closed trades)</th><th>Realized after slippage</th><th>True Total after slippage</th></tr>
+        <tr>
+          <td data-label="Slippage per order">0.05%</td>
+          <td data-label="Cost (closed trades)">0.09 USDT</td>
+          <td data-label="Realized after slippage"><span class="profit-pos">+1.57 USDT</span></td>
+          <td data-label="True Total after slippage"><span class="profit-pos">+1.57 USDT</span></td>
+        </tr><tr>
+          <td data-label="Slippage per order">0.10%</td>
+          <td data-label="Cost (closed trades)">0.19 USDT</td>
+          <td data-label="Realized after slippage"><span class="profit-pos">+1.48 USDT</span></td>
+          <td data-label="True Total after slippage"><span class="profit-pos">+1.48 USDT</span></td>
+        </tr><tr>
+          <td data-label="Slippage per order">0.20%</td>
+          <td data-label="Cost (closed trades)">0.37 USDT</td>
+          <td data-label="Realized after slippage"><span class="profit-pos">+1.29 USDT</span></td>
+          <td data-label="True Total after slippage"><span class="profit-pos">+1.29 USDT</span></td>
+        </tr>
+      </table>
+      </div>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        Cost = traded notional x slippage % (entries, rebuys and exits all count) — not a % of profit.
+        True Total after slippage charges every filled order; the exit of a still-open trade is not
+        included yet. 0.05% / 0.10% / 0.20% are rough optimistic / base / pessimistic guesses for
+        mid-size OKX perpetuals; panic exits on thin coins can be worse.
+      </p>
     </div>
 
 
@@ -262,10 +305,10 @@
 
 <div class="grid">
   <div class="stat-card"><div class="label">Open Trades</div><div class="value">0</div></div>
-  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">0</div></div>
-  <div class="stat-card"><div class="label">Win Rate</div><div class="value">0.0%</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">1</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">100.0%</div></div>
   <div class="stat-card"><div class="label">Total Profit (closed only)</div>
-    <div class="value profit-pos">+0.00 USDT</div>
+    <div class="value profit-pos">+1.69 USDT</div>
     <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes open trades — see Capital Efficiency below</div></div>
 </div>
 
@@ -276,7 +319,7 @@
       <div class="grid" style="margin-bottom:0;">
         <div class="stat-card">
           <div class="label">Realized Profit</div>
-          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="value profit-pos">+1.69 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
         </div>
         <div class="stat-card">
@@ -291,22 +334,22 @@
         </div>
         <div class="stat-card">
           <div class="label">True Total (realized + unrealized)</div>
-          <div id="live-total-futures_x8guard" class="value profit-pos">+0.00 USDT</div>
+          <div id="live-total-futures_x8guard" class="value profit-pos">+1.69 USDT</div>
           <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now (closed + realized on open + unrealized)</div>
         </div>
         <div class="stat-card">
           <div class="label">Stuck Trades</div>
           <div class="value ">0 / 0</div>
-          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;2.0d</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;0.5d</div>
         </div>
       </div>
       <p style="margin-top:16px;margin-bottom:4px;">
-        Realized return per capital-day: <b>—</b>
-        
+        Realized return per capital-day: <b>149.6794%</b>
+        (≈ 54633.0%/yr if repeated — simple, non-compounded extrapolation)
       </p>
       <p style="margin-bottom:4px;">
-        Blended return per capital-day (incl. unrealized): <b>—</b>
-        
+        Blended return per capital-day (incl. unrealized): <b>149.6794%</b>
+        (≈ 54633.0%/yr equivalent)
       </p>
       <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
         "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
@@ -319,8 +362,51 @@
 
 
     <div class="card">
-      <h3>Slippage Sensitivity</h3>
-      <p class="muted">Orders table not available/readable this run — skipped.</p>
+      <h3>Slippage Sensitivity <span class="muted" style="font-weight:400;font-size:0.75rem;">— estimate: flat % of every order's value, not a measured fill difference</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Traded Notional (closed trades)</div>
+          <div class="value">187 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">2 filled orders overall (187 USDT incl. open trades)</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Break-even Slippage</div>
+          <div class="value">0.901%</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">per order, before realized profit hits zero</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Cost per Closed Trade @ 0.10%</div>
+          <div class="value">0.19 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">187 USDT traded per closed trade</div>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-top:16px;">
+      <table>
+        <tr><th>Slippage per order</th><th>Cost (closed trades)</th><th>Realized after slippage</th><th>True Total after slippage</th></tr>
+        <tr>
+          <td data-label="Slippage per order">0.05%</td>
+          <td data-label="Cost (closed trades)">0.09 USDT</td>
+          <td data-label="Realized after slippage"><span class="profit-pos">+1.59 USDT</span></td>
+          <td data-label="True Total after slippage"><span class="profit-pos">+1.59 USDT</span></td>
+        </tr><tr>
+          <td data-label="Slippage per order">0.10%</td>
+          <td data-label="Cost (closed trades)">0.19 USDT</td>
+          <td data-label="Realized after slippage"><span class="profit-pos">+1.50 USDT</span></td>
+          <td data-label="True Total after slippage"><span class="profit-pos">+1.50 USDT</span></td>
+        </tr><tr>
+          <td data-label="Slippage per order">0.20%</td>
+          <td data-label="Cost (closed trades)">0.37 USDT</td>
+          <td data-label="Realized after slippage"><span class="profit-pos">+1.31 USDT</span></td>
+          <td data-label="True Total after slippage"><span class="profit-pos">+1.31 USDT</span></td>
+        </tr>
+      </table>
+      </div>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        Cost = traded notional x slippage % (entries, rebuys and exits all count) — not a % of profit.
+        True Total after slippage charges every filled order; the exit of a still-open trade is not
+        included yet. 0.05% / 0.10% / 0.20% are rough optimistic / base / pessimistic guesses for
+        mid-size OKX perpetuals; panic exits on thin coins can be worse.
+      </p>
     </div>
 
 
@@ -383,7 +469,14 @@
   <div class="table-scroll">
   <table>
     <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
-    <tr><td colspan="5" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td data-label="Enter Tag">63  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+5.37%</td>
+          <td data-label="Total Profit" class="profit-pos">+5.37%</td>
+        </tr>
   </table>
   </div>
 </div>
@@ -393,17 +486,31 @@
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
-    <tr><td colspan="4" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td data-label="Pair">H/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+5.37%</td>
+        </tr>
   </table>
   </div>
 </div>
 
 <div class="card">
-  <h3>Closed Trades (0)</h3>
+  <h3>Closed Trades (1)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
-    <tr><td colspan="6" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td data-label="Pair">H/USDT:USDT</td>
+          <td data-label="Enter Tag">63  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-11-10 15:40</td>
+          <td data-label="Closed">2026-11-10 15:59</td>
+          <td data-label="Profit" class="profit-pos">+5.37%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_u_1 ( 63 )</td>
+        </tr>
   </table>
   </div>
 </div>
@@ -430,7 +537,14 @@
   <div class="table-scroll">
   <table>
     <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
-    <tr><td colspan="5" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td data-label="Enter Tag">63  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+5.46%</td>
+          <td data-label="Total Profit" class="profit-pos">+5.46%</td>
+        </tr>
   </table>
   </div>
 </div>
@@ -440,17 +554,31 @@
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
-    <tr><td colspan="4" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td data-label="Pair">H/USDT:USDT</td>
+          <td data-label="Trades">1</td>
+          <td data-label="Win Rate">100%</td>
+          <td data-label="Avg Profit" class="profit-pos">+5.46%</td>
+        </tr>
   </table>
   </div>
 </div>
 
 <div class="card">
-  <h3>Closed Trades (0)</h3>
+  <h3>Closed Trades (1)</h3>
   <div class="table-scroll">
   <table>
     <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
-    <tr><td colspan="6" class="muted">No closed trades yet</td></tr>
+    
+        <tr>
+          <td data-label="Pair">H/USDT:USDT</td>
+          <td data-label="Enter Tag">63  <span class="muted">(Rebuy)</span></td>
+          <td data-label="Opened">2026-11-10 15:40</td>
+          <td data-label="Closed">2026-11-10 15:59</td>
+          <td data-label="Profit" class="profit-pos">+5.46%</td>
+          <td data-label="Exit Reason">exit_long_rebuy_u_1 ( 63 )</td>
+        </tr>
   </table>
   </div>
 </div>
@@ -459,7 +587,7 @@
 <div class="subtitle">Significance, duration, clustering, DCA activity.</div>
 <details class="fold"><summary>🟠 X8 FUTURES — OKX</summary><div class="inner"><div class="card">
           <h3>Statistical Significance</h3>
-          <p>Only 0 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
+          <p>Only 1 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
         </div>
 
 
@@ -473,10 +601,14 @@
     </div>
     <div class="card">
       <h3>DCA / Rebuy Activity (open trades)</h3>
-      <p class="muted">Orders table not available/readable this run — skipped.</p>
+      <div class="table-scroll">
+      <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
+      <tr><td colspan="4" class="muted">No open trades</td></tr>
+      </table>
+      </div>
     </div></div></details><details class="fold"><summary>🛡️ X8 GUARD FUTURES — OKX</summary><div class="inner"><div class="card">
           <h3>Statistical Significance</h3>
-          <p>Only 0 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
+          <p>Only 1 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
         </div>
 
 
@@ -490,7 +622,11 @@
     </div>
     <div class="card">
       <h3>DCA / Rebuy Activity (open trades)</h3>
-      <p class="muted">Orders table not available/readable this run — skipped.</p>
+      <div class="table-scroll">
+      <table><tr><th>Pair</th><th>Entry Fills</th><th>Extra DCA/Rebuy Fills</th><th></th></tr>
+      <tr><td colspan="4" class="muted">No open trades</td></tr>
+      </table>
+      </div>
     </div></div></details>
 </main>
 <script>
@@ -499,10 +635,10 @@ Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
 new Chart(document.getElementById('equityChart_futures_x8'), {
   type: 'line',
   data: {
-    labels: [],
+    labels: ["2026-11-10 15:59"],
     datasets: [{
       label: 'Cumulative profit %',
-      data: [],
+      data: [5.374],
       borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
       fill: true, tension: 0.2, pointRadius: 2
     }]
@@ -520,9 +656,9 @@ new Chart(document.getElementById('equityChart_futures_x8'), {
 new Chart(document.getElementById('reasonChart_futures_x8'), {
   type: 'doughnut',
   data: {
-    labels: [],
+    labels: ["exit_long_rebuy_u_1 ( 63 )"],
     datasets: [{
-      data: [],
+      data: [1],
       backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
     }]
   },
@@ -536,17 +672,17 @@ new Chart(document.getElementById('reasonChart_futures_x8'), {
 new Chart(document.getElementById('trendChart_futures_x8'), {
   type: 'bar',
   data: {
-    labels: ["11-10 09:54", "11-10 12:35", "11-10 15:54", "11-10 16:01", "11-10 16:01"],
+    labels: ["11-10 09:54", "11-10 12:35", "11-10 15:54", "11-10 16:01", "11-10 16:32", "11-10 16:32"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0, 0.0],
+        data: [0.0, 0.0, 0.0, 0.0, 1.66, 1.66],
         borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0, 0],
         backgroundColor: 'rgba(217,100,90,0.35)', order: 2
       }
     ]
@@ -566,7 +702,7 @@ new Chart(document.getElementById('trendChart_futures_x8'), {
 
 
 window.__nfiLive = window.__nfiLive || {};
-window.__nfiLive["futures_x8"] = {"realized": 0, "generated": "2026-11-10 16:01 UTC", "trades": []};
+window.__nfiLive["futures_x8"] = {"realized": 1.6625, "generated": "2026-11-10 16:32 UTC", "trades": []};
 
 (function () {
   try {
@@ -656,10 +792,10 @@ Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
 new Chart(document.getElementById('equityChart_futures_x8guard'), {
   type: 'line',
   data: {
-    labels: [],
+    labels: ["2026-11-10 15:59"],
     datasets: [{
       label: 'Cumulative profit %',
-      data: [],
+      data: [5.456],
       borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
       fill: true, tension: 0.2, pointRadius: 2
     }]
@@ -677,9 +813,9 @@ new Chart(document.getElementById('equityChart_futures_x8guard'), {
 new Chart(document.getElementById('reasonChart_futures_x8guard'), {
   type: 'doughnut',
   data: {
-    labels: [],
+    labels: ["exit_long_rebuy_u_1 ( 63 )"],
     datasets: [{
-      data: [],
+      data: [1],
       backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
     }]
   },
@@ -693,17 +829,17 @@ new Chart(document.getElementById('reasonChart_futures_x8guard'), {
 new Chart(document.getElementById('trendChart_futures_x8guard'), {
   type: 'bar',
   data: {
-    labels: ["11-10 12:35", "11-10 15:54", "11-10 16:01", "11-10 16:01"],
+    labels: ["11-10 12:35", "11-10 15:54", "11-10 16:01", "11-10 16:32", "11-10 16:32"],
     datasets: [
       {
         type: 'line', label: 'True Total (USDT)', yAxisID: 'y',
-        data: [0.0, 0.0, 0.0, 0.0],
+        data: [0.0, 0.0, 0.0, 1.69, 1.69],
         borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
         fill: false, tension: 0.2, pointRadius: 2, order: 1
       },
       {
         type: 'bar', label: 'Stuck Trades', yAxisID: 'y1',
-        data: [0, 0, 0, 0],
+        data: [0, 0, 0, 0, 0],
         backgroundColor: 'rgba(217,100,90,0.35)', order: 2
       }
     ]
@@ -723,7 +859,7 @@ new Chart(document.getElementById('trendChart_futures_x8guard'), {
 
 
 window.__nfiLive = window.__nfiLive || {};
-window.__nfiLive["futures_x8guard"] = {"realized": 0, "generated": "2026-11-10 16:01 UTC", "trades": []};
+window.__nfiLive["futures_x8guard"] = {"realized": 1.6875, "generated": "2026-11-10 16:32 UTC", "trades": []};
 
 (function () {
   try {
