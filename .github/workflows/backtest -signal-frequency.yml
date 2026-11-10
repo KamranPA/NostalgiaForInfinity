@@ -1,10 +1,10 @@
 name: Backtest Signal Frequency
 
 run-name: >-
-  Backtest ${{ inputs.strategy }} ${{ inputs.market }} ${{ inputs.direction }}
+  Backtest ${{ inputs.strategy }} ${{ inputs.direction }}
   end=${{ inputs.end_date || 'today' }} ref=${{ inputs.ref || 'main' }}${{ inputs.derisk_hold_short != 'default' && format(' derisk_short={0}', inputs.derisk_hold_short) || '' }}${{ inputs.stale_max_daily_range_pct != '' && format(' stale_range={0}', inputs.stale_max_daily_range_pct) || '' }}${{ inputs.nfi_overrides != '' && ' +overrides' || '' }}${{ inputs.guard_parameters != '' && format(' guard={0}', inputs.guard_parameters) || '' }}${{ inputs.export_signals == 'yes' && ' +signals' || '' }}${{ inputs.breakdown != 'none' && format(' breakdown={0}', inputs.breakdown) || '' }} days=${{ inputs.test_days }}
 
-# Manual backtest of the NFI strategies on OKX data.
+# Manual backtest of the NFI X8 family on OKX FUTURES data.
 #
 # Reproducible A/B runs:
 #   * ref          -> take the strategy files (.py) from this commit/branch/tag,
@@ -30,15 +30,14 @@ run-name: >-
 #                       result zip also gets the indicator values of the signal
 #                       candles (entries/exits) and the rejected signals, for
 #                       `backtesting-analysis` or our own scripts.
-#   * breakdown      -> none | month | week : freqtrade `--breakdown` table.
+#   * breakdown      -> none | month | week : freqtrade `--breakdown table.
 #   Peak memory / wall time of the backtest are written to the Job Summary
 #   (use them to size longer windows).
 #
-# Strategies: X (= X1), X2 ... X8, X7ML, X8Guard, X8Cap, X8ShortBand and X8Cut. Each needs its .py
-# file in the repo root or in user_data/strategies/. Older ones (X..X6) have no
-# NFI_SAFE_PARAMETERS list, so nfi_overrides / stale_max_daily_range_pct /
-# derisk_hold_short are most likely IGNORED there (the post-backtest check
-# reports it). If an old strategy has no futures support, use market=spot.
+# Strategies: X8, X8Guard, X8Cap, X8ShortBand and X8Cut. Each needs its .py file
+# in the repo root or in user_data/strategies/. Futures only (the spot bots and
+# X7ML / older strategies are retired and no longer selectable).
+# The base config is config_dryrun_futures.json -- do not delete that file.
 #
 # X8Cap = X8 plus ONE extra field, guard_max_entries (cap on the total number of
 # entry orders per trade; 0 = off, default 4). Set it with guard_parameters, e.g.
@@ -72,22 +71,7 @@ on:
           - NostalgiaForInfinityX8Cap
           - NostalgiaForInfinityX8ShortBand
           - NostalgiaForInfinityX8Cut
-          - NostalgiaForInfinityX7ML
-          - NostalgiaForInfinityX7
-          - NostalgiaForInfinityX6
-          - NostalgiaForInfinityX5
-          - NostalgiaForInfinityX4
-          - NostalgiaForInfinityX3
-          - NostalgiaForInfinityX2
-          - NostalgiaForInfinityX
         default: NostalgiaForInfinityX8
-      market:
-        description: 'Market'
-        type: choice
-        options:
-          - futures
-          - spot
-        default: futures
       test_days:
         description: 'Test window length in days (min 20)'
         type: string
@@ -161,7 +145,6 @@ jobs:
     timeout-minutes: 360
     env:
       STRATEGY_IN: ${{ inputs.strategy }}
-      MARKET_IN: ${{ inputs.market }}
       DAYS_IN: ${{ inputs.test_days }}
       END_IN: ${{ inputs.end_date }}
       REF_IN: ${{ inputs.ref }}
@@ -188,11 +171,9 @@ jobs:
           FULL_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${REF_IN}" --jq .sha)
           echo "ref '$REF_IN' resolved to $FULL_SHA"
           git fetch --no-tags --depth=1 origin "$FULL_SHA"
-          for n in NostalgiaForInfinityX NostalgiaForInfinityX2 NostalgiaForInfinityX3 \
-                   NostalgiaForInfinityX4 NostalgiaForInfinityX5 NostalgiaForInfinityX6 \
-                   NostalgiaForInfinityX7 NostalgiaForInfinityX7ML NostalgiaForInfinityX8 \
-                   NostalgiaForInfinityX8Guard NostalgiaForInfinityX8Cap \
-                   NostalgiaForInfinityX8ShortBand NostalgiaForInfinityX8Cut; do
+          for n in NostalgiaForInfinityX8 NostalgiaForInfinityX8Guard \
+                   NostalgiaForInfinityX8Cap NostalgiaForInfinityX8ShortBand \
+                   NostalgiaForInfinityX8Cut; do
             for f in "${n}.py" "user_data/strategies/${n}.py"; do
               if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
                 git checkout FETCH_HEAD -- "$f"
@@ -268,28 +249,17 @@ jobs:
             fi
           }
 
-          # X7 base file: kept for every run (as before); needed by X7 and the ML subclass.
-          copy_strategy NostalgiaForInfinityX7
-
-          # The selected strategy itself (X, X2 ... X8, X7ML, X8Guard, X8Cap, X8ShortBand, X8Cut).
+          # The selected strategy itself (X8, X8Guard, X8Cap, X8ShortBand, X8Cut).
           copy_strategy "$STRATEGY"
 
-          # Parents of the thin subclasses.
-          if [ "$STRATEGY" = "NostalgiaForInfinityX8Guard" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8Cap" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8ShortBand" ] || [ "$STRATEGY" = "NostalgiaForInfinityX8Cut" ]; then
+          # Parent of the thin subclasses.
+          if [ "$STRATEGY" != "NostalgiaForInfinityX8" ]; then
             copy_strategy NostalgiaForInfinityX8
           fi
-          if [ "$STRATEGY" = "NostalgiaForInfinityX7ML" ]; then
-            copy_strategy NostalgiaForInfinityX7
-          fi
 
-          # Base config for the selected market.
-          MARKET="${MARKET_IN:-futures}"
-          if [ "$MARKET" = "futures" ]; then
-            cp config_dryrun_futures.json user_data/live_config.json
-          else
-            cp config_dryrun_telegram.json user_data/live_config.json
-          fi
-          echo "market=$MARKET" >> "$GITHUB_ENV"
+          # Base config (futures only).
+          cp config_dryrun_futures.json user_data/live_config.json
+          echo "market=futures" >> "$GITHUB_ENV"
 
           # Long-only variant: thin subclass, shorts disabled two ways
           # (can_short=False AND enter_short forced to 0).
@@ -327,7 +297,7 @@ jobs:
             echo "strategy ref:   ${strategy_ref:-<same as HEAD>}"
             echo "strategy file:  $F"
             echo "file sha256:    $(sha256sum "$F" | cut -d' ' -f1)"
-            if [ "$base_strategy" = "NostalgiaForInfinityX8Guard" ] || [ "$base_strategy" = "NostalgiaForInfinityX8Cap" ] || [ "$base_strategy" = "NostalgiaForInfinityX8ShortBand" ] || [ "$base_strategy" = "NostalgiaForInfinityX8Cut" ]; then
+            if [ "$base_strategy" != "NostalgiaForInfinityX8" ]; then
               echo "parent X8 sha:  $(sha256sum user_data/strategies/NostalgiaForInfinityX8.py | cut -d' ' -f1)"
               echo "parent version: $(grep -A1 'def version' user_data/strategies/NostalgiaForInfinityX8.py | grep return | tr -d ' ')"
             fi
@@ -442,8 +412,8 @@ jobs:
           if requested:
               # Validate keys against the strategy's own NFI_SAFE_PARAMETERS list.
               base = os.environ.get("base_strategy", "NostalgiaForInfinityX8")
-              # Parent strategy file: strip the Guard / Cap / ML / ShortBand / Cut subclass suffix.
-              family_file = re.sub(r"(Guard|ML|Cap|ShortBand|Cut)$", "", base) + ".py"
+              # Parent strategy file: strip the Guard / Cap / ShortBand / Cut subclass suffix.
+              family_file = re.sub(r"(Guard|Cap|ShortBand|Cut)$", "", base) + ".py"
               src_path = os.path.join("user_data", "strategies", family_file)
               safe = set()
               try:
@@ -463,9 +433,8 @@ jobs:
                       )
               else:
                   print("::warning::Could not parse NFI_SAFE_PARAMETERS in "
-                        f"{family_file}; key validation skipped. Older strategies (X..X6) "
-                        "usually have no override mechanism, so the overrides are probably "
-                        "IGNORED (the post-backtest check will report it).")
+                        f"{family_file}; key validation skipped (the post-backtest "
+                        "check will report whether the overrides were applied).")
 
               params = dict(cfg.get("nfi_parameters") or {})
               params.update(requested)
@@ -525,7 +494,7 @@ jobs:
         run: |
           # The pair is not in the pairlist, so download-data never fetches it.
           # Runs on every run (also on cache hits); only a small amount of data.
-          if [ "$market" = "futures" ]; then BTC_PAIR="BTC/USDT:USDT"; else BTC_PAIR="BTC/USDT"; fi
+          BTC_PAIR="BTC/USDT:USDT"
           freqtrade download-data \
             --config user_data/config.json \
             --exchange okx \
