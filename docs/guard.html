@@ -1,7 +1,12 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NFI Dry-Run Dashboard — X8 vs X8 Guard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
+
   :root {
     --bg: #0b0c10; --bg-raised: #131620; --card: #131620; --border: #232838;
     --text: #dfe2ea; --muted: #838aa0; --accent: #d1a350; --accent-dim: #8a7040;
@@ -116,6 +121,7 @@
   .table-scroll { overflow-x: auto; }
   .compare-table td:not(:first-child), .compare-table th:not(:first-child) { text-align: right; }
 
+
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   .edge { background: rgba(63,185,80,0.12); }
@@ -126,9 +132,391 @@
   .legend-x8 { color: #58a6ff; font-weight: 600; }
   .era-marker { color: #8b949e; font-size: 0.75rem; }
 
+
   .legend-xg { color: #bc8cff; font-weight: 600; }
-</style></head><body>
+
+</style>
+</head>
+<body>
+
 <h1>🛡️ NostalgiaForInfinity — X8 vs X8 Guard</h1>
-<div class="nav"><a href="index.html">← Main dashboard</a><a href="compare.html">X7ML vs X8</a></div>
-<div class="card"><p class="muted">The X8 Guard bot has no state file yet — nothing to compare. This fills in automatically after its first hourly state checkpoint.</p></div>
-</body></html>
+<div class="subtitle">Generated 2026-11-10 12:35:36 UTC · dry-run (simulated) — no real funds involved · both bots on OKX futures</div>
+<div class="nav">
+  <a href="index.html">← Main dashboard</a>
+  <a href="compare.html">X7ML vs X8</a>
+  <a href="#guard-detail">Guard detail</a>
+</div>
+
+<div class="subtitle">The Guard is the SAME strategy as X8 with ONE addition since 2026-11-09 00:00 UTC: the cut rule — close the whole position at 3 filled entries (long trades only), then lock the pair for 14 days. Backtests on 5 six-month windows: better on 4, worse on 1; it pays in crash-type markets and costs profit in quiet ones. Before the switch the Guard ran with stale_range 15; that period is kept as its own card below. All trades opened before the switch are untouched on both bots.</div>
+
+<div class="card">
+  <h3>Head to head <span class="muted" style="font-weight:400;font-size:0.75rem;">— trades opened since the switch, both bots</span></h3>
+  <p class="muted" style="font-size:0.8rem;margin:0 0 12px 0;">
+    Window = trades opened since <b>2026-11-09 00:00 UTC</b> (1.5 days ago; cut_start_date in the Guard config). Trades opened earlier are inherited by both bots (X8: <b>0</b>, X8 Guard: <b>0</b> still open or closed after the switch) and are left out of this table — see 'Inherited trades' below.
+  </p>
+  <p style="font-size:0.85rem;margin:0 0 12px 0;">Cuts by X8 Guard since the switch: <b>0</b> (booked <b>+0.00 USDT</b>).</p>
+  <p class="warn-note">⚠️ Small sample: 0 (X8) and 0 (X8 Guard) closed trades — below 30, so differences here can easily be chance.</p>
+  
+  <div class="table-scroll"><table class="compare-table">
+    <tr><th>Metric</th><th class="legend-x8">X8</th><th class="legend-xg">X8 Guard</th></tr>
+    <tr><td>Trades opened (in window)</td><td>0</td><td>0</td></tr><tr><td>Closed / open now</td><td>0 / 0</td><td>0 / 0</td></tr><tr><td>Win rate (closed)</td><td>—</td><td>—</td></tr><tr><td>Realized profit (closed trades)</td><td>+0.00 USDT</td><td>+0.00 USDT</td></tr><tr><td>Realized on open trades (partial exits)</td><td>+0.00 USDT</td><td>+0.00 USDT</td></tr><tr><td>Unrealized P/L (open)</td><td>+0.00 USDT</td><td>+0.00 USDT</td></tr><tr><td><b>True Total</b> (all three above)</td><td><b>+0.00 USDT</b></td><td><b>+0.00 USDT</b></td></tr><tr><td>True Total (% of dry-run wallet)</td><td>0.00%</td><td>0.00%</td></tr><tr><td>Avg profit / closed trade</td><td>—</td><td>—</td></tr><tr><td>Avg closed duration</td><td>—</td><td>—</td></tr><tr><td>Worst closed trade</td><td>—</td><td>—</td></tr><tr><td>Open longer than 3d</td><td>0</td><td>0</td></tr><tr><td>Oldest open trade</td><td>—</td><td>—</td></tr><tr><td>Max drawdown (realized equity)</td><td>0.00 USDT</td><td>0.00 USDT</td></tr>
+  </table></div>
+  <p class="muted" style="font-size:0.8rem;margin:10px 0 0 0;">
+    Highlighted cell = the better value where "better" is unambiguous.
+    Unrealized P/L uses live OKX prices; open trades without a price are counted as 0
+    (0 for X8, 0 for X8 Guard).
+    True Total includes what partial exits of open trades already realized, so a bot that cuts a
+    loser and a bot that holds it are measured the same way.
+  </p>
+</div>
+
+<div class="card">
+  <h3>Realized equity since the switch <span class="muted" style="font-weight:400;font-size:0.75rem;">— cumulative closed-trade profit, USDT</span></h3>
+  <div class="chart-wrap"><canvas id="guardEquity"></canvas></div>
+</div>
+
+
+<div class="card">
+  <h3>🔀 Same entry, different exit <span class="muted" style="font-weight:400;font-size:0.75rem;">— where the cut rule actually changed the outcome (look for exits starting with cut_)</span></h3>
+  <p class="muted">No matched entry has closed differently yet — the two bots behaved identically so far.</p>
+</div>
+
+
+<div class="card">
+  <h3>🧳 Inherited trades <span class="muted" style="font-weight:400;font-size:0.75rem;">— opened before the switch</span></h3>
+  <p class="muted">No trade was open at the switch time on either bot.</p>
+</div>
+
+
+
+<div class="card"><h3>🔗 Signal Overlap — X8 vs X8 Guard</h3><p class="muted">No entries in the window yet.</p></div>
+
+<div class="card"><h3>Exit reasons (closed)</h3><p class="muted">No closed trades in the window yet.</p></div>
+
+<div id="guard-detail"></div>
+
+<h2 class="market-heading mode-futures" id="futures_x8guard"><span class="dot"></span>🟣 X8 GUARD FUTURES — OKX</h2>
+<div class="subtitle">OKX perpetual swaps · isolated margin · 3x leverage · cut rule from 2026-11-09 00:00 UTC</div>
+
+<div class="grid">
+  <div class="stat-card"><div class="label">Open Trades</div><div class="value">0</div></div>
+  <div class="stat-card"><div class="label">Closed Trades</div><div class="value">0</div></div>
+  <div class="stat-card"><div class="label">Win Rate</div><div class="value">0.0%</div></div>
+  <div class="stat-card"><div class="label">Total Profit (closed only)</div>
+    <div class="value profit-pos">+0.00 USDT</div>
+    <div class="muted" style="font-size:0.7rem;margin-top:2px;">excludes open trades — see Capital Efficiency below</div></div>
+</div>
+
+
+    <div class="card">
+      <h3>Capital Efficiency <span class="muted" style="font-weight:400;font-size:0.75rem;">— accounts for how long capital was tied up, not just the raw % per trade</span>
+        <span id="live-badge-futures_x8guard" class="muted" style="font-weight:400;font-size:0.72rem;margin-left:8px;">static (updated hourly)</span></h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Realized Profit</div>
+          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">closed trades only</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Realized on Open Trades</div>
+          <div class="value profit-pos">+0.00 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">already booked by partial exits (grind/derisk)</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unrealized P/L (open)</div>
+          <div id="live-unreal-futures_x8guard" class="value profit-pos">+0.00 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0.00 USDT currently locked in open trades</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">True Total (realized + unrealized)</div>
+          <div id="live-total-futures_x8guard" class="value profit-pos">+0.00 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">what you'd have if everything closed right now (closed + realized on open + unrealized)</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stuck Trades</div>
+          <div class="value ">0 / 0</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of open capital, open &gt;2.0d</div>
+        </div>
+      </div>
+      <p style="margin-top:16px;margin-bottom:4px;">
+        Realized return per capital-day: <b>—</b>
+        
+      </p>
+      <p style="margin-bottom:4px;">
+        Blended return per capital-day (incl. unrealized): <b>—</b>
+        
+      </p>
+      <p class="muted" style="font-size:0.8rem;margin-top:12px;margin-bottom:0;">
+        "Capital-day" = stake size × days held, tracked step-by-step through each DCA/rebuy
+        fill. This is what lets a 4-day trade for +0.1% and a 9-minute trade for +0.1% be
+        compared fairly, and it's why "Total Profit" alone can look fine while several slots
+        are quietly stuck. Unrealized P/L and True Total are re-priced live in the browser
+        (see the badge above); the trade list and realized profit are the hourly snapshot.
+      </p>
+    </div>
+
+
+    <div class="card">
+      <h3>Slippage Sensitivity</h3>
+      <p class="muted">Orders table not available/readable this run — skipped.</p>
+    </div>
+
+
+    <div class="card">
+      <h3>Portfolio Utilization</h3>
+      <div class="grid" style="margin-bottom:0;">
+        <div class="stat-card">
+          <div class="label">Slots Used</div>
+          <div class="value">0 / 8</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">8 free — 0% deployed</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Capital Deployed</div>
+          <div class="value">0.00 / 1000 USDT</div>
+          <div class="muted" style="font-size:0.75rem;margin-top:4px;">0% of dry-run wallet</div>
+        </div>
+      </div>
+    </div>
+
+<div class="two-col">
+  <div class="card">
+    <h3>Equity Curve (cumulative %, closed trades)</h3>
+    <div class="chart-wrap"><canvas id="equityChart_futures_x8guard"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Exit Reasons</h3>
+    <div class="chart-wrap"><canvas id="reasonChart_futures_x8guard"></canvas></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>True Total &amp; Stuck Trades Over Time <span class="muted" style="font-weight:400;font-size:0.75rem;">— is the real (realized+unrealized) position improving or getting worse?</span></h3>
+  <p class="muted">Not enough history yet — this chart fills in as more dashboard runs are recorded (one point per run).</p>
+</div>
+
+
+        <div class="card">
+          <h3>Statistical Significance</h3>
+          <p>Only 0 closed trades — need at least ~8 for a meaningful significance test. Treat all numbers below as provisional.</p>
+        </div>
+
+
+    <div class="card">
+      <h3>Duration vs Outcome</h3>
+      <p class="muted">Not enough closed trades with duration data yet.</p>
+    </div>
+
+
+    <div class="card">
+      <h3>Time-Clustering of Open Trades</h3>
+      <p class="muted">Not enough open trades to check clustering.</p>
+    </div>
+
+
+    <div class="card">
+      <h3>DCA / Rebuy Activity (open trades)</h3>
+      <p class="muted">Orders table not available/readable this run — skipped.</p>
+    </div>
+
+
+
+<div class="card">
+  <h3>Open Trades (0)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Age</th><th>Rebuys</th><th>Capital Locked</th><th>Open Rate</th><th>Live Price</th><th>Unrealized P/L</th></tr>
+    <tr><td colspan="9" class="muted">No open trades</td></tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Tag Family Performance (closed trades) <span class="muted" style="font-weight:400;font-size:0.75rem;">— "open now" marks a tag currently held by an open trade</span></h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Enter Tag</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th><th>Total Profit</th></tr>
+    <tr><td colspan="5" class="muted">No closed trades yet</td></tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Per-Pair Performance (closed trades)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Trades</th><th>Win Rate</th><th>Avg Profit</th></tr>
+    <tr><td colspan="4" class="muted">No closed trades yet</td></tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Closed Trades (0)</h3>
+  <div class="table-scroll">
+  <table>
+    <tr><th>Pair</th><th>Enter Tag</th><th>Opened</th><th>Closed</th><th>Profit</th><th>Exit Reason</th></tr>
+    <tr><td colspan="6" class="muted">No closed trades yet</td></tr>
+  </table>
+  </div>
+</div>
+
+
+<div class="subtitle">
+  ⚠️ Small samples can look great or terrible by chance — the cut rule only matters when a trade keeps
+  rebuying (3+ entries), which is rare. Judge it by the "Same entry, different exit" table and by True Total
+  over time, not by closed-trade profit alone.
+</div>
+
+<script>
+
+new Chart(document.getElementById('guardEquity'), {
+  type: 'scatter',
+  data: { datasets: [
+    { label: 'X8', data: [{"x": 0.0, "y": 0.0}, {"x": 36.59, "y": 0.0}], borderColor: '#58a6ff', backgroundColor: '#58a6ff',
+      showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 },
+    { label: 'X8 Guard', data: [{"x": 0.0, "y": 0.0}, {"x": 36.59, "y": 0.0}], borderColor: '#bc8cff', backgroundColor: '#bc8cff',
+      showLine: true, stepped: 'after', pointRadius: 2, borderWidth: 2 }
+  ]},
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { type: 'linear', title: { display: true, text: 'Hours since the switch', color: '#8b949e' },
+           ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+      y: { title: { display: true, text: 'Cumulative realized profit (USDT)', color: '#8b949e' },
+           ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
+    },
+    plugins: { legend: { labels: { color: '#c9d1d9' } } }
+  }
+});
+
+
+Chart.defaults.font.family = "'Public Sans', -apple-system, sans-serif";
+new Chart(document.getElementById('equityChart_futures_x8guard'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'Cumulative profit %',
+      data: [],
+      borderColor: '#d1a350', backgroundColor: 'rgba(209,163,80,0.10)',
+      fill: true, tension: 0.2, pointRadius: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#838aa0', maxTicksLimit: 8 }, grid: { color: '#232838' } },
+      y: { ticks: { color: '#838aa0' }, grid: { color: '#232838' } }
+    },
+    plugins: { legend: { labels: { color: '#dfe2ea' } } }
+  }
+});
+
+new Chart(document.getElementById('reasonChart_futures_x8guard'), {
+  type: 'doughnut',
+  data: {
+    labels: [],
+    datasets: [{
+      data: [],
+      backgroundColor: ['#d1a350','#4fae7a','#d9645a','#7c8fd6','#a487c9','#4fa8ae','#c97fa8']
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { color: '#dfe2ea', font: { size: 10 } } } }
+  }
+});
+
+
+
+window.__nfiLive = window.__nfiLive || {};
+window.__nfiLive["futures_x8guard"] = {"realized": 0, "generated": "2026-11-10 12:35 UTC", "trades": []};
+
+(function () {
+  try {
+    if (window.__nfiLiveStarted) { return; }
+    window.__nfiLiveStarted = true;
+    var REFRESH_MS = 15000;
+
+    function inst(pair) {
+      var swap = pair.indexOf(':') !== -1;
+      var base = pair.split(':')[0].replace('/', '-');
+      return { type: swap ? 'SWAP' : 'SPOT', id: swap ? base + '-SWAP' : base };
+    }
+    function fmt(v, d) { return (v >= 0 ? '+' : '') + v.toFixed(d); }
+    function cls(v) { return v >= 0 ? 'profit-pos' : 'profit-neg'; }
+    function el(id) { return document.getElementById(id); }
+    function setBadge(mode, ok, text) {
+      var b = el('live-badge-' + mode);
+      if (!b) { return; }
+      b.textContent = text;
+      b.style.color = ok ? '#4fae7a' : '';
+    }
+    async function fetchTickers(type) {
+      var r = await fetch('https://www.okx.com/api/v5/market/tickers?instType=' + type, { cache: 'no-store' });
+      var j = await r.json();
+      var m = {};
+      (j.data || []).forEach(function (d) { m[d.instId] = parseFloat(d.last); });
+      return m;
+    }
+    async function tick() {
+      if (document.hidden) { return; }
+      var all = window.__nfiLive || {};
+      var modes = Object.keys(all);
+      var needed = {};
+      modes.forEach(function (m) {
+        all[m].trades.forEach(function (t) { needed[inst(t.pair).type] = true; });
+      });
+      var prices = {};
+      try {
+        var types = Object.keys(needed);
+        for (var i = 0; i < types.length; i++) {
+          prices[types[i]] = await fetchTickers(types[i]);
+        }
+      } catch (e) {
+        modes.forEach(function (m) {
+          setBadge(m, false, 'static (updated hourly) - live prices unavailable');
+        });
+        return;
+      }
+      var now = new Date().toISOString().substr(11, 8);
+      modes.forEach(function (m) {
+        var d = all[m];
+        var unreal = 0;
+        var missing = 0;
+        d.trades.forEach(function (t) {
+          var k = inst(t.pair);
+          var px = prices[k.type] ? prices[k.type][k.id] : undefined;
+          if (!px || !isFinite(px) || !t.open_rate) { missing++; return; }
+          var dir = t.short ? -1 : 1;
+          var u = dir * (px - t.open_rate) * t.amount;
+          unreal += u;
+          var lp = el('lp-' + m + '-' + t.id);
+          var lu = el('lu-' + m + '-' + t.id);
+          if (lp) { lp.textContent = String(parseFloat(px.toPrecision(6))); }
+          if (lu) {
+            lu.innerHTML = '<span class="' + cls(u) + '">' +
+              fmt(t.stake ? (u / t.stake) * 100 : 0, 2) + '% (' + fmt(u, 2) + ' USDT)</span>';
+          }
+        });
+        var ue = el('live-unreal-' + m);
+        var te = el('live-total-' + m);
+        if (ue) { ue.className = 'value ' + cls(unreal); ue.textContent = fmt(unreal, 2) + ' USDT'; }
+        if (te) {
+          var tot = d.realized + unreal;
+          te.className = 'value ' + cls(tot);
+          te.textContent = fmt(tot, 2) + ' USDT';
+        }
+        setBadge(m, true, 'LIVE ' + now + ' UTC - trade list as of ' + d.generated +
+          (missing ? ' - ' + missing + ' without price' : ''));
+      });
+    }
+    setTimeout(tick, 0);
+    setInterval(tick, REFRESH_MS);
+  } catch (e) { /* never break the rest of the page */ }
+})();
+
+</script>
+
+</body>
+</html>
