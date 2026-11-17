@@ -34,7 +34,8 @@ run-name: >-
 #   Peak memory / wall time of the backtest are written to the Job Summary
 #   (use them to size longer windows).
 #
-# Strategies: X8, X8Guard, X8Cap, X8ShortBand and X8Cut. Each needs its .py file
+# Strategies: X8, X8Guard, X8Cut and X8Rebuy (X8Cap and X8ShortBand files are still
+# understood by the steps below, but are not in the dropdown). Each needs its .py file
 # in the repo root or in user_data/strategies/. Futures only (the spot bots and
 # X7ML / older strategies are retired and no longer selectable).
 # The base config is config_dryrun_futures.json -- do not delete that file.
@@ -56,6 +57,12 @@ run-name: >-
 # Cut trades carry the exit reason cut_entries_<N> or cut_age_<H>h_<D>pct; the Job
 # Summary lists how many cuts happened. File: NostalgiaForInfinityX8Cut.py
 #
+# X8Rebuy (EXPERIMENT, research only) = X8 + ONE fix in the two SHORT rebuy functions
+# (short_rebuy_adjust_trade_position_v3 and _v4): the filter close < EMA_26 * 1.012 becomes
+# close > EMA_26 * 1.012 (all other short filters of this kind use ">"). No parameters.
+# Compare it with plain X8 on the same end_date, test_days and pairs_run_id, with
+# direction=both. File: NostalgiaForInfinityX8Rebuy.py
+#
 # Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
 # applied to the whole window (freqtrade can't rebuild historical pairlists).
 
@@ -69,6 +76,7 @@ on:
           - NostalgiaForInfinityX8
           - NostalgiaForInfinityX8Guard
           - NostalgiaForInfinityX8Cut
+          - NostalgiaForInfinityX8Rebuy
         default: NostalgiaForInfinityX8
       test_days:
         description: 'Test window length in days (min 20)'
@@ -171,7 +179,7 @@ jobs:
           git fetch --no-tags --depth=1 origin "$FULL_SHA"
           for n in NostalgiaForInfinityX8 NostalgiaForInfinityX8Guard \
                    NostalgiaForInfinityX8Cap NostalgiaForInfinityX8ShortBand \
-                   NostalgiaForInfinityX8Cut; do
+                   NostalgiaForInfinityX8Cut NostalgiaForInfinityX8Rebuy; do
             for f in "${n}.py" "user_data/strategies/${n}.py"; do
               if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
                 git checkout FETCH_HEAD -- "$f"
@@ -247,7 +255,7 @@ jobs:
             fi
           }
 
-          # The selected strategy itself (X8, X8Guard, X8Cap, X8ShortBand, X8Cut).
+          # The selected strategy itself (X8, X8Guard, X8Cap, X8ShortBand, X8Cut, X8Rebuy).
           copy_strategy "$STRATEGY"
 
           # Parent of the thin subclasses.
@@ -284,11 +292,12 @@ jobs:
       - name: Strategy diagnostics (version, commit, bad-trade flags)
         run: |
           F="user_data/strategies/${base_strategy}.py"
-          # parent file of a thin subclass: strip a trailing Guard / Cap / ShortBand / Cut
+          # parent file of a thin subclass: strip a trailing Guard / Cap / ShortBand / Cut / Rebuy
           PARENT_NAME="${base_strategy%Guard}"
           PARENT_NAME="${PARENT_NAME%Cap}"
           PARENT_NAME="${PARENT_NAME%ShortBand}"
           PARENT_NAME="${PARENT_NAME%Cut}"
+          PARENT_NAME="${PARENT_NAME%Rebuy}"
           FP="user_data/strategies/${PARENT_NAME}.py"
           {
             echo "repo HEAD:      $(git rev-parse HEAD)"
@@ -308,6 +317,9 @@ jobs:
             fi
             if [ "$base_strategy" = "NostalgiaForInfinityX8Cut" ]; then
               echo "cut parameters requested (guard_parameters): ${GUARD_IN:-<none, everything off = plain X8>}"
+            fi
+            if [ "$base_strategy" = "NostalgiaForInfinityX8Rebuy" ]; then
+              echo "rebuy fix: short_rebuy_adjust_trade_position_v3 and _v4 (close > EMA_26 * 1.012), no parameters"
             fi
             echo "version():"
             grep -n -A2 "def version" "$FP" | head -5 || true
@@ -410,8 +422,8 @@ jobs:
           if requested:
               # Validate keys against the strategy's own NFI_SAFE_PARAMETERS list.
               base = os.environ.get("base_strategy", "NostalgiaForInfinityX8")
-              # Parent strategy file: strip the Guard / Cap / ShortBand / Cut subclass suffix.
-              family_file = re.sub(r"(Guard|Cap|ShortBand|Cut)$", "", base) + ".py"
+              # Parent strategy file: strip the Guard / Cap / ShortBand / Cut / Rebuy subclass suffix.
+              family_file = re.sub(r"(Guard|Cap|ShortBand|Cut|Rebuy)$", "", base) + ".py"
               src_path = os.path.join("user_data", "strategies", family_file)
               safe = set()
               try:
