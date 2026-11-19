@@ -317,6 +317,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
             carried_open = sum(1 for t in trs if t["is_open"] and t["open_date"]
                                and gd.to_aware_utc(t["open_date"]) < reset)
             counts.append(f"{label}: <b>{carried_open}</b> open")
+        counts_txt = (" \u00b7 ".join(counts) if counts else "none")
         reset_cards = f"""
 <div class="card">
   <h3>\U0001f504 Numbers restart at {reset_txt}</h3>
@@ -324,7 +325,7 @@ def main(spot_x7, fut_x7, spot_x8, fut_x8, fut_guard, history_db, output_path, d
     Both bots are counted from zero below: only trades opened after the reset are included.
     Trades opened earlier are carried over (list at the bottom of this section) and are not part of these
     numbers; nothing was deleted &mdash; the full all-time numbers and trade lists are on the
-    <a href="details.html">Details page</a>. Still-open carried-over trades (they keep occupying slots): {' \u00b7 '.join(counts) if counts else 'none'}.
+    <a href="details.html">Details page</a>. Still-open carried-over trades (they keep occupying slots): {counts_txt}.
   </p>
 </div>"""
         if "futures_x8" in all_trades and "futures_x8guard" in all_trades:
