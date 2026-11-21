@@ -715,6 +715,7 @@ jobs:
           import re
           sig = blk = pairs = nodata = 0
           params = ""
+          per_pair = {}
           try:
               lines = open("user_data/logs/backtest_stderr.log", errors="replace").read().splitlines()
           except OSError:
@@ -725,6 +726,8 @@ jobs:
                   pairs += 1
                   sig += int(m.group(2))
                   blk += int(m.group(3))
+                  if int(m.group(3)) > 0:
+                      per_pair[m.group(1).split("/")[0]] = (int(m.group(3)), int(m.group(2)))
               if "[Crash]" in l and "fail-open" in l:
                   nodata += 1
               if "[Crash] params" in l:
@@ -733,7 +736,10 @@ jobs:
           text = (f"parameters in effect: {params or '(not found in the log)'}\n"
                   f"pairs with a Crash log line: {pairs}\n"
                   f"long signal candles: {sig}, blocked: {blk} ({pct:.1f}%)\n"
-                  f"pairs where BTC 1h data was missing (gate did nothing): {nodata}\n")
+                  f"pairs where 1h data was missing (gate did nothing): {nodata}\n")
+          top = sorted(per_pair.items(), key=lambda x: -x[1][0])[:30]
+          text += "pairs with blocked signals (blocked/signals): " + (
+              ", ".join(f"{k} {b}/{s}" for k, (b, s) in top) if top else "none") + "\n"
           open("user_data/logs/crash.txt", "w").write(text)
           print(text)
           PYEOF
