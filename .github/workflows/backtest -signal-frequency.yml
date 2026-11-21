@@ -34,7 +34,7 @@ run-name: >-
 #   Peak memory / wall time of the backtest are written to the Job Summary
 #   (use them to size longer windows).
 #
-# Strategies: X8, X8Guard, X8Cut, X8Rebuy, X8BtcGate and X8Crash (X8Cap and X8ShortBand
+# Strategies: X8, X8Guard, X8Cut, X8Rebuy, X8BtcGate, X8Crash and X8ShortOn (X8Cap and X8ShortBand
 # files are still understood by the steps below, but are not in the dropdown). Each needs
 # its .py file in the repo root or in user_data/strategies/. Futures only (the spot bots
 # and X7ML / older strategies are retired and no longer selectable).
@@ -78,6 +78,13 @@ run-name: >-
 # plain X8). The Job Summary shows how many long signal candles it blocked.
 # File: NostalgiaForInfinityX8Crash.py
 #
+# X8ShortOn (EXPERIMENT, research only) = X8 + switches for the short entry conditions. X8 v18.0.155 runs only
+# 4 of its 31 short conditions (501, 502, 542, 562); the others are off in the file. With empty
+# guard_parameters it is exactly X8. Keys: short_families (normal, quick, rebuy, high_profit, rapid,
+# top_coins, scalp), short_enable (list of condition numbers), short_disable (list). Examples:
+# {"short_families": ["quick"]} or {"short_enable": [543, 544]} or {"short_disable": [502]}.
+# The Job Summary lists short trades by tag. File: NostalgiaForInfinityX8ShortOn.py
+#
 # Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
 # applied to the whole window (freqtrade can't rebuild historical pairlists).
 
@@ -94,6 +101,7 @@ on:
           - NostalgiaForInfinityX8Rebuy
           - NostalgiaForInfinityX8BtcGate
           - NostalgiaForInfinityX8Crash
+          - NostalgiaForInfinityX8ShortOn
         default: NostalgiaForInfinityX8
       test_days:
         description: 'Test window length in days (min 20)'
@@ -135,7 +143,7 @@ on:
         type: string
         default: ''
       guard_parameters:
-        description: 'X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash only: JSON object, e.g. {"guard_max_entries": 3}, {"band_near": 0.2}, {"cut_entries": 3} or {"crash_drop_pct": 15} (empty = defaults)'
+        description: 'X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash / X8ShortOn only: JSON object, e.g. {"guard_max_entries": 3}, {"cut_entries": 3}, {"crash_drop_pct": 15} or {"short_families": ["quick"]} (empty = defaults)'
         type: string
         default: ''
       export_signals:
@@ -197,7 +205,8 @@ jobs:
           for n in NostalgiaForInfinityX8 NostalgiaForInfinityX8Guard \
                    NostalgiaForInfinityX8Cap NostalgiaForInfinityX8ShortBand \
                    NostalgiaForInfinityX8Cut NostalgiaForInfinityX8Rebuy \
-                   NostalgiaForInfinityX8BtcGate NostalgiaForInfinityX8Crash; do
+                   NostalgiaForInfinityX8BtcGate NostalgiaForInfinityX8Crash \
+                   NostalgiaForInfinityX8ShortOn; do
             for f in "${n}.py" "user_data/strategies/${n}.py"; do
               if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
                 git checkout FETCH_HEAD -- "$f"
@@ -318,6 +327,7 @@ jobs:
           PARENT_NAME="${PARENT_NAME%Rebuy}"
           PARENT_NAME="${PARENT_NAME%BtcGate}"
           PARENT_NAME="${PARENT_NAME%Crash}"
+          PARENT_NAME="${PARENT_NAME%ShortOn}"
           FP="user_data/strategies/${PARENT_NAME}.py"
           {
             echo "repo HEAD:      $(git rev-parse HEAD)"
@@ -343,6 +353,9 @@ jobs:
             fi
             if [ "$base_strategy" = "NostalgiaForInfinityX8Crash" ]; then
               echo "crash gate parameters requested (guard_parameters): ${GUARD_IN:-<none, defaults: drop 20 pct from 720h high, within 5 pct of 168h low>}"
+            fi
+            if [ "$base_strategy" = "NostalgiaForInfinityX8ShortOn" ]; then
+              echo "short switches requested (guard_parameters): ${GUARD_IN:-<none = plain X8, shorts 501 502 542 562 only>}"
             fi
             if [ "$base_strategy" = "NostalgiaForInfinityX8Rebuy" ]; then
               echo "rebuy fix: short_rebuy_adjust_trade_position_v3 and _v4 (close > EMA_26 * 1.012), no parameters"
@@ -449,7 +462,7 @@ jobs:
               # Validate keys against the strategy's own NFI_SAFE_PARAMETERS list.
               base = os.environ.get("base_strategy", "NostalgiaForInfinityX8")
               # Parent strategy file: strip the Guard / Cap / ShortBand / Cut / Rebuy / BtcGate / Crash subclass suffix.
-              family_file = re.sub(r"(Guard|Cap|ShortBand|Cut|Rebuy|BtcGate|Crash)$", "", base) + ".py"
+              family_file = re.sub(r"(Guard|Cap|ShortBand|Cut|Rebuy|BtcGate|Crash|ShortOn)$", "", base) + ".py"
               src_path = os.path.join("user_data", "strategies", family_file)
               safe = set()
               try:
@@ -478,8 +491,8 @@ jobs:
 
           graw = os.environ.get("GUARD_IN", "").strip()
           if graw:
-              if not os.environ.get("base_strategy", "").endswith(("Guard", "Cap", "ShortBand", "Cut", "BtcGate", "Crash")):
-                  print("::warning::guard_parameters given but strategy is not an X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash -- ignored by the strategy.")
+              if not os.environ.get("base_strategy", "").endswith(("Guard", "Cap", "ShortBand", "Cut", "BtcGate", "Crash", "ShortOn")):
+                  print("::warning::guard_parameters given but strategy is not an X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash / X8ShortOn -- ignored by the strategy.")
               try:
                   gp = json.loads(graw)
               except json.JSONDecodeError as e:
@@ -744,6 +757,13 @@ jobs:
           print(text)
           PYEOF
 
+      - name: ShortOn switches in effect (X8ShortOn only)
+        if: always() && inputs.strategy == 'NostalgiaForInfinityX8ShortOn'
+        continue-on-error: true
+        run: |
+          grep -h "\[ShortOn\]" user_data/logs/backtest_stderr.log | head -3 > user_data/logs/shorton.txt || true
+          cat user_data/logs/shorton.txt
+
       - name: Summarize trades (weeks, tags, exits, long/short, worst trades)
         run: |
           python3 << 'PYEOF'
@@ -790,6 +810,20 @@ jobs:
           w(f"Long / Short trades: {len(longs)} / {len(shorts)}")
           w(f"Long / Short profit USDT: {sum(t['profit_abs'] for t in longs):.3f} / "
             f"{sum(t['profit_abs'] for t in shorts):.3f}")
+
+          w("\nShort trades by enter_tag (count, profit USDT, losses, avg hours):")
+          st = defaultdict(lambda: [0, 0.0, 0, 0.0])
+          for t in shorts:
+              k = str(t.get("enter_tag")).strip()
+              st[k][0] += 1
+              st[k][1] += t.get("profit_abs", 0)
+              st[k][3] += t.get("trade_duration", 0) / 60.0
+              if t.get("profit_abs", 0) < 0:
+                  st[k][2] += 1
+          if not st:
+              w("  (no short trades)")
+          for k, (n, p, l, h) in sorted(st.items()):
+              w(f"  short tag {k:6s} n={n:3d}  profit={p:10.3f}  losses={l}  avg_h={h / n:6.1f}")
 
           losers = [t for t in trades if t.get("profit_abs", 0) < 0]
           w(f"Losing trades: {len(losers)}  (sum {sum(t['profit_abs'] for t in losers):.3f} USDT)")
@@ -896,6 +930,12 @@ jobs:
               echo "### BTC gate"
               echo '```'
               cat user_data/logs/btcgate.txt
+              echo '```'
+            fi
+            if [ -f user_data/logs/shorton.txt ]; then
+              echo "### ShortOn switches"
+              echo '```'
+              cat user_data/logs/shorton.txt
               echo '```'
             fi
             if [ -f user_data/logs/crash.txt ]; then
