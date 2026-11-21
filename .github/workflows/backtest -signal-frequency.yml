@@ -34,10 +34,10 @@ run-name: >-
 #   Peak memory / wall time of the backtest are written to the Job Summary
 #   (use them to size longer windows).
 #
-# Strategies: X8, X8Guard, X8Cut and X8Rebuy (X8Cap and X8ShortBand files are still
-# understood by the steps below, but are not in the dropdown). Each needs its .py file
-# in the repo root or in user_data/strategies/. Futures only (the spot bots and
-# X7ML / older strategies are retired and no longer selectable).
+# Strategies: X8, X8Guard, X8Cut, X8Rebuy, X8BtcGate and X8Crash (X8Cap and X8ShortBand
+# files are still understood by the steps below, but are not in the dropdown). Each needs
+# its .py file in the repo root or in user_data/strategies/. Futures only (the spot bots
+# and X7ML / older strategies are retired and no longer selectable).
 # The base config is config_dryrun_futures.json -- do not delete that file.
 #
 # X8Cap = X8 plus ONE extra field, guard_max_entries (cap on the total number of
@@ -69,6 +69,15 @@ run-name: >-
 # {"btc_gate_ema_days": 50, "btc_gate_drop_days": 3, "btc_gate_drop_pct": 8}. The Job Summary shows how
 # many entry attempts were refused. File: NostalgiaForInfinityX8BtcGate.py
 #
+# X8Crash (EXPERIMENT, research only) = X8 + a "sharp BTC drop without a bounce" gate on NEW LONG
+# entries (first entry only; rebuys, grinds and shorts are untouched). The gate is on when BTC (1h
+# candles) is at least crash_drop_pct percent below its high of the last crash_high_hours hours AND at
+# most crash_near_low_pct percent above its low of the last crash_low_hours hours. Defaults
+# (20 / 720 / 5 / 168) are untested guesses: sweep them with guard_parameters, e.g.
+# {"crash_drop_pct": 15, "crash_near_low_pct": 3}. {"crash_drop_pct": 0} = gate off (same as
+# plain X8). The Job Summary shows how many long signal candles it blocked.
+# File: NostalgiaForInfinityX8Crash.py
+#
 # Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
 # applied to the whole window (freqtrade can't rebuild historical pairlists).
 
@@ -84,6 +93,7 @@ on:
           - NostalgiaForInfinityX8Cut
           - NostalgiaForInfinityX8Rebuy
           - NostalgiaForInfinityX8BtcGate
+          - NostalgiaForInfinityX8Crash
         default: NostalgiaForInfinityX8
       test_days:
         description: 'Test window length in days (min 20)'
@@ -125,7 +135,7 @@ on:
         type: string
         default: ''
       guard_parameters:
-        description: 'X8Guard / X8Cap / X8ShortBand / X8Cut only: JSON object, e.g. {"guard_max_entries": 3}, {"band_near": 0.2} or {"cut_entries": 3} (empty = defaults)'
+        description: 'X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash only: JSON object, e.g. {"guard_max_entries": 3}, {"band_near": 0.2}, {"cut_entries": 3} or {"crash_drop_pct": 15} (empty = defaults)'
         type: string
         default: ''
       export_signals:
@@ -187,7 +197,7 @@ jobs:
           for n in NostalgiaForInfinityX8 NostalgiaForInfinityX8Guard \
                    NostalgiaForInfinityX8Cap NostalgiaForInfinityX8ShortBand \
                    NostalgiaForInfinityX8Cut NostalgiaForInfinityX8Rebuy \
-                   NostalgiaForInfinityX8BtcGate; do
+                   NostalgiaForInfinityX8BtcGate NostalgiaForInfinityX8Crash; do
             for f in "${n}.py" "user_data/strategies/${n}.py"; do
               if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
                 git checkout FETCH_HEAD -- "$f"
@@ -263,7 +273,7 @@ jobs:
             fi
           }
 
-          # The selected strategy itself (X8, X8Guard, X8Cap, X8ShortBand, X8Cut, X8Rebuy).
+          # The selected strategy itself (X8, X8Guard, X8Cap, X8ShortBand, X8Cut, X8Rebuy, X8BtcGate, X8Crash).
           copy_strategy "$STRATEGY"
 
           # Parent of the thin subclasses.
@@ -300,13 +310,14 @@ jobs:
       - name: Strategy diagnostics (version, commit, bad-trade flags)
         run: |
           F="user_data/strategies/${base_strategy}.py"
-          # parent file of a thin subclass: strip a trailing Guard / Cap / ShortBand / Cut / Rebuy
+          # parent file of a thin subclass: strip a trailing Guard / Cap / ShortBand / Cut / Rebuy / BtcGate / Crash
           PARENT_NAME="${base_strategy%Guard}"
           PARENT_NAME="${PARENT_NAME%Cap}"
           PARENT_NAME="${PARENT_NAME%ShortBand}"
           PARENT_NAME="${PARENT_NAME%Cut}"
           PARENT_NAME="${PARENT_NAME%Rebuy}"
           PARENT_NAME="${PARENT_NAME%BtcGate}"
+          PARENT_NAME="${PARENT_NAME%Crash}"
           FP="user_data/strategies/${PARENT_NAME}.py"
           {
             echo "repo HEAD:      $(git rev-parse HEAD)"
@@ -329,6 +340,9 @@ jobs:
             fi
             if [ "$base_strategy" = "NostalgiaForInfinityX8BtcGate" ]; then
               echo "btc gate parameters requested (guard_parameters): ${GUARD_IN:-<none, defaults: EMA 50 days, drop 8 pct in 3 days>}"
+            fi
+            if [ "$base_strategy" = "NostalgiaForInfinityX8Crash" ]; then
+              echo "crash gate parameters requested (guard_parameters): ${GUARD_IN:-<none, defaults: drop 20 pct from 720h high, within 5 pct of 168h low>}"
             fi
             if [ "$base_strategy" = "NostalgiaForInfinityX8Rebuy" ]; then
               echo "rebuy fix: short_rebuy_adjust_trade_position_v3 and _v4 (close > EMA_26 * 1.012), no parameters"
@@ -434,8 +448,8 @@ jobs:
           if requested:
               # Validate keys against the strategy's own NFI_SAFE_PARAMETERS list.
               base = os.environ.get("base_strategy", "NostalgiaForInfinityX8")
-              # Parent strategy file: strip the Guard / Cap / ShortBand / Cut / Rebuy subclass suffix.
-              family_file = re.sub(r"(Guard|Cap|ShortBand|Cut|Rebuy|BtcGate)$", "", base) + ".py"
+              # Parent strategy file: strip the Guard / Cap / ShortBand / Cut / Rebuy / BtcGate / Crash subclass suffix.
+              family_file = re.sub(r"(Guard|Cap|ShortBand|Cut|Rebuy|BtcGate|Crash)$", "", base) + ".py"
               src_path = os.path.join("user_data", "strategies", family_file)
               safe = set()
               try:
@@ -464,8 +478,8 @@ jobs:
 
           graw = os.environ.get("GUARD_IN", "").strip()
           if graw:
-              if not os.environ.get("base_strategy", "").endswith(("Guard", "Cap", "ShortBand", "Cut", "BtcGate")):
-                  print("::warning::guard_parameters given but strategy is not an X8Guard / X8Cap / X8ShortBand / X8Cut -- ignored by the strategy.")
+              if not os.environ.get("base_strategy", "").endswith(("Guard", "Cap", "ShortBand", "Cut", "BtcGate", "Crash")):
+                  print("::warning::guard_parameters given but strategy is not an X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash -- ignored by the strategy.")
               try:
                   gp = json.loads(graw)
               except json.JSONDecodeError as e:
@@ -512,7 +526,7 @@ jobs:
             --timerange "${{ steps.dates.outputs.short_download_start }}-${{ steps.dates.outputs.test_end }}" \
             --timeframes 5m 15m
 
-      - name: Download BTC informative data (BTC 4h used by grind-exit filters)
+      - name: Download BTC informative data (BTC 1h/4h/1d used by grind-exit filters and the BTC gates)
         run: |
           # The pair is not in the pairlist, so download-data never fetches it.
           # Runs on every run (also on cache hits); only a small amount of data.
@@ -693,6 +707,37 @@ jobs:
           print(text)
           PYEOF
 
+      - name: Crash gate statistics (X8Crash only)
+        if: always() && inputs.strategy == 'NostalgiaForInfinityX8Crash'
+        continue-on-error: true
+        run: |
+          python3 << 'PYEOF'
+          import re
+          sig = blk = pairs = nodata = 0
+          params = ""
+          try:
+              lines = open("user_data/logs/backtest_stderr.log", errors="replace").read().splitlines()
+          except OSError:
+              lines = []
+          for l in lines:
+              m = re.search(r"\[Crash\] (\S+) signals=(\d+) blocked=(\d+)", l)
+              if m:
+                  pairs += 1
+                  sig += int(m.group(2))
+                  blk += int(m.group(3))
+              if "[Crash]" in l and "fail-open" in l:
+                  nodata += 1
+              if "[Crash] params" in l:
+                  params = l.split("[Crash] params", 1)[1].strip()
+          pct = (100.0 * blk / sig) if sig else 0.0
+          text = (f"parameters in effect: {params or '(not found in the log)'}\n"
+                  f"pairs with a Crash log line: {pairs}\n"
+                  f"long signal candles: {sig}, blocked: {blk} ({pct:.1f}%)\n"
+                  f"pairs where BTC 1h data was missing (gate did nothing): {nodata}\n")
+          open("user_data/logs/crash.txt", "w").write(text)
+          print(text)
+          PYEOF
+
       - name: Summarize trades (weeks, tags, exits, long/short, worst trades)
         run: |
           python3 << 'PYEOF'
@@ -845,6 +890,12 @@ jobs:
               echo "### BTC gate"
               echo '```'
               cat user_data/logs/btcgate.txt
+              echo '```'
+            fi
+            if [ -f user_data/logs/crash.txt ]; then
+              echo "### Crash gate"
+              echo '```'
+              cat user_data/logs/crash.txt
               echo '```'
             fi
             if [ -f user_data/logs/diagnostics.txt ]; then
