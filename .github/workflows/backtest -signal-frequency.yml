@@ -2,7 +2,7 @@ name: Backtest Signal Frequency
 
 run-name: >-
   Backtest ${{ inputs.strategy }} ${{ inputs.direction }}
-  end=${{ inputs.end_date || 'today' }} ref=${{ inputs.ref || 'main' }}${{ inputs.derisk_hold_short != 'default' && format(' derisk_short={0}', inputs.derisk_hold_short) || '' }}${{ inputs.stale_max_daily_range_pct != '' && format(' stale_range={0}', inputs.stale_max_daily_range_pct) || '' }}${{ inputs.nfi_overrides != '' && ' +overrides' || '' }}${{ inputs.guard_parameters != '' && format(' guard={0}', inputs.guard_parameters) || '' }}${{ inputs.export_signals == 'yes' && ' +signals' || '' }}${{ inputs.breakdown != 'none' && format(' breakdown={0}', inputs.breakdown) || '' }} days=${{ inputs.test_days }}
+  end=${{ inputs.end_date || 'today' }} ref=${{ inputs.ref || 'main' }}${{ inputs.derisk_hold_short != 'default' && format(' derisk_short={0}', inputs.derisk_hold_short) || '' }}${{ inputs.stale_max_daily_range_pct != '' && format(' stale_range={0}', inputs.stale_max_daily_range_pct) || '' }}${{ inputs.nfi_overrides != '' && ' +overrides' || '' }}${{ inputs.guard_parameters != '' && format(' guard={0}', inputs.guard_parameters) || '' }}${{ inputs.export_signals == 'yes' && ' +signals' || '' }}${{ inputs.breakdown != 'none' && format(' breakdown={0}', inputs.breakdown) || '' }}${{ inputs.fee != '' && format(' fee={0}', inputs.fee) || '' }} days=${{ inputs.test_days }}
 
 # Manual backtest of the NFI X8 family on OKX FUTURES data.
 #
@@ -31,6 +31,8 @@ run-name: >-
 #                       candles (entries/exits) and the rejected signals, for
 #                       `backtesting-analysis` or our own scripts.
 #   * breakdown      -> none | month | week : freqtrade `--breakdown table.
+#   * fee            -> freqtrade --fee ratio per side (e.g. 0.001 = 0.1 pct, applied on entry and on
+#                       exit of every order). Empty = exchange default. Use it to stress-test costs/slippage.
 #   Peak memory / wall time of the backtest are written to the Job Summary
 #   (use them to size longer windows).
 #
@@ -161,6 +163,10 @@ on:
           - month
           - week
         default: none
+      fee:
+        description: 'freqtrade --fee ratio per side, e.g. 0.001 (empty = exchange default; cost/slippage stress test)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -187,6 +193,7 @@ jobs:
       GUARD_IN: ${{ inputs.guard_parameters }}
       EXPORT_IN: ${{ inputs.export_signals }}
       BREAKDOWN_IN: ${{ inputs.breakdown }}
+      FEE_IN: ${{ inputs.fee }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repository
@@ -564,7 +571,12 @@ jobs:
           if [ -n "$BREAKDOWN_IN" ] && [ "$BREAKDOWN_IN" != "none" ]; then
             BREAKDOWN_ARGS=(--breakdown "$BREAKDOWN_IN")
           fi
-          echo "export mode: $EXPORT_MODE ; breakdown: ${BREAKDOWN_ARGS[*]:-none}"
+          FEE_ARGS=()
+          if [ -n "$FEE_IN" ]; then
+            if ! [[ "$FEE_IN" =~ ^[0-9]*\.?[0-9]+$ ]]; then echo "::error::fee must be a number like 0.001"; exit 1; fi
+            FEE_ARGS=(--fee "$FEE_IN")
+          fi
+          echo "export mode: $EXPORT_MODE ; breakdown: ${BREAKDOWN_ARGS[*]:-none} ; fee: ${FEE_ARGS[*]:-exchange default}"
 
           # stdout (the report) -> backtest.log ; stderr (freqtrade/strategy log lines,
           # incl. "Parameter X changed from ...") -> backtest_stderr.log + console.
@@ -578,6 +590,7 @@ jobs:
             --export "$EXPORT_MODE" \
             --export-directory user_data/backtest_results \
             "${BREAKDOWN_ARGS[@]}" \
+            "${FEE_ARGS[@]}" \
             2> >(tee user_data/logs/backtest_stderr.log >&2) \
             | tee user_data/logs/backtest.log
 
@@ -890,6 +903,7 @@ jobs:
             echo "| Pairlist | $( [ -n "$PAIRS_RUN_IN" ] && echo "reused from run $PAIRS_RUN_IN" || echo "new snapshot -- reuse with pairs_run_id=${{ github.run_id }}" ) |"
             echo "| Data cache | ${{ steps.datacache.outputs.cache-hit == 'true' && 'hit' || 'miss (downloaded)' }} |"
             echo "| Export / breakdown | \`$EXPORT_IN\` / \`$BREAKDOWN_IN\` |"
+            echo "| Fee per side | \`${FEE_IN:-exchange default}\` |"
             echo ""
             echo "**Known limitation:** the pairlist is a snapshot of TODAY's top pairs by volume,"
             echo "applied to the whole historical window."
