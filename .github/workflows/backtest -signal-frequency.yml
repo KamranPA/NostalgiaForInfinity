@@ -87,6 +87,12 @@ run-name: >-
 # {"short_families": ["quick"]} or {"short_enable": [543, 544]} or {"short_disable": [502]}.
 # The Job Summary lists short trades by tag. File: NostalgiaForInfinityX8ShortOn.py
 #
+# X8CutShortAge (EXPERIMENT, research only) = X8Cut (all its guard_parameters still work) + one rule for SHORTS:
+# a short open for at least short_age_days and losing at least short_age_loss (fraction of margin) is closed
+# (exit reason short_age_<days>d). Default off = exactly X8Cut. Example guard_parameters:
+# {"cut_entries": 3, "cut_lock_days": 14, "cut_apply_to": "long", "short_age_days": 14, "short_age_loss": 0.15}
+# File: NostalgiaForInfinityX8CutShortAge.py (needs NostalgiaForInfinityX8Cut.py and NostalgiaForInfinityX8.py)
+#
 # Known limitation: the pairlist is a snapshot of TODAY's top pairs by volume,
 # applied to the whole window (freqtrade can't rebuild historical pairlists).
 
@@ -104,6 +110,7 @@ on:
           - NostalgiaForInfinityX8BtcGate
           - NostalgiaForInfinityX8Crash
           - NostalgiaForInfinityX8ShortOn
+          - NostalgiaForInfinityX8CutShortAge
         default: NostalgiaForInfinityX8
       test_days:
         description: 'Test window length in days (min 20)'
@@ -145,7 +152,7 @@ on:
         type: string
         default: ''
       guard_parameters:
-        description: 'X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash / X8ShortOn only: JSON object, e.g. {"guard_max_entries": 3}, {"cut_entries": 3}, {"crash_drop_pct": 15} or {"short_families": ["quick"]} (empty = defaults)'
+        description: 'X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash / X8ShortOn / X8CutShortAge only: JSON object, e.g. {"guard_max_entries": 3}, {"cut_entries": 3}, {"crash_drop_pct": 15} or {"short_families": ["quick"]} (empty = defaults)'
         type: string
         default: ''
       export_signals:
@@ -213,7 +220,7 @@ jobs:
                    NostalgiaForInfinityX8Cap NostalgiaForInfinityX8ShortBand \
                    NostalgiaForInfinityX8Cut NostalgiaForInfinityX8Rebuy \
                    NostalgiaForInfinityX8BtcGate NostalgiaForInfinityX8Crash \
-                   NostalgiaForInfinityX8ShortOn; do
+                   NostalgiaForInfinityX8ShortOn NostalgiaForInfinityX8CutShortAge; do
             for f in "${n}.py" "user_data/strategies/${n}.py"; do
               if git cat-file -e "FETCH_HEAD:$f" 2>/dev/null; then
                 git checkout FETCH_HEAD -- "$f"
@@ -296,6 +303,9 @@ jobs:
           if [ "$STRATEGY" != "NostalgiaForInfinityX8" ]; then
             copy_strategy NostalgiaForInfinityX8
           fi
+          if [ "$STRATEGY" = "NostalgiaForInfinityX8CutShortAge" ]; then
+            copy_strategy NostalgiaForInfinityX8Cut
+          fi
 
           # Base config (futures only).
           cp config_dryrun_futures.json user_data/live_config.json
@@ -327,7 +337,8 @@ jobs:
         run: |
           F="user_data/strategies/${base_strategy}.py"
           # parent file of a thin subclass: strip a trailing Guard / Cap / ShortBand / Cut / Rebuy / BtcGate / Crash
-          PARENT_NAME="${base_strategy%Guard}"
+          PARENT_NAME="${base_strategy%ShortAge}"
+          PARENT_NAME="${PARENT_NAME%Guard}"
           PARENT_NAME="${PARENT_NAME%Cap}"
           PARENT_NAME="${PARENT_NAME%ShortBand}"
           PARENT_NAME="${PARENT_NAME%Cut}"
@@ -360,6 +371,9 @@ jobs:
             fi
             if [ "$base_strategy" = "NostalgiaForInfinityX8Crash" ]; then
               echo "crash gate parameters requested (guard_parameters): ${GUARD_IN:-<none, defaults: drop 20 pct from 720h high, within 5 pct of 168h low>}"
+            fi
+            if [ "$base_strategy" = "NostalgiaForInfinityX8CutShortAge" ]; then
+              echo "cut + short age parameters requested (guard_parameters): ${GUARD_IN:-<none = plain X8>}"
             fi
             if [ "$base_strategy" = "NostalgiaForInfinityX8ShortOn" ]; then
               echo "short switches requested (guard_parameters): ${GUARD_IN:-<none = plain X8, shorts 501 502 542 562 only>}"
@@ -469,7 +483,10 @@ jobs:
               # Validate keys against the strategy's own NFI_SAFE_PARAMETERS list.
               base = os.environ.get("base_strategy", "NostalgiaForInfinityX8")
               # Parent strategy file: strip the Guard / Cap / ShortBand / Cut / Rebuy / BtcGate / Crash subclass suffix.
-              family_file = re.sub(r"(Guard|Cap|ShortBand|Cut|Rebuy|BtcGate|Crash|ShortOn)$", "", base) + ".py"
+              family = base
+              for _ in range(3):
+                  family = re.sub(r"(Guard|Cap|ShortBand|Cut|Rebuy|BtcGate|Crash|ShortOn|ShortAge)$", "", family)
+              family_file = family + ".py"
               src_path = os.path.join("user_data", "strategies", family_file)
               safe = set()
               try:
@@ -498,8 +515,8 @@ jobs:
 
           graw = os.environ.get("GUARD_IN", "").strip()
           if graw:
-              if not os.environ.get("base_strategy", "").endswith(("Guard", "Cap", "ShortBand", "Cut", "BtcGate", "Crash", "ShortOn")):
-                  print("::warning::guard_parameters given but strategy is not an X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash / X8ShortOn -- ignored by the strategy.")
+              if not os.environ.get("base_strategy", "").endswith(("Guard", "Cap", "ShortBand", "Cut", "BtcGate", "Crash", "ShortOn", "ShortAge")):
+                  print("::warning::guard_parameters given but strategy is not an X8Guard / X8Cap / X8ShortBand / X8Cut / X8BtcGate / X8Crash / X8ShortOn / X8CutShortAge -- ignored by the strategy.")
               try:
                   gp = json.loads(graw)
               except json.JSONDecodeError as e:
