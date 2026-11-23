@@ -26,9 +26,23 @@
   "cancel_open_orders_on_exit": true,
   "position_adjustment_enable": true,
   "max_entry_position_adjustment": -1,
+  "_COMMENT_pricing": "PRICING FOLLOWS NFI's OFFICIAL configs/exampleconfig.json: entry/exit price_side 'other' (cross the spread, so orders fill at once like in the backtest), no order book, short unfilled timeouts (entry 3 min, exit 2 min, exit_timeout_count 0), all order types limit. The previous values ('same' = passive bid/ask, order book on, 10/30 min timeouts) could leave cut/derisk exits unfilled while price kept falling, and filled entries mostly on dips. X8's own code branches on exit price_side in ['bid','other'] when it computes profit in live/dry-run. Change this in BOTH x8 and x8guard configs at the same time.",
   "unfilledtimeout": {
-    "entry": 10,
-    "exit": 30
+    "entry": 3,
+    "exit": 2,
+    "exit_timeout_count": 0,
+    "unit": "minutes"
+  },
+  "order_types": {
+    "entry": "limit",
+    "exit": "limit",
+    "emergency_exit": "limit",
+    "force_entry": "limit",
+    "force_exit": "limit",
+    "stoploss": "limit",
+    "stoploss_on_exchange": false,
+    "stoploss_on_exchange_interval": 60,
+    "stoploss_on_exchange_limit_ratio": 0.99
   },
   "exchange": {
     "name": "okx",
@@ -102,8 +116,8 @@
   },
   "_COMMENT_pairlist": "Identical to config_dryrun_futures_x8.json: both VolumePairList entries need lookback_days=1 because OKX's futures/swap ticker does not expose quoteVolume in the live-ticker format (candle-based 'advanced mode' volume is required). Do not change one file without the other.",
   "entry_pricing": {
-    "price_side": "same",
-    "use_order_book": true,
+    "price_side": "other",
+    "use_order_book": false,
     "order_book_top": 1,
     "price_last_balance": 0.0,
     "check_depth_of_market": {
@@ -112,9 +126,10 @@
     }
   },
   "exit_pricing": {
-    "price_side": "same",
-    "use_order_book": true,
-    "order_book_top": 1
+    "price_side": "other",
+    "use_order_book": false,
+    "order_book_top": 1,
+    "price_last_balance": 0.0
   },
   "pairlists": [
     {
