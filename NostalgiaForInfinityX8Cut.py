@@ -9,11 +9,12 @@
 # buy the same falling coin again at once. Everything else of X8 is untouched; the normal X8 exits
 # keep working for every trade that does not trigger a cut.
 #
-# Two independent triggers, both OFF by default (all zero = this class behaves exactly like X8).
+# Three independent triggers, all OFF by default (all zero = this class behaves exactly like X8).
 # Parameters come from the backtest input "guard_parameters", e.g.
 # {"cut_entries": 3}
 # {"cut_age_hours": 72, "cut_adverse_pct": 12}
 # {"cut_entries": 5, "cut_age_hours": 72, "cut_adverse_pct": 12, "cut_lock_days": 3}
+# {"cut_entries": 3, "cut_lock_days": 14, "cut_apply_to": "long", "cut_liq_distance_pct": 10}
 #
 # cut_entries      close the trade when it has this many ENTRY orders filled (the first entry
 # counts as 1). 0 = off.
@@ -21,12 +22,21 @@
 # AND the price is cut_adverse_pct or more against the FIRST entry price
 # (below it for a long, above it for a short). 0 = off.
 # cut_adverse_pct  adverse move for the age trigger, in percent (default 12).
+# cut_liq_distance_pct  close the trade when the price is this close to the LIQUIDATION price, in percent
+# of the current price (long: price above liquidation; short: price below it). Uses
+# freqtrade's trade.liquidation_price. 0 = off. If that value is missing for a trade the rule
+# cannot fire for it and one warning is logged per run: "[Cut] ... liquidation price missing".
+# Also follows cut_apply_to. A pure backstop for fast crashes that liquidate a position before
+# cut_entries is reached; it has no effect on trades that never get near liquidation.
 # cut_lock_days    after a cut, block new entries on that pair for this many days (default 3).
 # cut_apply_to     "both" (default) or "long". With "long" only LONG trades are ever cut; shorts keep
 # the plain X8 behaviour. Any other value stops the run with an error (on purpose).
 #
-# Exit reasons written to the trade: cut_entries_<N>  and  cut_age_<H>h_<D>pct
-# Per cut it logs:  [Cut] PAIR reason=... entries=N age_h=H adverse_pct=D
+# Exit reasons written to the trade: cut_entries_<N>, cut_age_<H>h_<D>pct and cut_liq_<D>pct
+# Per cut it logs:  [Cut] PAIR reason=... entries=N age_h=H adverse_pct=D liq_dist_pct=L
+#
+# v4: new trigger cut_liq_distance_pct (distance to the liquidation price). Off by default, so every
+# existing guard_parameters run gives the same result as v3.
 #
 # v3: new option cut_apply_to ("long" = never cut shorts).
 #
@@ -47,6 +57,8 @@ class NostalgiaForInfinityX8Cut(NostalgiaForInfinityX8):
   cut_age_hours = 0.0
   cut_adverse_pct = 12.0
   cut_lock_days = 3.0
+  cut_liq_distance_pct = 0.0
+  _liq_warned = False
 
   def _cut_param(self, name, default):
     gp = self.config.get("guard_parameters") or {}
@@ -82,12 +94,27 @@ class NostalgiaForInfinityX8Cut(NostalgiaForInfinityX8):
     price = getattr(first, "safe_price", None) or getattr(first, "price", None)
     return float(price) if price else None
 
+  def _liq_distance_pct(self, trade, current_rate):
+    # Distance from the current price to the liquidation price, in percent of the current price.
+    # Long: price above liquidation. Short: price below liquidation. None if it cannot be read.
+    liq = getattr(trade, "liquidation_price", None)
+    if not liq or not current_rate:
+      if not self._liq_warned:
+        self._liq_warned = True
+        logger.warning("[Cut] %s liquidation price missing; cut_liq_distance_pct cannot work for this trade", trade.pair)
+      return None
+    liq = float(liq)
+    if trade.is_short:
+      return (liq - current_rate) / current_rate * 100.0
+    return (current_rate - liq) / current_rate * 100.0
+
   def _cut_reason(self, trade, current_time, current_rate):
     # Returns (reason, info) when the trade should be cut now, else (None, None).
     max_entries = int(self._cut_param("cut_entries", self.cut_entries))
     age_limit = self._cut_param("cut_age_hours", self.cut_age_hours)
     adverse_limit = self._cut_param("cut_adverse_pct", self.cut_adverse_pct)
-    if max_entries <= 0 and age_limit <= 0:
+    liq_limit = self._cut_param("cut_liq_distance_pct", self.cut_liq_distance_pct)
+    if max_entries <= 0 and age_limit <= 0 and liq_limit <= 0:
       return None, None
     apply_to = self._cut_apply_to()  # always validated, so a typo fails on the first trade
     if trade.is_short and apply_to == "long":
@@ -101,19 +128,25 @@ class NostalgiaForInfinityX8Cut(NostalgiaForInfinityX8):
     if p0 and current_rate:
       adverse = (current_rate - p0) / p0 * 100.0 if trade.is_short else (p0 - current_rate) / p0 * 100.0
 
+    liq_dist = self._liq_distance_pct(trade, current_rate) if liq_limit > 0 else None
+
+    if liq_dist is not None and liq_dist <= liq_limit:
+      return f"cut_liq_{liq_limit:g}pct", (n_entries, age_h, adverse, liq_dist)
     if max_entries > 0 and n_entries >= max_entries:
-      return f"cut_entries_{max_entries}", (n_entries, age_h, adverse)
+      return f"cut_entries_{max_entries}", (n_entries, age_h, adverse, liq_dist)
     if age_limit > 0 and adverse is not None and age_h >= age_limit and adverse >= adverse_limit:
-      return f"cut_age_{age_limit:g}h_{adverse_limit:g}pct", (n_entries, age_h, adverse)
+      return f"cut_age_{age_limit:g}h_{adverse_limit:g}pct", (n_entries, age_h, adverse, liq_dist)
     return None, None
 
   def custom_exit(self, pair, trade, current_time, current_rate, current_profit, **kwargs):
     reason, info = self._cut_reason(trade, current_time, current_rate)
     if reason:
-      n_entries, age_h, adverse = info
+      n_entries, age_h, adverse, liq_dist = info
       logger.info(
-        "[Cut] %s reason=%s entries=%d age_h=%.1f adverse_pct=%s",
-        pair, reason, n_entries, age_h, "n/a" if adverse is None else f"{adverse:.1f}",
+        "[Cut] %s reason=%s entries=%d age_h=%.1f adverse_pct=%s liq_dist_pct=%s",
+        pair, reason, n_entries, age_h,
+        "n/a" if adverse is None else f"{adverse:.1f}",
+        "n/a" if liq_dist is None else f"{liq_dist:.1f}",
       )
       return reason
     return super().custom_exit(pair, trade, current_time, current_rate, current_profit, **kwargs)
