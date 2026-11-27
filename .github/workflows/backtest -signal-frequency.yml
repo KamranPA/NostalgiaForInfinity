@@ -36,6 +36,14 @@ run-name: >-
 #   Peak memory / wall time of the backtest are written to the Job Summary
 #   (use them to size longer windows).
 #
+# Loss check (every run, no input needed):
+#   Every run writes user_data/logs/loss_check.txt and shows it in the Job Summary under
+#   "### Loss check": profit, max drawdown, win rate, the trades that lost 30 pct or more of their
+#   own margin (count, sum and a list) and the trades still open at the end of the window
+#   (exit_reason force_exit, unrealised). The numbers are read from the trades only, so they mean the
+#   same for every X8 version. To compare two versions use the same end_date, test_days and
+#   pairs_run_id, and compare the Loss check blocks.
+#
 # Strategies: X8, X8Guard, X8Cut, X8Rebuy, X8BtcGate, X8Crash and X8ShortOn (X8Cap and X8ShortBand
 # files are still understood by the steps below, but are not in the dropdown). Each needs
 # its .py file in the repo root or in user_data/strategies/. Futures only (the spot bots
@@ -901,7 +909,41 @@ jobs:
 
           with open("user_data/logs/summary.txt", "w") as f:
               f.write("\n".join(out) + "\n")
+
+          # ---- Loss check: numbers that mean the same for every X8 version ----
+          # "Big loss" = a trade that lost 30 pct or more of its own margin (profit_ratio <= -0.30).
+          # Trades still open at the end of the window (exit_reason force_exit) are listed apart: their
+          # loss is unrealised, and a version that leaves more trades open looks better than it is.
+          BIG_LOSS_RATIO = -0.30
+          sdata = data.get("strategy", {}).get(strat_key, {}) if strat_key else {}
+          n_tr = len(trades)
+          n_win = sum(1 for t in trades if t.get("profit_abs", 0) > 0)
+          big = sorted((t for t in trades if t.get("profit_ratio", 0) <= BIG_LOSS_RATIO),
+                       key=lambda t: t.get("profit_abs", 0))
+          still_open = sorted((t for t in trades if t.get("exit_reason") == "force_exit"),
+                              key=lambda t: t.get("profit_abs", 0))
+          lc = []
+          lc.append("Loss check (big loss = a trade that lost 30 pct or more of its margin)")
+          lc.append(f"window: {str(sdata.get('backtest_start', ''))[:10]} - {str(sdata.get('backtest_end', ''))[:10]}")
+          lc.append(f"trades: {n_tr}   profit: {tot:.1f} USDT   max drawdown: "
+                    f"{(sdata.get('max_drawdown_account') or 0) * 100:.1f} pct   "
+                    f"win rate: {(100.0 * n_win / n_tr) if n_tr else 0.0:.1f} pct")
+          lc.append(f"big-loss trades: n={len(big)}   sum={sum(t.get('profit_abs', 0) for t in big):.1f} USDT")
+          for t in big:
+              tag = str(t.get("enter_tag") or "?").split()[0]
+              side = "short" if t.get("is_short") else "long"
+              lc.append(f"  {t.get('pair', '?'):18s} tag={tag:>5s} {side:5s} "
+                        f"{t.get('profit_ratio', 0) * 100:7.1f}% {t.get('profit_abs', 0):9.1f} USDT  "
+                        f"open={str(t.get('open_date', ''))[:16]}  exit={t.get('exit_reason')}")
+          lc.append(f"still open at window end (force_exit, unrealised): n={len(still_open)}   "
+                    f"sum={sum(t.get('profit_abs', 0) for t in still_open):.1f} USDT")
+          for t in still_open[:5]:
+              lc.append(f"  {t.get('pair', '?'):18s} {t.get('profit_ratio', 0) * 100:7.1f}% "
+                        f"{t.get('profit_abs', 0):9.1f} USDT")
+          with open("user_data/logs/loss_check.txt", "w") as f:
+              f.write("\n".join(lc) + "\n")
           PYEOF
+          cat user_data/logs/loss_check.txt 2>/dev/null || true
           cat user_data/logs/summary.txt 2>/dev/null || echo "No summary produced."
 
       - name: Post result to Job Summary
@@ -925,6 +967,12 @@ jobs:
             echo "**Known limitation:** the pairlist is a snapshot of TODAY's top pairs by volume,"
             echo "applied to the whole historical window."
             echo ""
+            if [ -f user_data/logs/loss_check.txt ]; then
+              echo "### Loss check"
+              echo '```'
+              cat user_data/logs/loss_check.txt
+              echo '```'
+            fi
             if [ -f user_data/logs/resources.txt ]; then
               echo "### Resources"
               echo '```'
